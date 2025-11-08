@@ -31,24 +31,68 @@ const Footer: React.FC = () => {
             </h2>
             <ul style={{ listStyle: 'none', padding: 0 }}>
               <li style={{ marginBottom: '0.5rem' }}>
-                <a href="#" style={{ color: '#0066cc', textDecoration: 'none' }}>
+                <button
+                  onClick={() => console.log('Privacy Policy')}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    color: '#0066cc', 
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    font: 'inherit'
+                  }}
+                >
                   Privacy Policy
-                </a>
+                </button>
               </li>
               <li style={{ marginBottom: '0.5rem' }}>
-                <a href="#" style={{ color: '#0066cc', textDecoration: 'none' }}>
+                <button
+                  onClick={() => console.log('Terms of Service')}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    color: '#0066cc', 
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    font: 'inherit'
+                  }}
+                >
                   Terms of Service
-                </a>
+                </button>
               </li>
               <li style={{ marginBottom: '0.5rem' }}>
-                <a href="#" style={{ color: '#0066cc', textDecoration: 'none' }}>
+                <button
+                  onClick={() => console.log('Accessibility Statement')}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    color: '#0066cc', 
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    font: 'inherit'
+                  }}
+                >
                   Accessibility Statement
-                </a>
+                </button>
               </li>
               <li style={{ marginBottom: '0.5rem' }}>
-                <a href="#" style={{ color: '#0066cc', textDecoration: 'none' }}>
+                <button
+                  onClick={() => console.log('Contact Support')}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    color: '#0066cc', 
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    font: 'inherit'
+                  }}
+                >
                   Contact Support
-                </a>
+                </button>
               </li>
             </ul>
           </section>

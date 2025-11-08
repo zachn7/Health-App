@@ -121,8 +121,8 @@ const Contact: React.FC = () => {
         preferredContact: 'email',
         phone: ''
       });
-    } catch (error) {
-      setSubmitStatus('error');
+    } catch {
+      setSubmitStatus('error')
     } finally {
       setIsSubmitting(false);
     }
