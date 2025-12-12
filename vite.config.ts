@@ -2,9 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const basePath = process.env.BASE_PATH ? `/${process.env.BASE_PATH}/` : '/'
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/Health-App/',
+  base: basePath,
   plugins: [
     react(),
     VitePWA({
