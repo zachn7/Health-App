@@ -1,61 +1,62 @@
-import React, { useState } from 'react';
-import Header from './components/Header';
-import Navigation from './components/Navigation';
-import Home from './pages/Home';
-import Features from './pages/Features';
-import Contact from './pages/Contact';
-import Footer from './components/Footer';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
-export type Page = 'home' | 'features' | 'contact';
+// Pages
+import Dashboard from './pages/Dashboard';
+import Onboarding from './pages/Onboarding';
+import Profile from './pages/Profile';
+import Coach from './pages/Coach';
+import Workouts from './pages/Workouts';
+import WorkoutLogger from './pages/WorkoutLogger';
+import Nutrition from './pages/Nutrition';
+import Progress from './pages/Progress';
+import Injury from './pages/Injury';
+import Privacy from './pages/Privacy';
+import PrivacyPolicy from './pages/legal/PrivacyPolicy';
+import TermsOfUse from './pages/legal/TermsOfUse';
+import MedicalDisclaimer from './pages/legal/MedicalDisclaimer';
 
-const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+// Components
+import Layout from './components/Layout';
+import AgeGate from './components/AgeGate';
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'home':
-        return <Home />;
-      case 'features':
-        return <Features />;
-      case 'contact':
-        return <Contact />;
-      default:
-        return <Home />;
-    }
-  };
+// Hooks
+import { useLocalStorage } from './hooks/useLocalStorage';
+
+function App() {
+  const [hasAcceptedAgeGate] = useLocalStorage('age_gate_accepted', false);
+  const [hasCompletedOnboarding] = useLocalStorage('onboarding_completed', false);
+
+  if (!hasAcceptedAgeGate) {
+    return <AgeGate />;
+  }
 
   return (
-    <div className="app">
-      {/* Skip links for keyboard navigation - WCAG 2.4.1 */}
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
-      <a href="#navigation" className="skip-link">
-        Skip to navigation
-      </a>
-
-      {/* Header with site information */}
-      <Header />
-
-      {/* Main navigation */}
-      <Navigation 
-        currentPage={currentPage} 
-        onNavigate={setCurrentPage}
-      />
-
-      {/* Main content area */}
-      <main id="main-content" role="main">
-        <div className="container">
-          <section aria-label="Main Content">
-            {renderPage()}
-          </section>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <Footer />
-    </div>
+    <Router>
+      <Layout>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              hasCompletedOnboarding ? <Dashboard /> : <Navigate to="/onboarding" replace />
+            }
+          />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/coach" element={<Coach />} />
+          <Route path="/workouts" element={<Workouts />} />
+          <Route path="/log/workout" element={<WorkoutLogger />} />
+          <Route path="/nutrition" element={<Nutrition />} />
+          <Route path="/progress" element={<Progress />} />
+          <Route path="/injury" element={<Injury />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+          <Route path="/legal/terms" element={<TermsOfUse />} />
+          <Route path="/legal/disclaimer" element={<MedicalDisclaimer />} />
+        </Routes>
+      </Layout>
+    </Router>
   );
-};
+}
 
 export default App;

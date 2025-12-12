@@ -1,33 +1,38 @@
-import { expect, afterEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
-import * as matchers from '@testing-library/jest-dom/matchers'
+import '@testing-library/jest-dom';
 
-// Extend Vitest's expect
-expect.extend(matchers)
+// Mock IndexedDB for testing
+const store: { [key: string]: any } = {};
 
-// Cleanup after each test case
-afterEach(() => {
-  cleanup()
-})
+const MockDexie = {
+  stores: () => MockDexie,
+  version: () => MockDexie,
+  transaction: () => Promise.resolve(),
+  delete: () => Promise.resolve(),
+  get: (key: string) => Promise.resolve(store[key]),
+  put: (value: any, key: string) => {
+    store[key] = value;
+    return Promise.resolve(key);
+  },
+  toArray: () => Promise.resolve(Object.values(store)),
+  clear: () => {
+    for (const key in store) {
+      delete store[key];
+    }
+    return Promise.resolve();
+  },
+};
 
-// Mock IntersectionObserver
-Object.defineProperty(globalThis, 'IntersectionObserver', {
-  writable: true,
-  value: class IntersectionObserver {
-    constructor() {}
-    disconnect() {}
-    observe() {}
-    unobserve() {}
-  }
-});
+// Mock crypto.randomUUID if not available
+if (!global.crypto?.randomUUID) {
+  global.crypto = {
+    ...global.crypto,
+    randomUUID: () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  };
+}
 
-// Mock ResizeObserver
-Object.defineProperty(globalThis, 'ResizeObserver', {
-  writable: true,
-  value: class ResizeObserver {
-    constructor() {}
-    disconnect() {}
-    observe() {}
-    unobserve() {}
+// Before each test, clear the mock store
+beforeEach(() => {
+  for (const key in store) {
+    delete store[key];
   }
 });
