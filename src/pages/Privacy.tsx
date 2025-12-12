@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { clearAllData, exportAllData } from '../../db';
+import { useState } from 'react';
+import { clearAllData, exportAllData } from '../db';
 
 export default function Privacy() {
   const [isClearing, setIsClearing] = useState(false);

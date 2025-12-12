@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 export default function TermsOfUse() {
   const lastUpdated = 'December 2024';

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { beforeEach } from 'vitest';
 
 // Mock IndexedDB for testing
 const store: { [key: string]: any } = {};
@@ -26,7 +27,13 @@ const MockDexie = {
 if (!global.crypto?.randomUUID) {
   global.crypto = {
     ...global.crypto,
-    randomUUID: () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+    randomUUID: () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0
+        const v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+      }) as `${string}-${string}-${string}-${string}-${string}`
+    }
   };
 }
 

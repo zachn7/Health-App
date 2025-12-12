@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 export default function MedicalDisclaimer() {
   const lastUpdated = 'December 2024';
