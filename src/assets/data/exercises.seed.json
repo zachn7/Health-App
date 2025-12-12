@@ -1,0 +1,212 @@
+[
+  {
+    "id": "bench-press",
+    "name": "Barbell Bench Press",
+    "bodyPart": "chest",
+    "equipment": ["barbell", "bench"],
+    "category": "compound",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie on your back on a flat bench with your feet flat on the floor",
+      "Grip the barbell with hands slightly wider than shoulder-width",
+      "Lower the bar to your chest in a controlled manner",
+      "Press the bar back up until your arms are fully extended",
+      "Repeat for the desired number of repetitions"
+    ],
+    "cues": [
+      "Keep your shoulders back and chest up",
+      "Maintain a slight arch in your lower back",
+      "Don't bounce the bar off your chest",
+      "Breathe out on the way up, in on the way down"
+    ]
+  },
+  {
+    "id": "squat",
+    "name": "Barbell Back Squat",
+    "bodyPart": "legs",
+    "equipment": ["barbell", "squat rack"],
+    "category": "compound",
+    "difficulty": "beginner",
+    "instructions": [
+      "Position the barbell across your upper back",
+      "Stand with feet shoulder-width apart, toes slightly pointed out",
+      "Lower your body by bending your knees and hips",
+      "Go down until your thighs are parallel to the floor or lower",
+      "Drive back up through your heels to the starting position"
+    ],
+    "cues": [
+      "Keep your chest up and back straight",
+      "Don't let your knees cave inward",
+      "Keep your weight on your heels",
+      "Look straight ahead, not down"
+    ]
+  },
+  {
+    "id": "deadlift",
+    "name": "Conventional Deadlift",
+    "bodyPart": "back",
+    "equipment": ["barbell"],
+    "category": "compound",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Stand with feet hip-width apart, bar over mid-foot",
+      "Bend at hips and knees, grip the bar just outside your legs",
+      "Lift the bar by extending your hips and knees",
+      "Pull the bar up until you're standing straight",
+      "Lower the bar back to the floor in a controlled manner"
+    ],
+    "cues": [
+      "Keep your back straight, don't round",
+      "Pull the bar close to your body",
+      "Engage your core throughout the movement",
+      "Drive through your heels, not your toes"
+    ]
+  },
+  {
+    "id": "overhead-press",
+    "name": "Standing Overhead Press",
+    "bodyPart": "shoulders",
+    "equipment": ["barbell"],
+    "category": "compound",
+    "difficulty": "beginner",
+    "instructions": [
+      "Stand with feet shoulder-width apart, bar at collarbone level",
+      "Grip the bar slightly wider than shoulder-width",
+      "Press the bar directly overhead until arms are fully extended",
+      "Lower the bar back to collarbone level under control",
+      "Repeat for the desired number of repetitions"
+    ],
+    "cues": [
+      "Keep your core tight and glutes squeezed",
+      "Don't arch your back excessively",
+      "Keep your elbows slightly forward at the bottom",
+      "Press in a straight line, not back"
+    ]
+  },
+  {
+    "id": "pull-up",
+    "name": "Pull-up",
+    "bodyPart": "back",
+    "equipment": ["pull-up bar"],
+    "category": "compound",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Grab the pull-up bar with hands slightly wider than shoulders",
+      "Hang from the bar with arms fully extended",
+      "Pull your body up until your chin is over the bar",
+      "Lower your body back down in a controlled manner",
+      "Repeat for the desired number of repetitions"
+    ],
+    "cues": [
+      "Keep your shoulders down away from your ears",
+      "Engage your core throughout",
+      "Don't use momentum or kip",
+      "Pull with your back, not just your arms"
+    ]
+  },
+  {
+    "id": "dips",
+    "name": "Parallel Bar Dips",
+    "bodyPart": "chest",
+    "equipment": ["parallel bars"],
+    "category": "compound",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Support yourself between parallel bars with arms extended",
+      "Lower your body by bending your elbows",
+      "Go down until your shoulders are level with your elbows",
+      "Press back up to the starting position",
+      "Repeat for the desired number of repetitions"
+    ],
+    "cues": [
+      "Keep your chest up and shoulders back",
+      "Don't lean too far forward or back",
+      "Lower under control, don't drop",
+      "Keep your elbows pointing back, not out"
+    ]
+  },
+  {
+    "id": "bicep-curl",
+    "name": "Dumbbell Bicep Curl",
+    "bodyPart": "arms",
+    "equipment": ["dumbbells"],
+    "category": "isolation",
+    "difficulty": "beginner",
+    "instructions": [
+      "Stand with feet shoulder-width apart, dumbbells in hands",
+      "Start with arms fully extended, palms facing forward",
+      "Curl the weights up by bending your elbows",
+      "Squeeze biceps at the top of the movement",
+      "Lower the weights back to starting position"
+    ],
+    "cues": [
+      "Keep your elbows pinned to your sides",
+      "Don't use momentum or body swing",
+      "Control the negative portion",
+      "Don't let your wrists bend back"
+    ]
+  },
+  {
+    "id": "tricep-pushdown",
+    "name": "Cable Tricep Pushdown",
+    "bodyPart": "arms",
+    "equipment": ["cable machine"],
+    "category": "isolation",
+    "difficulty": "beginner",
+    "instructions": [
+      "Stand facing a cable machine with rope or bar attachment",
+      "Grip the attachment with hands about shoulder-width apart",
+      "Start with elbows bent and forearms parallel to floor",
+      "Push down until arms are fully extended",
+      "Slowly return to starting position"
+    ],
+    "cues": [
+      "Keep your elbows tucked into your sides",
+      "Use full range of motion",
+      "Squeeze triceps at the bottom",
+      "Don't use body momentum"
+    ]
+  },
+  {
+    "id": "leg-press",
+    "name": "Leg Press",
+    "bodyPart": "legs",
+    "equipment": ["leg press machine"],
+    "category": "compound",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit in the leg press machine with feet on the platform",
+      "Position feet shoulder-width apart, toes pointed slightly out",
+      "Release the safety latches and lower the platform",
+      "Lower until knees are at about 90 degrees",
+      "Press the platform back to starting position"
+    ],
+    "cues": [
+      "Don't lock your knees at the top",
+      "Keep your lower back pressed against the seat",
+      "Control both the positive and negative",
+      "Place feet to target different muscle areas"
+    ]
+  },
+  {
+    "id": "lateral-raise",
+    "name": "Dumbbell Lateral Raise",
+    "bodyPart": "shoulders",
+    "equipment": ["dumbbells"],
+    "category": "isolation",
+    "difficulty": "beginner",
+    "instructions": [
+      "Stand with feet shoulder-width apart, dumbbells at sides",
+      "Keep a slight bend in your elbows throughout",
+      "Raise arms out to the sides until level with shoulders",
+      "Pause briefly at the top of the movement",
+      "Lower weights back to starting position"
+    ],
+    "cues": [
+      "Keep your core tight and don't arch your back",
+      "Don't use momentum to swing the weights",
+      "Lead with your elbows, not hands",
+      "Control the entire movement"
+    ]
+  }
+]

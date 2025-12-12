@@ -1,41 +1,54 @@
-export enum ActivityLevel {
-  SEDENTARY = 'sedentary',
-  LIGHT = 'light',
-  MODERATE = 'moderate',
-  ACTIVE = 'active',
-  VERY_ACTIVE = 'very_active'
-}
+export const ActivityLevel = {
+  SEDENTARY: 'sedentary',
+  LIGHT: 'light',
+  MODERATE: 'moderate',
+  ACTIVE: 'active',
+  VERY_ACTIVE: 'very_active'
+} as const;
 
-export enum ExperienceLevel {
-  BEGINNER = 'beginner',
-  INTERMEDIATE = 'intermediate',
-  ADVANCED = 'advanced'
-}
+export type ActivityLevel = typeof ActivityLevel[keyof typeof ActivityLevel];
 
-export enum GoalType {
-  STRENGTH = 'strength',
-  HYPERTROPHY = 'hypertrophy',
-  FAT_LOSS = 'fat_loss',
-  ENDURANCE = 'endurance',
-  GENERAL_FITNESS = 'general_fitness'
-}
+export const ExperienceLevel = {
+  BEGINNER: 'beginner',
+  INTERMEDIATE: 'intermediate',
+  ADVANCED: 'advanced'
+} as const;
 
-export enum Sex {
-  MALE = 'male',
-  FEMALE = 'female',
-  OTHER = 'other'
-}
+export type ExperienceLevel = typeof ExperienceLevel[keyof typeof ExperienceLevel];
 
-export enum PlanGenerationType {
-  MANUAL = 'manual',
-  COACH = 'coach'
-}
+export const GoalType = {
+  STRENGTH: 'strength',
+  HYPERTROPHY: 'hypertrophy',
+  FAT_LOSS: 'fat_loss',
+  ENDURANCE: 'endurance',
+  GENERAL_FITNESS: 'general_fitness',
+  MAINTENANCE: 'general_fitness'
+} as const;
 
-export enum FoodSource {
-  USER = 'user',
-  BUNDLED = 'bundled',
-  IMPORTED = 'imported'
-}
+export type GoalType = typeof GoalType[keyof typeof GoalType];
+
+export const Sex = {
+  MALE: 'male',
+  FEMALE: 'female',
+  OTHER: 'other'
+} as const;
+
+export type Sex = typeof Sex[keyof typeof Sex];
+
+export const PlanGenerationType = {
+  MANUAL: 'manual',
+  COACH: 'coach'
+} as const;
+
+export type PlanGenerationType = typeof PlanGenerationType[keyof typeof PlanGenerationType];
+
+export const FoodSource = {
+  USER: 'user',
+  BUNDLED: 'bundled',
+  IMPORTED: 'imported'
+} as const;
+
+export type FoodSource = typeof FoodSource[keyof typeof FoodSource];
 
 export interface Goal {
   id: string;
@@ -221,6 +234,7 @@ export interface MealTemplate {
 
 // Coach Engine Types
 export interface WeeklyCheckIn {
+  id: string;
   adherenceRating: number; // 1-5 scale
   energyLevel: number; // 1-5 scale
   sleepQuality: number; // 1-5 scale

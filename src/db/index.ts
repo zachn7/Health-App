@@ -90,6 +90,12 @@ export const initDatabase = async (): Promise<void> => {
   }
 };
 
+// Import repositories
+import { profileRepository } from './repositories/profile.repository';
+import { workoutRepository } from './repositories/workout.repository';
+import { nutritionRepository } from './repositories/nutrition.repository';
+import { progressRepository } from './repositories/progress.repository';
+
 // Export all tables for easy access
 export const tables = {
   profiles: db.profiles,
@@ -101,6 +107,14 @@ export const tables = {
   mealTemplates: db.mealTemplates,
   weeklyCheckIns: db.weeklyCheckIns,
   injuryAssessments: db.injuryAssessments
+} as const;
+
+// Export repositories for convenient usage
+export const repositories = {
+  profile: profileRepository,
+  workout: workoutRepository,
+  nutrition: nutritionRepository,
+  progress: progressRepository
 } as const;
 
 // Database utility functions
