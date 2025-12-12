@@ -181,19 +181,19 @@ export default function Navigation() {
               <p>Version 0.1.0</p>
               <div className="pt-2 space-x-2">
                 <a 
-                  href="/legal/privacy" 
+                  href="#/legal/privacy" 
                   className="text-primary-600 hover:text-primary-700"
                 >
                   Privacy
                 </a>
                 <a 
-                  href="/legal/terms" 
+                  href="#/legal/terms" 
                   className="text-primary-600 hover:text-primary-700"
                 >
                   Terms
                 </a>
                 <a 
-                  href="/legal/disclaimer" 
+                  href="#/legal/disclaimer" 
                   className="text-primary-600 hover:text-primary-700"
                 >
                   Disclaimer

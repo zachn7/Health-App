@@ -7,9 +7,10 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  
   return (
     <div className="min-h-screen bg-gray-50">
-      < Navigation />
+      <Navigation />
       <main className="pb-20">
         {children || <Outlet />}
       </main>

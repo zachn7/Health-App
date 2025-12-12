@@ -122,13 +122,13 @@ export default function Privacy() {
         <div className="card">
           <h2 className="text-xl font-medium text-gray-900 mb-4">Legal Information</h2>
           <div className="space-y-3">
-            <a href="/legal/privacy" className="block text-primary-600 hover:text-primary-700">
+            <a href="#/legal/privacy" className="block text-primary-600 hover:text-primary-700">
               Privacy Policy →
             </a>
-            <a href="/legal/terms" className="block text-primary-600 hover:text-primary-700">
+            <a href="#/legal/terms" className="block text-primary-600 hover:text-primary-700">
               Terms of Use →
             </a>
-            <a href="/legal/disclaimer" className="block text-primary-600 hover:text-primary-700">
+            <a href="#/legal/disclaimer" className="block text-primary-600 hover:text-primary-700">
               Medical Disclaimer →
             </a>
           </div>

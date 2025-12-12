@@ -11,6 +11,7 @@ export default function AgeGate() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('AgeGate: handleSubmit called with age:', age);
     
     const ageNum = parseInt(age, 10);
     
@@ -24,6 +25,7 @@ export default function AgeGate() {
       return;
     }
     
+    console.log('AgeGate: Valid age, setting accepted state');
     setAccepted(true);
     setTimestamp(new Date().toISOString());
   };
@@ -101,11 +103,11 @@ export default function AgeGate() {
         <div className="text-center">
           <p className="text-xs text-gray-500">
             By continuing, you confirm that you meet the age requirement and accept our{' '}
-            <a href="/legal/terms" className="text-primary-600 hover:text-primary-700">
+            <a href="#/legal/terms" className="text-primary-600 hover:text-primary-700">
               Terms of Use
             </a>{' '}
             and{' '}
-            <a href="/legal/privacy" className="text-primary-600 hover:text-primary-700">
+            <a href="#/legal/privacy" className="text-primary-600 hover:text-primary-700">
               Privacy Policy
             </a>
             .
