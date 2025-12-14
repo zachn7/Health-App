@@ -2,16 +2,16 @@ import { db } from '../index';
 import type { Profile } from '@/types';
 
 export class ProfileRepository {
-  async create(profile: Omit<Profile, 'id' | 'createdAt' | 'updatedAt'>): Promise<Profile> {
+  async create(profile: Profile): Promise<Profile> {
     const now = new Date().toISOString();
     const newProfile: Profile = {
       ...profile,
-      id: crypto.randomUUID(),
-      createdAt: now,
+      id: profile.id || crypto.randomUUID(),
+      createdAt: profile.createdAt || now,
       updatedAt: now,
     };
     
-    await db.profiles.add(newProfile);
+    await db.profiles.put(newProfile);
     return newProfile;
   }
 
@@ -19,14 +19,28 @@ export class ProfileRepository {
     return await db.profiles.toCollection().first();
   }
 
-  async update(id: string, updates: Partial<Profile>): Promise<Profile> {
+  async save(profile: Profile): Promise<Profile> {
+    // Check if profile already exists
+    const existing = await this.get();
+    if (existing && existing.id !== profile.id) {
+      // Update existing profile with new data but keep existing ID
+      const updatedProfile = { ...profile, id: existing.id };
+      return this.update(updatedProfile);
+    } else {
+      // Create or update profile
+      return this.create(profile);
+    }
+  }
+
+  async update(profile: Profile): Promise<Profile> {
     const now = new Date().toISOString();
-    const updatedProfile = { ...updates, updatedAt: now };
+    const updatedProfile: Profile = {
+      ...profile,
+      updatedAt: now,
+    };
     
-    await db.profiles.update(id, updatedProfile);
-    const profile = await db.profiles.get(id);
-    if (!profile) throw new Error('Profile not found');
-    return profile;
+    await db.profiles.put(updatedProfile);
+    return updatedProfile;
   }
 
   async delete(id: string): Promise<void> {

@@ -1,6 +1,142 @@
 
+import { useState, useEffect } from 'react';
+import { repositories } from '../db';
+import type { WeightLog, WorkoutLog } from '../types';
 
 export default function Progress() {
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddWeight, setShowAddWeight] = useState(false);
+  const [newWeight, setNewWeight] = useState<{
+    weightKg: number;
+    bodyFat?: number;
+    notes: string;
+  }>({
+    weightKg: 75,
+    bodyFat: undefined,
+    notes: ''
+  });
+
+  useEffect(() => {
+    loadProgressData();
+  }, []);
+
+  const loadProgressData = async () => {
+    try {
+      const [weights, workouts] = await Promise.all([
+        repositories.progress.getWeightLogs(),
+        repositories.workout.getWorkoutLogs()
+      ]);
+      
+      setWeightLogs(weights);
+      setWorkoutLogs(workouts);
+    } catch (error) {
+      console.error('Failed to load progress data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveWeightLog = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const weightLog = {
+        id: crypto.randomUUID(),
+        date: today,
+        weightKg: newWeight.weightKg,
+        bodyFat: newWeight.bodyFat,
+        notes: newWeight.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await repositories.progress.createWeightLog(weightLog);
+      setWeightLogs([weightLog, ...weightLogs]);
+      
+      // Reset form
+      setNewWeight({ weightKg: 75, bodyFat: undefined, notes: '' });
+      setShowAddWeight(false);
+    } catch (error) {
+      console.error('Failed to save weight log:', error);
+      alert('Failed to save weight log. Please try again.');
+    }
+  };
+
+  const calculateWeightStats = () => {
+    if (weightLogs.length === 0) return null;
+    
+    const weights = weightLogs.map(log => log.weightKg);
+    const currentWeight = weights[0];
+    const startingWeight = weights[weights.length - 1];
+    const weightChange = currentWeight - startingWeight;
+    const averageWeight = weights.reduce((sum, w) => sum + w, 0) / weights.length;
+    
+    // Calculate trends from last 7 entries if available
+    const recentWeights = weights.slice(0, Math.min(7, weights.length));
+    let trend = 'stable';
+    if (recentWeights.length >= 3) {
+      const firstHalf = recentWeights.slice(0, Math.floor(recentWeights.length / 2));
+      const secondHalf = recentWeights.slice(Math.floor(recentWeights.length / 2));
+      const firstAvg = firstHalf.reduce((sum, w) => sum + w, 0) / firstHalf.length;
+      const secondAvg = secondHalf.reduce((sum, w) => sum + w, 0) / secondHalf.length;
+      
+      if (secondAvg < firstAvg - 0.5) trend = 'decreasing';
+      else if (secondAvg > firstAvg + 0.5) trend = 'increasing';
+    }
+    
+    return {
+      currentWeight,
+      startingWeight,
+      weightChange,
+      averageWeight,
+      trend,
+      totalEntries: weightLogs.length
+    };
+  };
+
+  const calculateWorkoutStats = () => {
+    if (workoutLogs.length === 0) return null;
+    
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
+    
+    const recentWorkouts = workoutLogs.filter(
+      log => new Date(log.date) >= last30Days
+    );
+    
+    const totalWorkouts = workoutLogs.length;
+    const recentWorkoutCount = recentWorkouts.length;
+    const avgWorkoutsPerWeek = (recentWorkoutCount / 30) * 7;
+    
+    // Calculate total volume (weight × reps × sets)
+    const totalVolume = workoutLogs.reduce((sum, log) => {
+      return sum + log.entries.reduce((entrySum, entry) => {
+        return entrySum + entry.sets.reduce((setSum, set) => {
+          return setSum + ((set.weight || 0) * set.reps);
+        }, 0);
+      }, 0);
+    }, 0);
+    
+    return {
+      totalWorkouts,
+      recentWorkoutCount,
+      avgWorkoutsPerWeek,
+      totalVolume
+    };
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center">Loading progress data...</div>
+      </div>
+    );
+  }
+
+  const weightStats = calculateWeightStats();
+  const workoutStats = calculateWorkoutStats();
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -8,9 +144,194 @@ export default function Progress() {
         <p className="mt-2 text-gray-600">Your fitness journey and achievements</p>
       </div>
       
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="card">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Current Weight</h3>
+          <div className="text-2xl font-bold text-blue-600">
+            {weightStats ? `${weightStats.currentWeight.toFixed(1)} kg` : '—'}
+          </div>
+          {weightStats && weightStats.weightChange !== 0 && (
+            <div className={`text-sm ${weightStats.weightChange > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {weightStats.weightChange > 0 ? '+' : ''}{weightStats.weightChange.toFixed(1)} kg
+            </div>
+          )}
+        </div>
+        
+        <div className="card">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Total Workouts</h3>
+          <div className="text-2xl font-bold text-green-600">
+            {workoutStats?.totalWorkouts || 0}
+          </div>
+          <div className="text-sm text-gray-600">
+            {workoutStats ? `${workoutStats.recentWorkoutCount} in last 30 days` : '—'}
+          </div>
+        </div>
+        
+        <div className="card">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Workouts/Week</h3>
+          <div className="text-2xl font-bold text-purple-600">
+            {workoutStats ? workoutStats.avgWorkoutsPerWeek.toFixed(1) : '—'}
+          </div>
+          <div className="text-sm text-gray-600">Average (last 30 days)</div>
+        </div>
+        
+        <div className="card">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Total Volume</h3>
+          <div className="text-2xl font-bold text-orange-600">
+            {workoutStats ? `${(workoutStats.totalVolume / 1000).toFixed(0)}k` : '—'}
+          </div>
+          <div className="text-sm text-gray-600">kg × reps</div>
+        </div>
+      </div>
+      
+      {/* Weight Tracking Section */}
+      <div className="card mb-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-medium text-gray-900">Weight Tracking</h2>
+          <button
+            onClick={() => setShowAddWeight(true)}
+            className="btn btn-primary"
+          >
+            Log Weight
+          </button>
+        </div>
+        
+        {showAddWeight && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-lg font-medium mb-4">Log Today's Weight</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="label">Weight (kg)</label>
+                <input
+                  type="number"
+                  value={newWeight.weightKg}
+                  onChange={(e) => setNewWeight({ ...newWeight, weightKg: parseFloat(e.target.value) || 0 })}
+                  className="input"
+                  min="30"
+                  max="300"
+                  step="0.1"
+                />
+              </div>
+              
+              <div>
+                <label className="label">Body Fat % (optional)</label>
+                <input
+                  type="number"
+                  value={newWeight.bodyFat || ''}
+                  onChange={(e) => setNewWeight({ 
+                    ...newWeight, 
+                    bodyFat: e.target.value ? parseFloat(e.target.value) : undefined 
+                  })}
+                  className="input"
+                  min="3"
+                  max="60"
+                  step="0.1"
+                />
+              </div>
+              
+              <div>
+                <label className="label">Notes (optional)</label>
+                <input
+                  type="text"
+                  value={newWeight.notes}
+                  onChange={(e) => setNewWeight({ ...newWeight, notes: e.target.value })}
+                  className="input"
+                  placeholder="e.g., Morning weight"
+                />
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setShowAddWeight(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveWeightLog}
+                disabled={newWeight.weightKg <= 0}
+                className="btn btn-primary"
+              >
+                Save Weight
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {weightLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2">Date</th>
+                  <th className="text-left py-2">Weight</th>
+                  <th className="text-left py-2">Body Fat</th>
+                  <th className="text-left py-2">Change</th>
+                  <th className="text-left py-2">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weightLogs.slice(0, 10).map((log, index) => {
+                  const prevWeight = index < weightLogs.length - 1 ? weightLogs[index + 1].weightKg : null;
+                  const change = prevWeight ? log.weightKg - prevWeight : null;
+                  
+                  return (
+                    <tr key={log.id} className="border-b">
+                      <td className="py-2">{new Date(log.date).toLocaleDateString()}</td>
+                      <td className="py-2 font-medium">{log.weightKg.toFixed(1)} kg</td>
+                      <td className="py-2">{log.bodyFat ? `${log.bodyFat.toFixed(1)}%` : '—'}</td>
+                      <td className="py-2">
+                        {change && (
+                          <span className={change > 0 ? 'text-red-600' : change < 0 ? 'text-green-600' : 'text-gray-600'}>
+                            {change > 0 ? '+' : ''}{change.toFixed(1)} kg
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2">{log.notes || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-600 mb-4">No weight data yet. Start tracking your progress!</p>
+          </div>
+        )}
+      </div>
+      
+      {/* Recent Workouts */}
       <div className="card">
-        <h2 className="text-xl font-medium text-gray-900 mb-4">Coming Soon</h2>
-        <p className="text-gray-600">Progress analytics will be available soon.</p>
+        <h2 className="text-xl font-medium text-gray-900 mb-4">Recent Workouts</h2>
+        
+        {workoutLogs.length > 0 ? (
+          <div className="space-y-3">
+            {workoutLogs.slice(0, 5).map((log) => (
+              <div key={log.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="font-medium">{new Date(log.date).toLocaleDateString()}</div>
+                  <div className="text-sm text-gray-600">
+                    {log.entries.length} exercises • {log.duration} minutes
+                  </div>
+                  {log.sessionNotes && (
+                    <div className="text-sm text-gray-600 italic">{log.sessionNotes}</div>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {log.entries.reduce((sum, entry) => sum + entry.sets.length, 0)} sets
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-600 mb-4">No workouts logged yet. Start your training journey!</p>
+          </div>
+        )}
       </div>
     </div>
   );

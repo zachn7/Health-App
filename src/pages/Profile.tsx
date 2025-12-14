@@ -36,17 +36,36 @@ export default function Profile() {
   const saveProfile = async () => {
     if (!profile) return;
     
+    // Validate profile before saving
+    const validationErrors = validateProfile(profile);
+    if (validationErrors.length > 0) {
+      alert('Please fix the following errors:\n\n' + validationErrors.join('\n'));
+      return;
+    }
+    
     setSaving(true);
     try {
-      if (profile.id) {
-        await repositories.profile.update(profile.id, profile);
-      } else {
-        await repositories.profile.create(profile);
-      }
+      console.log('Saving profile:', profile);
+      await repositories.profile.save(profile);
+      console.log('Profile saved successfully!');
       alert('Profile saved successfully!');
+      
+      // Navigate to dashboard after successful save
+      window.location.hash = '/dashboard';
     } catch (error) {
       console.error('Failed to save profile:', error);
-      alert('Failed to save profile. Please try again.');
+      
+      // Enhanced error reporting for debugging
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : 'No stack trace';
+      
+      console.error('Profile save error details:', {
+        errorMessage,
+        errorStack,
+        profileData: profile
+      });
+      
+      alert(`Failed to save profile: ${errorMessage}. Please check the console for details.`);
     } finally {
       setSaving(false);
     }
@@ -104,6 +123,37 @@ export default function Profile() {
   const removeGoal = (goalId: string) => {
     if (!profile) return;
     updateField('goals', profile.goals.filter(g => g.id !== goalId));
+  };
+
+  const validateProfile = (profile: Profile): string[] => {
+    const errors: string[] = [];
+    
+    if (!profile.age || profile.age < 13) {
+      errors.push('Age must be 13 or older');
+    }
+    
+    if (!profile.heightCm || profile.heightCm < 100 || profile.heightCm > 250) {
+      errors.push('Height must be between 100-250 cm');
+    }
+    
+    if (!profile.weightKg || profile.weightKg < 30 || profile.weightKg > 300) {
+      errors.push('Weight must be between 30-300 kg');
+    }
+    
+    if (profile.goals.length === 0) {
+      errors.push('At least one fitness goal is required');
+    }
+    
+    if (!profile.equipment || profile.equipment.length === 0) {
+      errors.push('At least one equipment selection is required');
+    }
+    
+    const hasWorkoutDay = Object.values(profile.schedule).some(day => day === true);
+    if (!hasWorkoutDay) {
+      errors.push('At least one workout day must be selected');
+    }
+    
+    return errors;
   };
 
   if (loading) {

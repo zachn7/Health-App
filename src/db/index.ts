@@ -29,7 +29,7 @@ export class CodePuppyDB extends Dexie {
     // Schema version 1
     this.version(1).stores({
       // Core profile data
-      profiles: '++id, createdAt, updatedAt, age, activityLevel, experienceLevel',
+      profiles: 'id, createdAt, updatedAt, age, activityLevel, experienceLevel',
       
       // Workout related
       workoutPlans: '++id, name, generatedBy, createdAt, updatedAt',
@@ -50,7 +50,7 @@ export class CodePuppyDB extends Dexie {
 
     // Schema version 2 - Add indexes for better performance
     this.version(2).stores({
-      profiles: '++id, createdAt, updatedAt, age, activityLevel, experienceLevel',
+      profiles: 'id, createdAt, updatedAt, age, activityLevel, experienceLevel',
       workoutPlans: '++id, name, generatedBy, createdAt, updatedAt',
       workoutLogs: '++id, date, workoutPlanId, createdAt, updatedAt, [date+workoutPlanId]',
       nutritionLogs: '++id, date, createdAt, updatedAt, [date]',
@@ -63,7 +63,7 @@ export class CodePuppyDB extends Dexie {
 
     // Schema version 3 - Add PWA cache and sync timestamps
     this.version(3).stores({
-      profiles: '++id, createdAt, updatedAt, age, activityLevel, experienceLevel, lastSync',
+      profiles: 'id, createdAt, updatedAt, age, activityLevel, experienceLevel, lastSync',
       workoutPlans: '++id, name, generatedBy, createdAt, updatedAt, lastSync',
       workoutLogs: '++id, date, workoutPlanId, createdAt, updatedAt, [date+workoutPlanId], lastSync',
       nutritionLogs: '++id, date, createdAt, updatedAt, [date], lastSync',
