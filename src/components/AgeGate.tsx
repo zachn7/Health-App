@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const MINIMUM_AGE = 13;
 
-export default function AgeGate() {
-  const navigate = useNavigate();
+interface AgeGateProps {
+  onAgeGatePassed?: () => void;
+}
+
+export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
   const [age, setAge] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [devError, setDevError] = useState('');
   const [, setAccepted] = useLocalStorage('age_gate_accepted', false);
   const [, setTimestamp] = useLocalStorage('age_gate_timestamp', '');
-  const [hasCompletedOnboarding] = useLocalStorage('onboarding_completed', false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,14 +39,12 @@ export default function AgeGate() {
       setAccepted(true);
       setTimestamp(new Date().toISOString());
       
-      // Give localStorage time to update, then navigate
+      // Give localStorage time to update, then call callback
       setTimeout(() => {
         setIsLoading(false);
-        // Navigate to onboarding if not completed, otherwise to dashboard
-        if (hasCompletedOnboarding) {
-          navigate('/');
-        } else {
-          navigate('/onboarding');
+        // Call the callback to handle navigation
+        if (onAgeGatePassed) {
+          onAgeGatePassed();
         }
       }, 100);
     } catch (error) {

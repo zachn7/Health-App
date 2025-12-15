@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -25,39 +25,59 @@ import ErrorBoundary from './components/ErrorBoundary';
 // Hooks
 import { useLocalStorage } from './hooks/useLocalStorage';
 
-function App() {
+function AppContent() {
+  const navigate = useNavigate();
   const [hasAcceptedAgeGate] = useLocalStorage('age_gate_accepted', false);
   const [hasCompletedOnboarding] = useLocalStorage('onboarding_completed', false);
 
+  const handleAgeGatePassed = () => {
+    // Navigate to onboarding if not completed, otherwise to dashboard
+    if (hasCompletedOnboarding) {
+      navigate('/');
+    } else {
+      navigate('/onboarding');
+    }
+  };
+
   if (!hasAcceptedAgeGate) {
-    return <AgeGate />;
+    return (
+      <Layout>
+        <AgeGate onAgeGatePassed={handleAgeGatePassed} />
+      </Layout>
+    );
   }
 
   return (
+    <Layout>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            hasCompletedOnboarding ? <Dashboard /> : <Navigate to="/onboarding" replace />
+          }
+        />
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/coach" element={<Coach />} />
+        <Route path="/workouts" element={<Workouts />} />
+        <Route path="/log/workout" element={<WorkoutLogger />} />
+        <Route path="/nutrition" element={<Nutrition />} />
+        <Route path="/progress" element={<Progress />} />
+        <Route path="/injury" element={<Injury />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+        <Route path="/legal/terms" element={<TermsOfUse />} />
+        <Route path="/legal/disclaimer" element={<MedicalDisclaimer />} />
+      </Routes>
+    </Layout>
+  );
+}
+
+function App() {
+  return (
     <ErrorBoundary>
       <Router>
-        <Layout>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                hasCompletedOnboarding ? <Dashboard /> : <Navigate to="/onboarding" replace />
-              }
-            />
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/coach" element={<Coach />} />
-            <Route path="/workouts" element={<Workouts />} />
-            <Route path="/log/workout" element={<WorkoutLogger />} />
-            <Route path="/nutrition" element={<Nutrition />} />
-            <Route path="/progress" element={<Progress />} />
-            <Route path="/injury" element={<Injury />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/legal/privacy" element={<PrivacyPolicy />} />
-            <Route path="/legal/terms" element={<TermsOfUse />} />
-            <Route path="/legal/disclaimer" element={<MedicalDisclaimer />} />
-          </Routes>
-        </Layout>
+        <AppContent />
       </Router>
     </ErrorBoundary>
   );
