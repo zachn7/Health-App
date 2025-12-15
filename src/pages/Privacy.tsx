@@ -120,6 +120,82 @@ export default function Privacy() {
         </div>
         
         <div className="card">
+          <h2 className="text-xl font-medium text-gray-900 mb-4">Troubleshooting & Reset</h2>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Reset Local App Data</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                If you're experiencing issues like blank screens, errors, or corrupted data, 
+                try resetting all local data. This will clear: localStorage, sessionStorage, IndexedDB, and Service Worker caches.
+              </p>
+              <button 
+                onClick={async () => {
+                  if (confirm('This will clear ALL app data and caches. Are you sure? This fixes most startup issues.')) {
+                    try {
+                      // Clear localStorage
+                      localStorage.clear();
+                      sessionStorage.clear();
+                      
+                      // Clear IndexedDB databases
+                      if ('indexedDB' in window) {
+                        const dbs = await indexedDB.databases();
+                        await Promise.all(
+                          dbs.map(db => indexedDB.deleteDatabase(db.name!))
+                        );
+                      }
+                      
+                      // Clear Service Worker caches
+                      if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(
+                          cacheNames.map(cacheName => caches.delete(cacheName))
+                        );
+                      }
+                      
+                      // Unregister service workers
+                      if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        await Promise.all(
+                          registrations.map(registration => registration.unregister())
+                        );
+                      }
+                      
+                      alert('All app data and caches cleared successfully! The page will now reload.');
+                      window.location.reload();
+                    } catch (error) {
+                      console.error('Reset failed:', error);
+                      alert('Reset failed. Please try clearing your browser cache manually.');
+                    }
+                  }
+                }}
+                className="bg-orange-600 text-white px-4 py-2 rounded-md font-medium hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+              >
+                Reset All Local Data & Caches
+              </button>
+              <p className="text-xs text-gray-500 mt-2">
+                This is the most thorough reset and should fix blank screen issues.
+              </p>
+            </div>
+            
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Diagnose Issues</h3>
+              <div className="space-y-3">
+                <div className="bg-gray-50 p-3 rounded text-sm">
+                  <strong>Current Status:</strong>
+                  <ul className="mt-2 space-y-1">
+                    <li>• localStorage: {typeof localStorage !== 'undefined' ? 'Available' : 'Not Available'}</li>
+                    <li>• indexedDB: {typeof indexedDB !== 'undefined' ? 'Available' : 'Not Available'}</li>
+                    <li>• serviceWorker: {typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? 'Available' : 'Not Available'}</li>
+                    <li>• caches: {typeof caches !== 'undefined' ? 'Available' : 'Not Available'}</li>
+                    <li>• Base URL: {window.location.origin + window.location.pathname}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="card">
           <h2 className="text-xl font-medium text-gray-900 mb-4">Legal Information</h2>
           <div className="space-y-3">
             <a href="#/legal/privacy" className="block text-primary-600 hover:text-primary-700">

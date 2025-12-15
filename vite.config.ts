@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const basePath = process.env.BASE_PATH ? `/${process.env.BASE_PATH}/` : '/'
+const basePath = process.env.NODE_ENV === 'production' ? '/Health-App/' : '/'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -11,6 +11,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'generateSW',
+      injectRegister: null,
+      devOptions: {
+        enabled: true // Enable PWA in development for testing
+      },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'CodePuppy Trainer',
@@ -51,6 +56,7 @@ export default defineConfig({
     })
   ],
   build: {
+    sourcemap: true, // Enable sourcemaps for diagnosis
     rollupOptions: {
       output: {
         manualChunks: {
