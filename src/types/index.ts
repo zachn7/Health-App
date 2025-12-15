@@ -50,6 +50,8 @@ export const FoodSource = {
 
 export type FoodSource = typeof FoodSource[keyof typeof FoodSource];
 
+export type UnitSystem = 'metric' | 'imperial';
+
 export interface Goal {
   id: string;
   type: GoalType;
@@ -79,6 +81,7 @@ export interface Profile {
   sex?: Sex;
   heightCm: number;
   weightKg: number;
+  preferredUnits: UnitSystem;
   activityLevel: ActivityLevel;
   experienceLevel: ExperienceLevel;
   goals: Goal[];

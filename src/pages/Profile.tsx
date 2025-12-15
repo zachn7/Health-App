@@ -1,12 +1,26 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import type { Profile, Goal } from '../types';
+import type { Profile, Goal, UnitSystem } from '../types';
 import { ActivityLevel, ExperienceLevel, GoalType, Sex } from '../types';
+import {
+  formatHeight,
+  formatWeight,
+  cmToFtIn,
+  kgToLbs,
+  parseImperialHeight,
+  parseImperialWeight,
+  validateMetricHeight,
+  validateMetricWeight,
+  validateImperialHeight,
+  validateImperialWeight
+} from '../lib/unit-conversions';
 
 export default function Profile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [imperialHeight, setImperialHeight] = useState({ feet: '', inches: '' });
+  const [imperialWeight, setImperialWeight] = useState('');
   const [newGoal, setNewGoal] = useState<Goal>({
     id: crypto.randomUUID(),
     type: GoalType.GENERAL_FITNESS,
@@ -80,6 +94,7 @@ export default function Profile() {
       sex: Sex.MALE,
       heightCm: 175,
       weightKg: 75,
+      preferredUnits: 'metric',
       activityLevel: ActivityLevel.MODERATE,
       experienceLevel: ExperienceLevel.BEGINNER,
       goals: [newGoal],
@@ -97,6 +112,20 @@ export default function Profile() {
     };
     setProfile(newProfile);
   };
+
+  // Update imperial fields when profile or unit system changes
+  useEffect(() => {
+    if (profile) {
+      if (profile.preferredUnits === 'imperial') {
+        const { feet, inches } = cmToFtIn(profile.heightCm);
+        setImperialHeight({ feet: feet.toString(), inches: inches.toString() });
+        setImperialWeight(kgToLbs(profile.weightKg).toFixed(1));
+      } else {
+        setImperialHeight({ feet: '', inches: '' });
+        setImperialWeight('');
+      }
+    }
+  }, [profile, profile?.preferredUnits, profile?.heightCm, profile?.weightKg]);
 
   const updateField = (field: keyof Profile, value: any) => {
     if (!profile) return;
@@ -125,6 +154,45 @@ export default function Profile() {
     updateField('goals', profile.goals.filter(g => g.id !== goalId));
   };
 
+  const updateHeight = (value: number) => {
+    if (!profile) return;
+    
+    if (profile.preferredUnits === 'imperial') {
+      const { feet, inches } = cmToFtIn(value);
+      setImperialHeight({ feet: feet.toString(), inches: inches.toString() });
+    }
+    
+    updateField('heightCm', value);
+  };
+
+  const updateWeight = (value: number) => {
+    if (!profile) return;
+    
+    if (profile.preferredUnits === 'imperial') {
+      setImperialWeight(kgToLbs(value).toFixed(1));
+    }
+    
+    updateField('weightKg', value);
+  };
+
+  const updateImperialHeight = (feet: string, inches: string) => {
+    setImperialHeight({ feet, inches });
+    
+    const cm = parseImperialHeight(feet, inches);
+    if (cm !== null) {
+      updateField('heightCm', cm);
+    }
+  };
+
+  const updateImperialWeight = (lbs: string) => {
+    setImperialWeight(lbs);
+    
+    const kg = parseImperialWeight(lbs);
+    if (kg !== null) {
+      updateField('weightKg', kg);
+    }
+  };
+
   const validateProfile = (profile: Profile): string[] => {
     const errors: string[] = [];
     
@@ -132,12 +200,29 @@ export default function Profile() {
       errors.push('Age must be 13 or older');
     }
     
-    if (!profile.heightCm || profile.heightCm < 100 || profile.heightCm > 250) {
-      errors.push('Height must be between 100-250 cm');
+    // Validate height based on display units but check internally
+    if (profile.preferredUnits === 'imperial') {
+      const feet = parseInt(imperialHeight.feet, 10);
+      const inches = parseInt(imperialHeight.inches, 10);
+      if (!validateImperialHeight(feet, inches)) {
+        errors.push('Height must be between 3\'4" and 8\'3"');
+      }
+    } else {
+      if (!validateMetricHeight(profile.heightCm)) {
+        errors.push('Height must be between 100-250 cm');
+      }
     }
     
-    if (!profile.weightKg || profile.weightKg < 30 || profile.weightKg > 300) {
-      errors.push('Weight must be between 30-300 kg');
+    // Validate weight based on display units but check internally
+    if (profile.preferredUnits === 'imperial') {
+      const lbs = parseFloat(imperialWeight);
+      if (!validateImperialWeight(lbs)) {
+        errors.push('Weight must be between 66-661 lbs');
+      }
+    } else {
+      if (!validateMetricWeight(profile.weightKg)) {
+        errors.push('Weight must be between 30-300 kg');
+      }
     }
     
     if (profile.goals.length === 0) {
@@ -223,29 +308,105 @@ export default function Profile() {
             </div>
             
             <div>
-              <label className="label">Height (cm)</label>
-              <input
-                type="number"
-                value={profile.heightCm}
-                onChange={(e) => updateField('heightCm', parseInt(e.target.value))}
+              <label className="label">Units</label>
+              <select
+                value={profile.preferredUnits || 'metric'}
+                onChange={(e) => updateField('preferredUnits', e.target.value as UnitSystem)}
                 className="input"
-                min="100"
-                max="250"
-              />
+              >
+                <option value="metric">Metric (cm, kg)</option>
+                <option value="imperial">Imperial (ft/in, lbs)</option>
+              </select>
             </div>
-            
-            <div>
-              <label className="label">Weight (kg)</label>
-              <input
-                type="number"
-                value={profile.weightKg}
-                onChange={(e) => updateField('weightKg', parseFloat(e.target.value))}
-                className="input"
-                min="30"
-                max="300"
-                step="0.1"
-              />
-            </div>
+          </div>
+          
+          {/* Height Input */}
+          <div className="mt-6">
+            <label className="label">Height</label>
+            {profile.preferredUnits === 'imperial' ? (
+              <div className="flex gap-2 items-center">
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    value={imperialHeight.feet}
+                    onChange={(e) => updateImperialHeight(e.target.value, imperialHeight.inches)}
+                    className="input"
+                    min="3"
+                    max="8"
+                    placeholder="Feet"
+                  />
+                </div>
+                <span className="text-gray-500">ft</span>
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    value={imperialHeight.inches}
+                    onChange={(e) => updateImperialHeight(imperialHeight.feet, e.target.value)}
+                    className="input"
+                    min="0"
+                    max="11"
+                    placeholder="Inches"
+                  />
+                </div>
+                <span className="text-gray-500">in</span>
+                <span className="text-sm text-gray-500 ml-2">
+                  ({formatHeight(profile.heightCm, 'metric')})
+                </span>
+              </div>
+            ) : (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  value={profile.heightCm}
+                  onChange={(e) => updateHeight(parseInt(e.target.value))}
+                  className="input flex-1"
+                  min="100"
+                  max="250"
+                />
+                <span className="text-gray-500">cm</span>
+                <span className="text-sm text-gray-500 ml-2">
+                  ({formatHeight(profile.heightCm, 'imperial')})
+                </span>
+              </div>
+            )}
+          </div>
+          
+          {/* Weight Input */}
+          <div className="mt-6">
+            <label className="label">Weight</label>
+            {profile.preferredUnits === 'imperial' ? (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  value={imperialWeight}
+                  onChange={(e) => updateImperialWeight(e.target.value)}
+                  className="input flex-1"
+                  min="66"
+                  max="661"
+                  step="0.1"
+                />
+                <span className="text-gray-500">lbs</span>
+                <span className="text-sm text-gray-500 ml-2">
+                  ({formatWeight(profile.weightKg, 'metric')})
+                </span>
+              </div>
+            ) : (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  value={profile.weightKg}
+                  onChange={(e) => updateWeight(parseFloat(e.target.value))}
+                  className="input flex-1"
+                  min="30"
+                  max="300"
+                  step="0.1"
+                />
+                <span className="text-gray-500">kg</span>
+                <span className="text-sm text-gray-500 ml-2">
+                  ({formatWeight(profile.weightKg, 'imperial')})
+                </span>
+              </div>
+            )}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">

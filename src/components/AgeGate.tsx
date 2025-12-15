@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const MINIMUM_AGE = 13;
 
 export default function AgeGate() {
+  const navigate = useNavigate();
   const [age, setAge] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [devError, setDevError] = useState('');
   const [, setAccepted] = useLocalStorage('age_gate_accepted', false);
   const [, setTimestamp] = useLocalStorage('age_gate_timestamp', '');
+  const [hasCompletedOnboarding] = useLocalStorage('onboarding_completed', false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('AgeGate: handleSubmit called with age:', age);
+    setError('');
+    setDevError('');
     
     const ageNum = parseInt(age, 10);
     
@@ -25,9 +31,30 @@ export default function AgeGate() {
       return;
     }
     
-    console.log('AgeGate: Valid age, setting accepted state');
-    setAccepted(true);
-    setTimestamp(new Date().toISOString());
+    setIsLoading(true);
+    
+    try {
+      // Save to localStorage
+      setAccepted(true);
+      setTimestamp(new Date().toISOString());
+      
+      // Give localStorage time to update, then navigate
+      setTimeout(() => {
+        setIsLoading(false);
+        // Navigate to onboarding if not completed, otherwise to dashboard
+        if (hasCompletedOnboarding) {
+          navigate('/');
+        } else {
+          navigate('/onboarding');
+        }
+      }, 100);
+    } catch (error) {
+      setIsLoading(false);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('AgeGate: Failed to save:', error);
+      setDevError(`DEV ERROR: ${errorMessage}`);
+      setError('Failed to continue. Please try again.');
+    }
   };
 
   return (
@@ -93,9 +120,9 @@ export default function AgeGate() {
             <button
               type="submit"
               className="btn btn-primary w-full"
-              disabled={!age}
+              disabled={!age || isLoading}
             >
-              Continue
+              {isLoading ? 'Saving...' : 'Continue'}
             </button>
           </form>
         </div>
@@ -113,6 +140,12 @@ export default function AgeGate() {
             .
           </p>
         </div>
+        
+        {devError && process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 p-2 bg-red-100 border border-red-400 text-red-700 text-xs rounded">
+            {devError}
+          </div>
+        )}
       </div>
     </div>
   );
