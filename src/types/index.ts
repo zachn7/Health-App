@@ -57,6 +57,7 @@ export interface Goal {
   type: GoalType;
   targetDate?: string;
   priority: number;
+  isPrimary?: boolean;
   createdAt: string;
   updatedAt: string;
 }

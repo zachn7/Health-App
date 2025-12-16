@@ -1,10 +1,13 @@
 
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import type { NutritionLog, FoodLogItem, MacroTotals } from '../types';
+import { calculateTDEE } from '../lib/coach-engine';
+import type { NutritionLog, FoodLogItem, MacroTotals, Profile } from '../types';
 
 export default function Nutrition() {
-  const [todayLog, setTodayLog] = useState<NutritionLog | null>(null);
+  const [currentLog, setCurrentLog] = useState<NutritionLog | null>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [newFood, setNewFood] = useState<FoodLogItem>({
     id: crypto.randomUUID(),
@@ -19,48 +22,82 @@ export default function Nutrition() {
   const [showAddFood, setShowAddFood] = useState(false);
 
   useEffect(() => {
-    loadTodayLog();
-  }, []);
+    loadNutritionData();
+  }, [selectedDate]);
 
-  const loadTodayLog = async () => {
+  const loadNutritionData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const log = await repositories.nutrition.getNutritionLog(today);
-      setTodayLog(log || null);
+      // Load profile for targets
+      const userProfile = await repositories.profile.get();
+      setProfile(userProfile || null);
+
+      // Load nutrition log for selected date
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      const log = await repositories.nutrition.getNutritionLog(dateStr);
+      setCurrentLog(log || null);
     } catch (error) {
-      console.error('Failed to load nutrition log:', error);
+      console.error('Failed to load nutrition data:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const navigateDate = (direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'today') {
+      setSelectedDate(new Date());
+    } else {
+      const newDate = new Date(selectedDate);
+      if (direction === 'prev') {
+        newDate.setDate(newDate.getDate() - 1);
+      } else {
+        newDate.setDate(newDate.getDate() + 1);
+      }
+      setSelectedDate(newDate);
+    }
+  };
+
+  const getDailyTargets = () => {
+    if (!profile) {
+      return { calories: 2000, proteinG: 150, carbsG: 250, fatG: 65 };
+    }
+    
+    const tdee = calculateTDEE(profile);
+    // Use TDEE as calorie target (can be adjusted based on goals)
+    return {
+      calories: Math.round(tdee.tdee),
+      proteinG: Math.round(profile.weightKg * 2.2), // ~2g per kg
+      carbsG: Math.round(tdee.tdee * 0.5 / 4), // 50% of calories
+      fatG: Math.round(tdee.tdee * 0.25 / 9) // 25% of calories
+    };
+  };
+
   const saveFood = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const dateStr = selectedDate.toISOString().split('T')[0];
       
-      if (!todayLog) {
-        // Create new log for today
+      if (!currentLog) {
+        // Create new log for selected date
         const newLog: NutritionLog = {
           id: crypto.randomUUID(),
-          date: today,
+          date: dateStr,
           items: [newFood],
           totals: calculateTotals([newFood]),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
         await repositories.nutrition.createNutritionLog(newLog);
-        setTodayLog(newLog);
+        setCurrentLog(newLog);
       } else {
         // Add to existing log
-        const updatedItems = [...todayLog.items, newFood];
+        const updatedItems = [...currentLog.items, newFood];
         const updatedLog = {
-          ...todayLog,
+          ...currentLog,
           items: updatedItems,
           totals: calculateTotals(updatedItems),
           updatedAt: new Date().toISOString()
         };
         await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
-        setTodayLog(updatedLog);
+        setCurrentLog(updatedLog);
       }
       
       // Reset form
@@ -105,12 +142,12 @@ export default function Nutrition() {
   };
 
   const deleteFood = async (foodId: string) => {
-    if (!todayLog) return;
+    if (!currentLog) return;
     
     try {
-      const updatedItems = todayLog.items.filter(item => item.id !== foodId);
+      const updatedItems = currentLog.items.filter(item => item.id !== foodId);
       const updatedLog = {
-        ...todayLog,
+        ...currentLog,
         items: updatedItems,
         totals: calculateTotals(updatedItems),
         updatedAt: new Date().toISOString()
@@ -118,11 +155,11 @@ export default function Nutrition() {
       
       if (updatedItems.length === 0) {
         // Delete the entire log if no items left
-        await repositories.nutrition.deleteNutritionLog(todayLog.id);
-        setTodayLog(null);
+        await repositories.nutrition.deleteNutritionLog(currentLog.id);
+        setCurrentLog(null);
       } else {
         await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
-        setTodayLog(updatedLog);
+        setCurrentLog(updatedLog);
       }
     } catch (error) {
       console.error('Failed to delete food:', error);
@@ -144,41 +181,97 @@ export default function Nutrition() {
         <p className="mt-2 text-gray-600">Track your meals and macros</p>
       </div>
       
-      {/* Daily Totals */}
-      {todayLog && (
-        <div className="card mb-6">
-          <h2 className="text-xl font-medium text-gray-900 mb-4">
-            Today's Totals - {new Date().toLocaleDateString()}
-          </h2>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {Math.round(todayLog.totals.calories)}
-              </div>
-              <div className="text-sm text-gray-600">Calories</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {Math.round(todayLog.totals.proteinG)}g
-              </div>
-              <div className="text-sm text-gray-600">Protein</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">
-                {Math.round(todayLog.totals.carbsG)}g
-              </div>
-              <div className="text-sm text-gray-600">Carbs</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">
-                {Math.round(todayLog.totals.fatG)}g
-              </div>
-              <div className="text-sm text-gray-600">Fat</div>
-            </div>
+      {/* Date Navigation */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-medium text-gray-900">Nutrition Log</h2>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => navigateDate('prev')}
+              className="btn btn-secondary btn-sm"
+            >
+              ← Previous
+            </button>
+            <button
+              onClick={() => navigateDate('today')}
+              className={`btn btn-sm ${
+                selectedDate.toDateString() === new Date().toDateString() 
+                  ? 'btn-primary' 
+                  : 'btn-secondary'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => navigateDate('next')}
+              className="btn btn-secondary btn-sm"
+            >
+              Next →
+            </button>
           </div>
         </div>
-      )}
+        
+        <div className="text-center text-lg font-medium mb-4">
+          {selectedDate.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}
+        </div>
+        
+        {/* Daily Totals with 0/target format */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">
+              {currentLog ? Math.round(currentLog.totals.calories) : 0}
+              <span className="text-lg text-gray-500">/{getDailyTargets().calories}</span>
+            </div>
+            <div className="text-sm text-gray-600">Calories</div>
+            {currentLog && (
+              <div className="text-xs text-gray-500 mt-1">
+                {Math.round((currentLog.totals.calories / getDailyTargets().calories) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">
+              {currentLog ? Math.round(currentLog.totals.proteinG) : 0}g
+              <span className="text-lg text-gray-500">/{getDailyTargets().proteinG}g</span>
+            </div>
+            <div className="text-sm text-gray-600">Protein</div>
+            {currentLog && (
+              <div className="text-xs text-gray-500 mt-1">
+                {Math.round((currentLog.totals.proteinG / getDailyTargets().proteinG) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-yellow-600">
+              {currentLog ? Math.round(currentLog.totals.carbsG) : 0}g
+              <span className="text-lg text-gray-500">/{getDailyTargets().carbsG}g</span>
+            </div>
+            <div className="text-sm text-gray-600">Carbs</div>
+            {currentLog && (
+              <div className="text-xs text-gray-500 mt-1">
+                {Math.round((currentLog.totals.carbsG / getDailyTargets().carbsG) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600">
+              {currentLog ? Math.round(currentLog.totals.fatG) : 0}g
+              <span className="text-lg text-gray-500">/{getDailyTargets().fatG}g</span>
+            </div>
+            <div className="text-sm text-gray-600">Fat</div>
+            {currentLog && (
+              <div className="text-xs text-gray-500 mt-1">
+                {Math.round((currentLog.totals.fatG / getDailyTargets().fatG) * 100)}%
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
       
       {/* Add Food Button */}
       <div className="mb-6">
@@ -308,13 +401,15 @@ export default function Nutrition() {
         </div>
       )}
       
-      {/* Today's Foods */}
-      {todayLog && todayLog.items.length > 0 && (
+      {/* Food Items */}
+      {currentLog && currentLog.items.length > 0 && (
         <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Today's Foods</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Food Items ({currentLog.items.length})
+          </h3>
           
           <div className="space-y-3">
-            {todayLog.items.map((item) => (
+            {currentLog.items.map((item) => (
               <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex-1">
                   <div className="font-medium">{item.name}</div>
@@ -340,9 +435,15 @@ export default function Nutrition() {
         </div>
       )}
       
-      {!todayLog && (
+      {currentLog && currentLog.items.length === 0 && (
+        <div className="card text-center py-8">
+          <p className="text-gray-600">No food items logged for this date</p>
+        </div>
+      )}
+      
+      {!currentLog && (
         <div className="card text-center py-12">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No food logged today</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No food logged for this date</h3>
           <p className="text-gray-600 mb-4">Start tracking your nutrition by adding your first meal</p>
           <button
             onClick={() => setShowAddFood(true)}

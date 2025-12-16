@@ -40,7 +40,7 @@ export function calculateTDEE(profile: Profile): { bmr: number; tdee: number } {
 
 // Calculate macro targets based on goals
 export function calculateMacroTargets(profile: Profile, tdee: number): MacroTargets {
-  const primaryGoal = profile.goals[0]?.type || GoalType.MAINTENANCE;
+  const primaryGoal = profile.goals.find(g => g.isPrimary)?.type || profile.goals[0]?.type || GoalType.MAINTENANCE;
   const weightKg = profile.weightKg;
   
   // Start with base calorie calculation
@@ -89,9 +89,10 @@ export function calculateMacroTargets(profile: Profile, tdee: number): MacroTarg
 }
 
 // Generate workout plan based on profile and goals
-export function generateWorkoutPlan(profile: Profile): WorkoutPlan {
+export function generateWorkoutPlan(profile: Profile, goalId?: string): WorkoutPlan {
   const { experienceLevel, goals, equipment, schedule } = profile;
-  const primaryGoal = goals[0]?.type || GoalType.GENERAL_FITNESS;
+  const selectedGoal = goals.find(g => g.id === goalId) || goals.find(g => g.isPrimary) || goals[0];
+  const primaryGoal = selectedGoal?.type || GoalType.GENERAL_FITNESS;
   
   // Determine training frequency based on schedule
   const trainingDays = Object.values(schedule).filter(Boolean).length;
@@ -168,12 +169,28 @@ function generateDayWorkout(
   const targetBodyParts = getTargetBodyParts(bodyPartDay);
   
   // Filter exercises by target body parts
-  const targetExercises = exercises.filter(ex => 
+  let targetExercises = exercises.filter(ex => 
     targetBodyParts.includes(ex.bodyPart)
   );
   
+  // If not enough exercises for target body parts, add general exercises
+  if (targetExercises.length < 4) {
+    const generalExercises = exercises.filter(ex => 
+      !targetExercises.includes(ex) && ex.category === 'compound'
+    );
+    targetExercises = [...targetExercises, ...generalExercises.slice(0, 4 - targetExercises.length)];
+  }
+  
+  // If still not enough, add some isolation exercises
+  if (targetExercises.length < 4) {
+    const isolationExercises = exercises.filter(ex => 
+      !targetExercises.includes(ex) && ex.category === 'isolation'
+    );
+    targetExercises = [...targetExercises, ...isolationExercises.slice(0, 4 - targetExercises.length)];
+  }
+  
   // Select 4-6 exercises per workout
-  const exerciseCount = Math.min(6, Math.max(4, Math.floor(targetExercises.length / 2)));
+  const exerciseCount = Math.min(6, Math.max(4, targetExercises.length));
   const selectedExercises = targetExercises.slice(0, exerciseCount);
   
   selectedExercises.forEach(exercise => {
@@ -194,9 +211,9 @@ function getWorkoutSplit(totalDays: number): number {
 
 function getTargetBodyParts(bodyPartDay: number): string[] {
   if (bodyPartDay === 0) {
-    return ['chest', 'shoulders', 'triceps']; // Push day
+    return ['chest', 'shoulders', 'arms']; // Push day
   } else if (bodyPartDay === 1) {
-    return ['back', 'biceps']; // Pull day
+    return ['back', 'arms']; // Pull day
   } else {
     return ['legs']; // Leg day
   }

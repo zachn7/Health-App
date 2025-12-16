@@ -19,6 +19,8 @@ export default function Profile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [imperialHeight, setImperialHeight] = useState({ feet: '', inches: '' });
   const [imperialWeight, setImperialWeight] = useState('');
   const [newGoal, setNewGoal] = useState<Goal>({
@@ -62,10 +64,11 @@ export default function Profile() {
       console.log('Saving profile:', profile);
       await repositories.profile.save(profile);
       console.log('Profile saved successfully!');
-      alert('Profile saved successfully!');
       
-      // Navigate to dashboard after successful save
-      window.location.hash = '/dashboard';
+      // Switch back to view mode and show success
+      setEditMode(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to save profile:', error);
       
@@ -134,6 +137,23 @@ export default function Profile() {
       [field]: value,
       updatedAt: new Date().toISOString()
     });
+  };
+
+  const updateGoal = (goalId: string, updates: Partial<Goal>) => {
+    if (!profile) return;
+    const updatedGoals = profile.goals.map(goal => 
+      goal.id === goalId ? { ...goal, ...updates, updatedAt: new Date().toISOString() } : goal
+    );
+    updateField('goals', updatedGoals);
+  };
+
+  const setPrimaryGoal = (goalId: string) => {
+    if (!profile) return;
+    const updatedGoals = profile.goals.map(goal => ({
+      ...goal,
+      isPrimary: goal.id === goalId
+    }));
+    updateField('goals', updatedGoals);
   };
 
   const addGoal = () => {
@@ -260,7 +280,10 @@ export default function Profile() {
         <div className="card text-center py-12">
           <h2 className="text-xl font-medium text-gray-900 mb-4">No Profile Found</h2>
           <p className="text-gray-600 mb-6">Create your profile to get started with personalized fitness plans</p>
-          <button onClick={createNewProfile} className="btn btn-primary">
+          <button onClick={() => {
+            createNewProfile();
+            setEditMode(true);
+          }} className="btn btn-primary">
             Create Profile
           </button>
         </div>
@@ -268,10 +291,133 @@ export default function Profile() {
     );
   }
 
+  // View Mode - Display readonly stat cards
+  if (!editMode && profile) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
+            <p className="mt-2 text-gray-600">Your personal information and goals</p>
+          </div>
+          <button
+            onClick={() => setEditMode(true)}
+            className="btn btn-secondary"
+          >
+            Edit Profile
+          </button>
+        </div>
+
+        {showSuccess && (
+          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
+            Profile saved successfully!
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Basic Info Card */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Age:</span>
+                <span className="font-medium">{profile.age} years</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Sex:</span>
+                <span className="font-medium capitalize">{profile.sex}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Height:</span>
+                <span className="font-medium">
+                  {formatHeight(profile.heightCm, profile.preferredUnits)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Weight:</span>
+                <span className="font-medium">
+                  {formatWeight(profile.weightKg, profile.preferredUnits)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Units:</span>
+                <span className="font-medium capitalize">{profile.preferredUnits}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Activity Level Card */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Activity & Experience</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Activity Level:</span>
+                <span className="font-medium capitalize">{profile.activityLevel.replace('_', ' ')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Experience:</span>
+                <span className="font-medium capitalize">{profile.experienceLevel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Workout Days:</span>
+                <span className="font-medium">
+                  {Object.values(profile.schedule).filter(Boolean).length} per week
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Equipment Card */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Available Equipment</h3>
+            <div className="flex flex-wrap gap-1">
+              {profile.equipment.map(eq => (
+                <span key={eq} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full capitalize">
+                  {eq.replace('-', ' ')}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Goals Card */}
+          <div className="card md:col-span-2 lg:col-span-3">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Fitness Goals</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {profile.goals.map(goal => (
+                <div key={goal.id} className="p-4 bg-gray-50 rounded-lg">
+                  <div className="font-medium capitalize mb-2">
+                    {goal.type.replace('_', ' ')}
+                  </div>
+                  {goal.targetDate && (
+                    <div className="text-sm text-gray-600 mb-1">
+                      Target: {new Date(goal.targetDate).toLocaleDateString()}
+                    </div>
+                  )}
+                  <div className="text-sm text-gray-600">
+                    Priority: {'★'.repeat(goal.priority)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Limitations Card */}
+          {profile.limitations && (
+            <div className="card md:col-span-2 lg:col-span-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Injury Limitations</h3>
+              <p className="text-sm text-gray-600">{profile.limitations}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Edit Mode - Show the existing form
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
+        <h1 className="text-3xl font-bold text-gray-900">{editMode ? 'Edit Profile' : 'Profile'}</h1>
         <p className="mt-2 text-gray-600">Your personal information and goals</p>
       </div>
       
@@ -496,56 +642,128 @@ export default function Profile() {
           
           <div className="space-y-4 mb-6">
             {profile.goals.map(goal => (
-              <div key={goal.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <div className="font-medium capitalize">
-                    {goal.type.replace('_', ' ')}
-                  </div>
-                  {goal.targetDate && (
-                    <div className="text-sm text-gray-600">
-                      Target: {new Date(goal.targetDate).toLocaleDateString()}
+              <div key={goal.id} className={`p-4 rounded-lg border-2 ${goal.isPrimary ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="label text-xs">Goal Type</label>
+                      <select
+                        value={goal.type}
+                        onChange={(e) => updateGoal(goal.id, { type: e.target.value as GoalType })}
+                        className="input text-sm"
+                      >
+                        <option value="strength">Strength</option>
+                        <option value="hypertrophy">Muscle Building</option>
+                        <option value="fat_loss">Fat Loss</option>
+                        <option value="endurance">Endurance</option>
+                        <option value="general_fitness">General Fitness</option>
+                      </select>
                     </div>
-                  )}
-                  <div className="text-sm text-gray-600">
-                    Priority: {'★'.repeat(goal.priority)}
+                    
+                    <div>
+                      <label className="label text-xs">Goal End Date</label>
+                      <input
+                        type="date"
+                        value={goal.targetDate}
+                        onChange={(e) => updateGoal(goal.id, { targetDate: e.target.value })}
+                        className="input text-sm"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="label text-xs">Priority</label>
+                      <select
+                        value={goal.priority}
+                        onChange={(e) => updateGoal(goal.id, { priority: parseInt(e.target.value) })}
+                        className="input text-sm"
+                      >
+                        <option value="1">★ Low</option>
+                        <option value="2">★★ Medium</option>
+                        <option value="3">★★★ High</option>
+                        <option value="4">★★★★ Critical</option>
+                      </select>
+                    </div>
+                    
+                    <div className="flex items-end space-x-2">
+                      <button
+                        onClick={() => setPrimaryGoal(goal.id)}
+                        className={`btn btn-sm ${goal.isPrimary ? 'btn-primary' : 'btn-secondary'}`}
+                      >
+                        {goal.isPrimary ? 'Primary' : 'Set Primary'}
+                      </button>
+                      <button
+                        onClick={() => removeGoal(goal.id)}
+                        className="btn btn-sm text-red-600 hover:text-red-800 border-red-300"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => removeGoal(goal.id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  Remove
-                </button>
+                
+                {goal.targetDate && (
+                  <div className="text-sm text-gray-600">
+                    Target: {new Date(goal.targetDate).toLocaleDateString()} ({Math.ceil((new Date(goal.targetDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days remaining)
+                  </div>
+                )}
+                
+                {goal.isPrimary && (
+                  <div className="text-sm text-green-700 font-medium mt-2">
+                    ⭐ Primary goal for workout plan generation
+                  </div>
+                )}
               </div>
             ))}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <select
-              value={newGoal.type}
-              onChange={(e) => setNewGoal({ ...newGoal, type: e.target.value as GoalType })}
-              className="input"
-            >
-              <option value="strength">Strength</option>
-              <option value="hypertrophy">Muscle Building</option>
-              <option value="fat_loss">Fat Loss</option>
-              <option value="endurance">Endurance</option>
-              <option value="general_fitness">General Fitness</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="label">Goal Type</label>
+              <select
+                value={newGoal.type}
+                onChange={(e) => setNewGoal({ ...newGoal, type: e.target.value as GoalType })}
+                className="input"
+              >
+                <option value="strength">Strength</option>
+                <option value="hypertrophy">Muscle Building</option>
+                <option value="fat_loss">Fat Loss</option>
+                <option value="endurance">Endurance</option>
+                <option value="general_fitness">General Fitness</option>
+              </select>
+            </div>
             
-            <input
-              type="date"
-              value={newGoal.targetDate}
-              onChange={(e) => setNewGoal({ ...newGoal, targetDate: e.target.value })}
-              className="input"
-            />
+            <div>
+              <label className="label">Goal End Date</label>
+              <input
+                type="date"
+                value={newGoal.targetDate}
+                onChange={(e) => setNewGoal({ ...newGoal, targetDate: e.target.value })}
+                className="input"
+              />
+            </div>
             
-            <button
-              onClick={addGoal}
-              className="btn btn-secondary"
-            >
-              Add Goal
-            </button>
+            <div>
+              <label className="label">Priority</label>
+              <select
+                value={newGoal.priority}
+                onChange={(e) => setNewGoal({ ...newGoal, priority: parseInt(e.target.value) })}
+                className="input"
+              >
+                <option value="1">★ Low</option>
+                <option value="2">★★ Medium</option>
+                <option value="3">★★★ High</option>
+                <option value="4">★★★★ Critical</option>
+              </select>
+            </div>
+            
+            <div className="flex items-end">
+              <button
+                onClick={addGoal}
+                className="btn btn-secondary w-full"
+              >
+                Add Goal
+              </button>
+            </div>
           </div>
         </div>
 

@@ -9,6 +9,7 @@ export default function Workouts() {
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
+  const [workoutCompletion, setWorkoutCompletion] = useState<Record<string, Record<string, boolean>>>({});
 
   useEffect(() => {
     loadWorkoutData();
@@ -46,6 +47,45 @@ export default function Workouts() {
     const startOfYear = new Date(today.getFullYear(), 0, 1);
     const weekNumber = Math.ceil((today.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000));
     return weekNumber % 4; // Cycle through 4-week blocks
+  };
+
+  const getWorkoutKey = (planId: string, weekIndex: number, dayIndex: number) => {
+    return `${planId}-w${weekIndex}-d${dayIndex}`;
+  };
+
+  const toggleExerciseComplete = (planId: string, weekIndex: number, dayIndex: number, exerciseId: string) => {
+    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
+    setWorkoutCompletion(prev => ({
+      ...prev,
+      [workoutKey]: {
+        ...prev[workoutKey],
+        [exerciseId]: !prev[workoutKey]?.[exerciseId]
+      }
+    }));
+  };
+
+  const isExerciseComplete = (planId: string, weekIndex: number, dayIndex: number, exerciseId: string) => {
+    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
+    return workoutCompletion[workoutKey]?.[exerciseId] || false;
+  };
+
+  const getWorkoutProgress = (planId: string, weekIndex: number, dayIndex: number, totalExercises: number) => {
+    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
+    const completed = Object.values(workoutCompletion[workoutKey] || {}).filter(Boolean).length;
+    return { completed, total: totalExercises, percentage: (completed / totalExercises) * 100 };
+  };
+
+  const markWholeWorkoutComplete = (planId: string, weekIndex: number, dayIndex: number, exercises: any[]) => {
+    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
+    const completion: Record<string, boolean> = {};
+    exercises.forEach(ex => {
+      completion[ex.exerciseId] = true;
+    });
+    
+    setWorkoutCompletion(prev => ({
+      ...prev,
+      [workoutKey]: completion
+    }));
   };
 
   const generateWorkoutPlan = async () => {
@@ -97,7 +137,7 @@ export default function Workouts() {
     
     // Store in session for the logger to pick up
     sessionStorage.setItem('currentWorkout', JSON.stringify(workoutData));
-    window.location.hash = '/workout-logger';
+    window.location.hash = '/log/workout';
   };
 
   if (loading) {
@@ -160,16 +200,31 @@ export default function Workouts() {
               {/* Quick Start Current Week */}
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Week {currentWeekIndex + 1} (Current Week)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  {plan.weeks[currentWeekIndex]?.workouts.map((workout, dayIndex) => (
-                    <button
-                      key={dayIndex}
-                      onClick={() => startWorkout(plan, currentWeekIndex, dayIndex)}
-                      className="btn btn-secondary text-sm py-2"
-                    >
-                      {workout.day} ({workout.exercises.length} exercises)
-                    </button>
-                  ))}
+                <div className="space-y-2">
+                  {plan.weeks[currentWeekIndex]?.workouts.map((workout, dayIndex) => {
+                    const progress = getWorkoutProgress(plan.id, currentWeekIndex, dayIndex, workout.exercises.length);
+                    return (
+                      <div key={dayIndex} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{workout.day}</div>
+                          <div className="text-xs text-gray-600">
+                            {workout.exercises.length} exercises
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <div className="text-xs text-gray-600">
+                            {progress.completed}/{progress.total}
+                          </div>
+                          <button
+                            onClick={() => setSelectedPlan(plan)}
+                            className="btn btn-secondary text-xs py-1 px-2"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -250,34 +305,62 @@ export default function Workouts() {
                       {workout.exercises.map((exercise, exIndex) => {
                         const exerciseName = getExerciseName(exercise.exerciseId);
                         const instructions = getExerciseInstructions(exercise.exerciseId);
+                        const isComplete = isExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId);
                         
                         return (
-                          <div key={exIndex} className="border-l-4 border-blue-500 pl-4">
-                            <div className="font-medium">{exerciseName}</div>
-                            <div className="text-sm text-gray-600">
-                              {exercise.sets.repsRange ? 
-                                `${exercise.sets.sets} sets of ${exercise.sets.repsRange.min}-${exercise.sets.repsRange.max} reps` :
-                                `${exercise.sets.sets} sets of ${exercise.sets.reps} reps`
-                              }
-                              {exercise.sets.weight && ` • ${exercise.sets.weight}kg`}
-                              {exercise.sets.restTime && ` • ${exercise.sets.restTime}s rest`}
+                          <div key={exIndex} className={`border-l-4 pl-4 ${isComplete ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
+                            <div className="flex items-start space-x-3">
+                              <input
+                                type="checkbox"
+                                checked={isComplete}
+                                onChange={() => toggleExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId)}
+                                className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <div className="flex-1">
+                                <div className={`font-medium ${isComplete ? 'line-through text-gray-500' : ''}`}>
+                                  {exerciseName}
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  {exercise.sets.repsRange ? 
+                                    `${exercise.sets.sets} sets of ${exercise.sets.repsRange.min}-${exercise.sets.repsRange.max} reps` :
+                                    `${exercise.sets.sets} sets of ${exercise.sets.reps} reps`
+                                  }
+                                  {exercise.sets.weight && ` • ${exercise.sets.weight}kg`}
+                                  {exercise.sets.restTime && ` • ${exercise.sets.restTime}s rest`}
+                                </div>
+                                {exercise.sets.notes && (
+                                  <div className="text-sm text-gray-600 italic mt-1">{exercise.sets.notes}</div>
+                                )}
+                                {instructions.length > 0 && (
+                                  <details className="mt-2">
+                                    <summary className="text-sm text-blue-600 cursor-pointer">Instructions</summary>
+                                    <ul className="text-sm text-gray-600 mt-2 ml-4 list-disc">
+                                      {instructions.slice(0, 3).map((instruction, i) => (
+                                        <li key={i}>{instruction}</li>
+                                      ))}
+                                    </ul>
+                                  </details>
+                                )}
+                              </div>
                             </div>
-                            {exercise.sets.notes && (
-                              <div className="text-sm text-gray-600 italic mt-1">{exercise.sets.notes}</div>
-                            )}
-                            {instructions.length > 0 && (
-                              <details className="mt-2">
-                                <summary className="text-sm text-blue-600 cursor-pointer">Instructions</summary>
-                                <ul className="text-sm text-gray-600 mt-2 ml-4 list-disc">
-                                  {instructions.slice(0, 3).map((instruction, i) => (
-                                    <li key={i}>{instruction}</li>
-                                  ))}
-                                </ul>
-                              </details>
-                            )}
                           </div>
                         );
                       })}
+                      
+                      {/* Workout completion summary and actions */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex justify-between items-center">
+                          <div className="text-sm text-gray-600">
+                            Progress: {getWorkoutProgress(selectedPlan.id, selectedWeek, dayIndex, workout.exercises.length).completed} of {workout.exercises.length} exercises
+                          </div>
+                          <button
+                            onClick={() => markWholeWorkoutComplete(selectedPlan.id, selectedWeek, dayIndex, workout.exercises)}
+                            className="btn btn-primary text-sm"
+                          >
+                            Mark Whole Workout Complete
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}

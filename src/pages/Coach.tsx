@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE, calculateMacroTargets, generateWorkoutPlan } from '../lib/coach-engine';
+import { formatWeight } from '../lib/unit-conversions';
 import type { Profile, WorkoutPlan } from '../types';
 
 export default function Coach() {
@@ -12,6 +13,9 @@ export default function Coach() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState<string>('');
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [exercises, setExercises] = useState<any[]>([]);
   
   const [checkIn, setCheckIn] = useState({
     adherenceRating: 3,
@@ -43,6 +47,23 @@ export default function Coach() {
         
         const macros = calculateMacroTargets(userProfile, tdeeResult.tdee);
         setMacroTargets(macros);
+        
+        // Set default selected goal (first one or highest priority)
+        if (userProfile.goals.length > 0) {
+          const highestPriorityGoal = userProfile.goals.reduce((prev, current) => 
+            (prev.priority > current.priority) ? prev : current
+          );
+          setSelectedGoalId(highestPriorityGoal.id);
+        }
+        
+        // Load exercise data for names
+        try {
+          const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
+          const exercisesData = await exercisesResponse.json();
+          setExercises(exercisesData);
+        } catch (error) {
+          console.warn('Failed to load exercises data:', error);
+        }
       }
     } catch (error) {
       console.error('Failed to load coach data:', error);
@@ -51,16 +72,35 @@ export default function Coach() {
     }
   };
 
+  const getExerciseName = (exerciseId: string): string => {
+    const exercise = exercises.find(ex => ex.id === exerciseId);
+    return exercise?.name || `Exercise ${exerciseId}`;
+  };
+
   const generateNewPlan = async () => {
     if (!profile) return;
 
     setGenerating(true);
+    setGenerationError(null);
     try {
-      const newPlan = generateWorkoutPlan(profile);
+      console.log('Generating workout plan for profile:', profile.id, 'goal:', selectedGoalId);
+      const newPlan = generateWorkoutPlan(profile, selectedGoalId);
+      console.log('Workout plan generated successfully:', newPlan.name);
       setGeneratedPlan(newPlan);
     } catch (error) {
       console.error('Failed to generate plan:', error);
-      alert('Failed to generate workout plan. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setGenerationError(`Failed to generate workout plan: ${errorMessage}`);
+      
+      // In development, show more details
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Plan generation failure details:', {
+          profile: profile,
+          selectedGoalId,
+          error,
+          stack: error instanceof Error ? error.stack : 'No stack trace'
+        });
+      }
     } finally {
       setGenerating(false);
     }
@@ -70,13 +110,48 @@ export default function Coach() {
     if (!generatedPlan) return;
 
     try {
-      await repositories.workout.createWorkoutPlan(generatedPlan);
-      setCurrentPlan(generatedPlan);
+      console.log('Saving workout plan:', generatedPlan);
+      
+      // Validate the plan structure before saving
+      if (!generatedPlan.name || !generatedPlan.weeks || generatedPlan.weeks.length === 0) {
+        throw new Error('Invalid workout plan structure');
+      }
+      
+      const savedPlan = await repositories.workout.createWorkoutPlan(generatedPlan);
+      console.log('Workout plan saved successfully:', savedPlan.id);
+      
+      setCurrentPlan(savedPlan);
       setGeneratedPlan(null);
-      alert('Workout plan saved successfully!');
+      
+      // Show success message instead of alert
+      const successDiv = document.createElement('div');
+      successDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50';
+      successDiv.innerHTML = '✓ Workout plan saved successfully!';
+      document.body.appendChild(successDiv);
+      setTimeout(() => document.body.removeChild(successDiv), 3000);
     } catch (error) {
       console.error('Failed to save plan:', error);
-      alert('Failed to save workout plan. Please try again.');
+      
+      // Enhanced error reporting
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorDetails = {
+        errorMessage,
+        planStructure: {
+          hasName: !!generatedPlan.name,
+          hasWeeks: !!generatedPlan.weeks,
+          weekCount: generatedPlan.weeks?.length || 0,
+          firstWeekWorkouts: generatedPlan.weeks?.[0]?.workouts?.length || 0
+        }
+      };
+      
+      console.error('Plan save error details:', errorDetails);
+      
+      // Show error in UI instead of alert
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg z-50';
+      errorDiv.innerHTML = `✗ Failed to save workout plan: ${errorMessage}`;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => document.body.removeChild(errorDiv), 5000);
     }
   };
 
@@ -143,7 +218,7 @@ export default function Coach() {
             </div>
             <div>
               <div className="text-sm text-gray-600">Weight</div>
-              <div className="font-medium">{profile.weightKg} kg</div>
+              <div className="font-medium">{formatWeight(profile.weightKg, profile.preferredUnits)}</div>
             </div>
             <div>
               <div className="text-sm text-gray-600">Experience</div>
@@ -173,7 +248,7 @@ export default function Coach() {
           <div className="card">
             <h2 className="text-xl font-medium text-gray-900 mb-4">Daily Nutrition Targets</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Based on your profile and goals (BMR: {tdee?.bmr} calories, TDEE: {tdee?.tdee} calories)
+              Based on your profile and goals (BMR: {tdee ? Math.round(tdee.bmr) : 0} calories, TDEE: {tdee ? Math.round(tdee.tdee) : 0} calories)
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-blue-50 rounded-lg">
@@ -235,6 +310,23 @@ export default function Coach() {
             Create a personalized 4-week workout plan based on your current profile
           </p>
           
+          {profile.goals.length > 1 && (
+            <div className="mb-4">
+              <label className="label">Generate plan for:</label>
+              <select
+                value={selectedGoalId}
+                onChange={(e) => setSelectedGoalId(e.target.value)}
+                className="input max-w-xs"
+              >
+                {profile.goals.map(goal => (
+                  <option key={goal.id} value={goal.id}>
+                    {goal.type.replace('_', ' ').replace(/\w/g, l => l.toUpperCase())} {'★'.repeat(goal.priority)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
           <button
             onClick={generateNewPlan}
             disabled={generating}
@@ -242,6 +334,25 @@ export default function Coach() {
           >
             {generating ? 'Generating...' : 'Generate Workout Plan'}
           </button>
+          
+          {/* Error Display */}
+          {generationError && (
+            <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+              <div className="font-medium">Plan Generation Failed</div>
+              <div className="text-sm mt-1">{generationError}</div>
+              <button
+                onClick={() => setGenerationError(null)}
+                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-2 text-xs text-red-600">
+                  Check the console for detailed error information.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Generated Plan Preview */}
@@ -256,11 +367,12 @@ export default function Coach() {
                 <div key={index} className="bg-gray-50 p-3 rounded">
                   <div className="font-medium">{workout.day}</div>
                   <div className="text-sm text-gray-600">
-                    {workout.exercises.map((ex, i) => (
-                      <div key={i} className="ml-4">
-                        • Exercise {i + 1}: {ex.exerciseId} ({ex.sets.sets} sets × {ex.sets.reps} reps)
+                    {workout.exercises.length} exercises
+                    {workout.exercises.length > 0 && (
+                      <div className="mt-1 text-xs">
+                        Types: {workout.exercises.map(ex => getExerciseName(ex.exerciseId)).join(', ')}
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               ))}

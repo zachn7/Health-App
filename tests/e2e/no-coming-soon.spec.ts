@@ -34,4 +34,9 @@ test.describe('No Coming Soon Text (F05)', () => {
       // Check page content
       const pageContent = await page.textContent('body');
       
-      // Should not contain 
+      // Should not contain "Coming Soon" text
+      expect(pageContent).not.toContain('Coming Soon');
+      expect(pageContent).not.toContain('coming soon');
+    }
+  });
+}); 

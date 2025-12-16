@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
 import type { Profile, WorkoutLog, NutritionLog } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [todaysWorkout, setTodaysWorkout] = useState<WorkoutLog | null>(null);
   const [todaysNutrition, setTodaysNutrition] = useState<NutritionLog | null>(null);
@@ -127,9 +129,12 @@ export default function Dashboard() {
           ) : (
             <div>
               <p className="text-gray-600 mb-4">No workout logged yet today</p>
-              <a href="#/log/workout" className="btn btn-primary">
+              <button
+                onClick={() => navigate('/log/workout')}
+                className="btn btn-primary"
+              >
                 Log Workout
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -166,9 +171,12 @@ export default function Dashboard() {
           ) : (
             <div>
               <p className="text-gray-600 mb-4">No nutrition logged yet today</p>
-              <a href="#/nutrition" className="btn btn-primary">
+              <button
+                onClick={() => navigate('/nutrition')}
+                className="btn btn-primary"
+              >
                 Log Nutrition
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -214,9 +222,12 @@ export default function Dashboard() {
           ) : (
             <div>
               <p className="text-gray-600 mb-4">No weight data yet</p>
-              <a href="#/progress" className="btn btn-secondary">
+              <button
+                onClick={() => navigate('/progress')}
+                className="btn btn-secondary"
+              >
                 Log Weight
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -242,16 +253,22 @@ export default function Dashboard() {
                 <span className="text-gray-600">Goals:</span>
                 <span className="ml-2">{profile.goals.length}</span>
               </div>
-              <a href="#/profile" className="btn btn-secondary mt-3">
+              <button
+                onClick={() => navigate('/profile')}
+                className="btn btn-secondary mt-3"
+              >
                 Edit Profile
-              </a>
+              </button>
             </div>
           ) : (
             <div>
               <p className="text-gray-600 mb-4">No profile set up yet</p>
-              <a href="#/profile" className="btn btn-primary">
+              <button
+                onClick={() => navigate('/profile')}
+                className="btn btn-primary"
+              >
                 Create Profile
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -260,15 +277,24 @@ export default function Dashboard() {
         <div className="card">
           <h3 className="text-lg font-medium text-gray-900 mb-2">Quick Actions</h3>
           <div className="space-y-2">
-            <a href="#/coach" className="block btn btn-secondary w-full text-center">
+            <button
+              onClick={() => navigate('/coach')}
+              className="block btn btn-secondary w-full text-center"
+            >
               Generate Workout Plan
-            </a>
-            <a href="#/workouts" className="block btn btn-secondary w-full text-center">
+            </button>
+            <button
+              onClick={() => navigate('/workouts')}
+              className="block btn btn-secondary w-full text-center"
+            >
               View Workout Plans
-            </a>
-            <a href="#/privacy" className="block btn btn-secondary w-full text-center">
+            </button>
+            <button
+              onClick={() => navigate('/privacy')}
+              className="block btn btn-secondary w-full text-center"
+            >
               Privacy Settings
-            </a>
+            </button>
           </div>
         </div>
       </div>
