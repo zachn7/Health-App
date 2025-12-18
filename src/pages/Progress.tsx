@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import type { WeightLog, WorkoutLog } from '../types';
+import { formatWeight } from '../lib/unit-conversions';
+import type { WeightLog, Profile, WorkoutLog } from '../types';
 
 export default function Progress() {
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -17,10 +18,25 @@ export default function Progress() {
     bodyFat: undefined,
     notes: ''
   });
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     loadProgressData();
+    loadProfile();
   }, []);
+
+  const loadProfile = async () => {
+    try {
+      const userProfile = await repositories.profile.get();
+      setProfile(userProfile || null);
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
+  const getWeightUnit = (): string => {
+    return profile?.preferredUnits === 'imperial' ? 'lb' : 'kg';
+  };
 
   const loadProgressData = async () => {
     try {
@@ -110,9 +126,9 @@ export default function Progress() {
     const avgWorkoutsPerWeek = (recentWorkoutCount / 30) * 7;
     
     // Calculate total volume (weight × reps × sets)
-    const totalVolume = workoutLogs.reduce((sum, log) => {
-      return sum + log.entries.reduce((entrySum, entry) => {
-        return entrySum + entry.sets.reduce((setSum, set) => {
+    const totalVolume = workoutLogs.reduce((sum: number, log: WorkoutLog) => {
+      return sum + log.entries.reduce((entrySum: number, entry: any) => {
+        return entrySum + entry.sets.reduce((setSum: number, set: any) => {
           return setSum + ((set.weight || 0) * set.reps);
         }, 0);
       }, 0);
@@ -149,11 +165,11 @@ export default function Progress() {
         <div className="card">
           <h3 className="text-lg font-medium text-gray-900 mb-2">Current Weight</h3>
           <div className="text-2xl font-bold text-blue-600">
-            {weightStats ? `${weightStats.currentWeight.toFixed(1)} kg` : '—'}
+            {weightStats ? formatWeight(weightStats.currentWeight, profile?.preferredUnits || 'metric') : '—'}
           </div>
           {weightStats && weightStats.weightChange !== 0 && (
             <div className={`text-sm ${weightStats.weightChange > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {weightStats.weightChange > 0 ? '+' : ''}{weightStats.weightChange.toFixed(1)} kg
+              {weightStats.weightChange > 0 ? '+' : ''}{formatWeight(Math.abs(weightStats.weightChange), profile?.preferredUnits || 'metric')}
             </div>
           )}
         </div>
@@ -181,7 +197,7 @@ export default function Progress() {
           <div className="text-2xl font-bold text-orange-600">
             {workoutStats ? `${(workoutStats.totalVolume / 1000).toFixed(0)}k` : '—'}
           </div>
-          <div className="text-sm text-gray-600">kg × reps</div>
+          <div className="text-sm text-gray-600">{getWeightUnit()} × reps</div>
         </div>
       </div>
       
@@ -203,7 +219,7 @@ export default function Progress() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="label">Weight (kg)</label>
+                <label className="label">Weight ({getWeightUnit()})</label>
                 <input
                   type="number"
                   value={newWeight.weightKg}
@@ -267,7 +283,7 @@ export default function Progress() {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-2">Date</th>
-                  <th className="text-left py-2">Weight</th>
+                  <th className="text-left py-2">Weight ({getWeightUnit()})</th>
                   <th className="text-left py-2">Body Fat</th>
                   <th className="text-left py-2">Change</th>
                   <th className="text-left py-2">Notes</th>
@@ -281,12 +297,12 @@ export default function Progress() {
                   return (
                     <tr key={log.id} className="border-b">
                       <td className="py-2">{new Date(log.date).toLocaleDateString()}</td>
-                      <td className="py-2 font-medium">{log.weightKg.toFixed(1)} kg</td>
+                      <td className="py-2 font-medium">{formatWeight(log.weightKg, profile?.preferredUnits || 'metric')}</td>
                       <td className="py-2">{log.bodyFat ? `${log.bodyFat.toFixed(1)}%` : '—'}</td>
                       <td className="py-2">
                         {change && (
                           <span className={change > 0 ? 'text-red-600' : change < 0 ? 'text-green-600' : 'text-gray-600'}>
-                            {change > 0 ? '+' : ''}{change.toFixed(1)} kg
+                            {change > 0 ? '+' : ''}{formatWeight(Math.abs(change), profile?.preferredUnits || 'metric')}
                           </span>
                         )}
                       </td>
@@ -322,7 +338,7 @@ export default function Progress() {
                   )}
                 </div>
                 <div className="text-sm text-gray-500">
-                  {log.entries.reduce((sum, entry) => sum + entry.sets.length, 0)} sets
+                  {log.entries.reduce((sum: number, entry: any) => sum + entry.sets.length, 0)} sets
                 </div>
               </div>
             ))}

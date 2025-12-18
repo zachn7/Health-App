@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
+import { formatWeight } from '../lib/unit-conversions';
 import type { Profile, WorkoutLog, NutritionLog } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -203,7 +204,7 @@ export default function Dashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Current:</span>
-                <span className="font-medium">{weightTrend.current} kg</span>
+                <span className="font-medium">{formatWeight(weightTrend.current, profile?.preferredUnits || 'metric')}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Trend:</span>
@@ -215,7 +216,7 @@ export default function Dashboard() {
                   {weightTrend.trend === 'up' && '↑'}
                   {weightTrend.trend === 'down' && '↓'}
                   {weightTrend.trend === 'stable' && '→'}
-                  {Math.abs(weightTrend.trendAmount).toFixed(1)} kg
+                  {formatWeight(Math.abs(weightTrend.trendAmount), profile?.preferredUnits || 'metric')}
                 </span>
               </div>
             </div>

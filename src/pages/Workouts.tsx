@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
+import { formatWeight } from '../lib/unit-conversions';
 import { Edit3, Plus, Trash2, X } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
-import type { WorkoutPlan, ExerciseDBItem } from '../types';
+import type { WorkoutPlan, ExerciseDBItem, Profile } from '../types';
 
 interface ExerciseData {
   [id: string]: {
@@ -29,10 +30,26 @@ export default function Workouts() {
   const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [exerciseData, setExerciseData] = useState<ExerciseData>({});
+  const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<WorkoutPlan | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     loadWorkoutData();
+    loadProfile();
   }, []);
+
+  const loadProfile = async () => {
+    try {
+      const userProfile = await repositories.profile.get();
+      setProfile(userProfile || null);
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
+  const getWeightUnit = (): string => {
+    return profile?.preferredUnits === 'imperial' ? 'lb' : 'kg';
+  };
 
   const loadWorkoutData = async () => {
     try {
@@ -231,15 +248,23 @@ export default function Workouts() {
     }
   };
 
-  const deleteWorkoutPlan = async (planId: string) => {
+  const deleteWorkoutPlan = (plan: WorkoutPlan) => {
+    setDeleteConfirmPlan(plan);
+  };
+
+  const confirmDeleteWorkoutPlan = async () => {
+    if (!deleteConfirmPlan) return;
+    
     try {
-      await repositories.workout.deleteWorkoutPlan(planId);
-      setWorkoutPlans(workoutPlans.filter(plan => plan.id !== planId));
-      if (selectedPlan?.id === planId) {
+      await repositories.workout.deleteWorkoutPlan(deleteConfirmPlan.id);
+      setWorkoutPlans(workoutPlans.filter(plan => plan.id !== deleteConfirmPlan.id));
+      if (selectedPlan?.id === deleteConfirmPlan.id) {
         setSelectedPlan(null);
       }
+      setDeleteConfirmPlan(null);
     } catch (error) {
       console.error('Failed to delete workout plan:', error);
+      alert('Failed to delete workout plan. Please try again.');
     }
   };
 
@@ -321,7 +346,7 @@ export default function Workouts() {
                     View
                   </button>
                   <button
-                    onClick={() => deleteWorkoutPlan(plan.id)}
+                    onClick={() => deleteWorkoutPlan(plan)}
                     className="btn btn-danger text-sm"
                   >
                     Delete
@@ -485,7 +510,7 @@ export default function Workouts() {
                                       `${exercise.sets.sets} sets of ${exercise.sets.repsRange.min}-${exercise.sets.repsRange.max} reps` :
                                       `${exercise.sets.sets} sets of ${exercise.sets.reps} reps`
                                     }
-                                    {exercise.sets.weight && ` • ${exercise.sets.weight}kg`}
+                                    {exercise.sets.weight && ` • ${formatWeight(exercise.sets.weight, profile?.preferredUnits || 'metric')}${getWeightUnit()}`}
                                     {exercise.sets.restTime && ` • ${exercise.sets.restTime}s rest`}
                                   </div>
                                   {exercise.sets.notes && (
@@ -566,6 +591,45 @@ export default function Workouts() {
           }}
           excludeIds={selectedPlan?.weeks[selectedWeek]?.workouts[editingWorkout.dayIndex]?.exercises.map(ex => ex.exerciseId) || []}
         />
+      )}
+      
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmPlan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Delete Workout Plan</h3>
+                <p className="text-sm text-gray-600">This action cannot be undone.</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete <strong>"{deleteConfirmPlan.name}"</strong>? 
+                This will permanently remove the workout plan and all its exercises.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmPlan(null)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteWorkoutPlan}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete Plan
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor } from 'lucide-react';
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
 
@@ -10,9 +10,13 @@ export default function Settings() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [tempApiKey, setTempApiKey] = useState('');
+  const [showSaveToast, setShowSaveToast] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [webgpuAvailable, setWebgpuAvailable] = useState(false);
   
   useEffect(() => {
     loadSettings();
+    checkWebGPU();
     
     // Check for environment variable in development
     const envApiKey = import.meta.env.VITE_FDC_API_KEY;
@@ -49,6 +53,16 @@ export default function Settings() {
     }
   };
   
+  const checkWebGPU = async () => {
+    try {
+      const available = 'gpu' in navigator && await (navigator as any).gpu?.requestAdapter();
+      setWebgpuAvailable(!!available);
+    } catch (error) {
+      console.error('WebGPU detection failed:', error);
+      setWebgpuAvailable(false);
+    }
+  };
+
   const saveSettings = async () => {
     if (!settings) return;
     
@@ -64,8 +78,28 @@ export default function Settings() {
       await db.settings.put(updatedSettings);
       setSettings(updatedSettings);
       setApiKey(tempApiKey || '');
+      setSaveMessage('Settings saved successfully!');
+      setShowSaveToast(true);
+      
+      // Log success in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Settings saved:', {
+          hasApiKey: !!updatedSettings.fdcApiKey,
+          usdaEnabled: updatedSettings.enableUSDALookups,
+          webllmEnabled: updatedSettings.enableWebLLMCoach,
+          timestamp: updatedSettings.updatedAt
+        });
+      }
+      
+      // Hide toast after 3 seconds
+      setTimeout(() => setShowSaveToast(false), 3000);
+      
     } catch (error) {
       console.error('Failed to save settings:', error);
+      setSaveMessage('Failed to save settings. Please try again.');
+      setShowSaveToast(true);
+      
+      setTimeout(() => setShowSaveToast(false), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -73,6 +107,14 @@ export default function Settings() {
   
   const toggleWebLLMCoach = async () => {
     if (!settings) return;
+    
+    // Check WebGPU availability before enabling
+    if (!settings.enableWebLLMCoach && !webgpuAvailable) {
+      setSaveMessage('WebGPU is not available in your browser. WebLLM requires WebGPU support.');
+      setShowSaveToast(true);
+      setTimeout(() => setShowSaveToast(false), 5000);
+      return;
+    }
     
     try {
       const updatedSettings: SettingsType = {
@@ -83,8 +125,21 @@ export default function Settings() {
       
       await db.settings.put(updatedSettings);
       setSettings(updatedSettings);
+      setSaveMessage(
+        updatedSettings.enableWebLLMCoach 
+          ? 'WebLLM Coach enabled. Models will load when you visit the Coach page.'
+          : 'WebLLM Coach disabled.'
+      );
+      setShowSaveToast(true);
+      
+      setTimeout(() => setShowSaveToast(false), 3000);
+      
     } catch (error) {
       console.error('Failed to toggle WebLLM coach:', error);
+      setSaveMessage('Failed to toggle WebLLM Coach.');
+      setShowSaveToast(true);
+      
+      setTimeout(() => setShowSaveToast(false), 5000);
     }
   };
   
@@ -189,17 +244,35 @@ export default function Settings() {
           
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <div className="font-medium text-gray-900">Enable AI Coach</div>
                 <div className="text-sm text-gray-600">
                   Allow the AI coach to generate and modify workout plans
                 </div>
+                {!webgpuAvailable && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-orange-600">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>WebGPU not available - requires WebGPU-enabled browser</span>
+                  </div>
+                )}
+                {webgpuAvailable && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>WebGPU support detected</span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={toggleWebLLMCoach}
+                disabled={!webgpuAvailable && !settings?.enableWebLLMCoach}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings?.enableWebLLMCoach ? 'bg-primary-600' : 'bg-gray-200'
+                  !webgpuAvailable && !settings?.enableWebLLMCoach
+                    ? 'bg-gray-100 cursor-not-allowed'
+                    : settings?.enableWebLLMCoach 
+                    ? 'bg-primary-600' 
+                    : 'bg-gray-200'
                 }`}
+                title={!webgpuAvailable && !settings?.enableWebLLMCoach ? 'WebGPU not available' : ''}
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -215,6 +288,16 @@ export default function Settings() {
                 <div className="text-blue-700 text-sm">
                   <p>AI Coach will load models when you first open the Coach page.</p>
                   <p className="mt-1">This may take a few moments on first use.</p>
+                  <p className="mt-1">
+                    <a 
+                      href="https://caniuse.com/webgpu" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700 underline"
+                    >
+                      Check WebGPU browser compatibility
+                    </a>
+                  </p>
                 </div>
               </div>
             )}
@@ -254,6 +337,91 @@ export default function Settings() {
           {isSaving ? 'Saving...' : 'Save Settings'}
         </button>
       </div>
+      
+      {/* Toast Notification */}
+      {showSaveToast && (
+        <div className="fixed bottom-4 right-4 flex items-center gap-3 p-4 rounded-lg shadow-lg z-50 animate-pulse bg-white border border-gray-200">
+          <div className="flex items-center gap-2">
+            {saveMessage.includes('successfully') || saveMessage.includes('enabled') ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+            )}
+            <span className={`text-sm ${
+              saveMessage.includes('successfully') || saveMessage.includes('enabled') 
+                ? 'text-green-700' 
+                : 'text-yellow-700'
+            }`}>
+              {saveMessage}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowSaveToast(false)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      
+      {/* DEV-only Diagnostics */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-8 bg-gray-900 text-gray-100 rounded-lg p-6 font-mono text-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Monitor className="h-5 w-5 text-green-400" />
+            <h2 className="text-lg font-semibold text-green-400">Development Diagnostics</h2>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-gray-400">WebGPU Available:</span>
+              <span className={webgpuAvailable ? 'text-green-400' : 'text-red-400'}>
+                {webgpuAvailable ? 'YES' : 'NO'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">navigator.gpu:</span>
+              <span className="text-yellow-400">
+                {typeof navigator !== 'undefined' && 'gpu' in navigator ? 'EXISTS' : 'MISSING'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">FDC API Key Set:</span>
+              <span className={apiKey ? 'text-green-400' : 'text-gray-400'}>
+                {apiKey ? 'YES (' + apiKey.length + ' chars)' : 'NO'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">USDA Lookups Enabled:</span>
+              <span className={settings?.enableUSDALookups ? 'text-green-400' : 'text-gray-400'}>
+                {settings?.enableUSDALookups ? 'YES' : 'NO'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">WebLLM Coach Enabled:</span>
+              <span className={settings?.enableWebLLMCoach ? 'text-green-400' : 'text-gray-400'}>
+                {settings?.enableWebLLMCoach ? 'YES' : 'NO'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">Last Updated:</span>
+              <span className="text-blue-400">
+                {settings?.updatedAt ? new Date(settings.updatedAt).toLocaleTimeString() : 'NEVER'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">Storage Backend:</span>
+              <span className="text-purple-400">IndexedDB</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

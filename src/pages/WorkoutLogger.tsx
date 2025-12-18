@@ -1,7 +1,9 @@
 
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import type { WorkoutLog, ExerciseLogEntry } from '../types';
+import ExercisePicker from '../components/ExercisePicker';
+import { kgToLbs } from '../lib/unit-conversions';
+import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile } from '../types';
 
 interface CurrentWorkout {
   workoutPlanId?: string;
@@ -28,9 +30,13 @@ export default function WorkoutLogger() {
   const [exerciseEntries, setExerciseEntries] = useState<ExerciseLogEntry[]>([]);
   const [sessionNotes, setSessionNotes] = useState('');
   const [recentWorkouts, setRecentWorkouts] = useState<WorkoutLog[]>([]);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [manualWorkoutMode, setManualWorkoutMode] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     loadWorkoutData();
+    loadProfile();
   }, []);
 
   const loadWorkoutData = async () => {
@@ -146,12 +152,51 @@ export default function WorkoutLogger() {
     }
   };
 
+  const loadProfile = async () => {
+    try {
+      const userProfile = await repositories.profile.get();
+      setProfile(userProfile || null);
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
   const getWorkoutDuration = () => {
     if (!startTime) return '0:00';
     const elapsed = Math.round((new Date().getTime() - startTime.getTime()) / 1000);
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const getWeightUnit = (): string => {
+    return profile?.preferredUnits === 'imperial' ? 'lb' : 'kg';
+  };
+
+  const handleAddExerciseManually = () => {
+    setShowExercisePicker(true);
+  };
+
+  const handleSelectExercise = (exercise: ExerciseDBItem) => {
+    const newEntry: ExerciseLogEntry = {
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      sets: []
+    };
+    
+    setExerciseEntries(prev => [...prev, newEntry]);
+    setManualWorkoutMode(true);
+  };
+
+  const handleRemoveExercise = (exerciseIndex: number) => {
+    const updatedEntries = exerciseEntries.filter((_, index) => index !== exerciseIndex);
+    setExerciseEntries(updatedEntries);
+    
+    // If no exercises left, exit manual mode
+    if (updatedEntries.length === 0) {
+      setManualWorkoutMode(false);
+      setIsLogging(false);
+    }
   };
 
   if (loading) {
@@ -179,19 +224,33 @@ export default function WorkoutLogger() {
             <p>Total Sets: {workoutLog.entries.reduce((sum, entry) => sum + entry.sets.length, 0)}</p>
           </div>
         </div>
-      ) : isLogging ? (
+      ) : (isLogging || manualWorkoutMode) ? (
         <div className="card mb-6 bg-blue-50 border-blue-200">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-lg font-medium text-blue-900">Workout in Progress</h2>
-              <p className="text-blue-700">Duration: {getWorkoutDuration()}</p>
+              <h2 className="text-lg font-medium text-blue-900">
+                {manualWorkoutMode ? 'Manual Workout' : 'Workout in Progress'}
+              </h2>
+              <p className="text-blue-700">
+                {manualWorkoutMode ? `${exerciseEntries.length} exercises added` : `Duration: ${getWorkoutDuration()}`}
+              </p>
             </div>
-            <button
-              onClick={finishWorkout}
-              className="btn btn-success"
-            >
-              Finish Workout
-            </button>
+            <div className="flex gap-2">
+              {manualWorkoutMode && !isLogging && exerciseEntries.length > 0 && (
+                <button
+                  onClick={startWorkout}
+                  className="btn btn-primary"
+                >
+                  Start Logging
+                </button>
+              )}
+              <button
+                onClick={finishWorkout}
+                className="btn btn-success"
+              >
+                Finish Workout
+              </button>
+            </div>
           </div>
         </div>
       ) : currentWorkout ? (
@@ -209,36 +268,58 @@ export default function WorkoutLogger() {
         </div>
       ) : (
         <div className="card mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-2">No Workout Selected</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-2">Choose Your Workout</h2>
           <p className="text-gray-600 mb-4">
-            Select a workout from the Workouts page to start logging
+            Select a pre-made workout or log exercises manually
           </p>
-          <button
-            onClick={() => window.location.hash = '/workouts'}
-            className="btn btn-primary"
-          >
-            Go to Workouts
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => window.location.hash = '/workouts'}
+              className="btn btn-primary"
+            >
+              Browse Workouts
+            </button>
+            <button
+              onClick={handleAddExerciseManually}
+              className="btn btn-secondary"
+            >
+              Log Exercises Manually
+            </button>
+          </div>
         </div>
       )}
       
       {/* Workout Logging Interface */}
-      {isLogging && exerciseEntries.map((exercise, exerciseIndex) => (
+      {(isLogging || manualWorkoutMode) && exerciseEntries.map((exercise, exerciseIndex) => (
         <div key={exercise.exerciseId} className="card mb-4">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">{exercise.exerciseName}</h3>
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="text-lg font-medium text-gray-900">{exercise.exerciseName}</h3>
+            {manualWorkoutMode && (
+              <button
+                onClick={() => handleRemoveExercise(exerciseIndex)}
+                className="text-red-500 hover:text-red-700 text-sm"
+                title="Remove exercise"
+              >
+                Remove
+              </button>
+            )}
+          </div>
           
           {exercise.sets.length > 0 ? (
             <div className="mb-4">
               <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-600 mb-2">
                 <div className="col-span-2">Set</div>
                 <div className="col-span-3">Reps</div>
-                <div className="col-span-3">Weight (kg)</div>
-                <div className="col-span-2">Volume</div>
+                <div className="col-span-3">Weight ({getWeightUnit()})</div>
+                <div className="col-span-2">Volume ({getWeightUnit()})</div>
                 <div className="col-span-2">Actions</div>
               </div>
               
               {exercise.sets.map((set, setIndex) => {
                 const volume = (set.weight || 0) * (set.reps || 0);
+                const displayVolume = profile?.preferredUnits === 'imperial' 
+                  ? (kgToLbs(set.weight || 0) * (set.reps || 0))
+                  : volume;
                 return (
                   <div key={setIndex} className="grid grid-cols-12 gap-2 mb-2">
                     <div className="col-span-2 flex items-center">{set.set}</div>
@@ -263,7 +344,7 @@ export default function WorkoutLogger() {
                         step="0.5"
                       />
                     </div>
-                    <div className="col-span-2 flex items-center text-sm">{volume} kg</div>
+                    <div className="col-span-2 flex items-center text-sm">{displayVolume} {getWeightUnit()}</div>
                     <div className="col-span-2">
                       <button
                         onClick={() => removeSet(exerciseIndex, setIndex)}
@@ -284,7 +365,12 @@ export default function WorkoutLogger() {
                   Add Set
                 </button>
                 <span className="ml-4 text-sm text-gray-600">
-                  Total Volume: {exercise.sets.reduce((sum, set) => sum + ((set.weight || 0) * (set.reps || 0)), 0)} kg
+                  Total Volume: {exercise.sets.reduce((sum, set) => {
+                    const volume = (set.weight || 0) * (set.reps || 0);
+                    return profile?.preferredUnits === 'imperial' 
+                      ? sum + (kgToLbs(set.weight || 0) * (set.reps || 0))
+                      : sum + volume;
+                  }, 0)} {getWeightUnit()}
                 </span>
               </div>
             </div>
@@ -301,8 +387,20 @@ export default function WorkoutLogger() {
         </div>
       ))}
       
+      {/* Add Exercise Button (Manual Mode) */}
+      {manualWorkoutMode && (
+        <div className="card mb-6">
+          <button
+            onClick={handleAddExerciseManually}
+            className="btn btn-secondary"
+          >
+            Add Another Exercise
+          </button>
+        </div>
+      )}
+      
       {/* Session Notes */}
-      {isLogging && (
+      {(isLogging || manualWorkoutMode) && (
         <div className="card mb-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Session Notes (Optional)</h3>
           <textarea
@@ -331,8 +429,13 @@ export default function WorkoutLogger() {
                   <div className="text-sm text-gray-600">
                     {log.entries.reduce((sum, entry) => sum + entry.sets.length, 0)} sets • 
                     {log.entries.reduce((sum, entry) => 
-                      sum + entry.sets.reduce((setSum, set) => setSum + ((set.weight || 0) * (set.reps || 0)), 0), 0
-                    )} kg total volume
+                      sum + entry.sets.reduce((setSum, set) => {
+                        const volume = (set.weight || 0) * (set.reps || 0);
+                        return profile?.preferredUnits === 'imperial' 
+                          ? setSum + (kgToLbs(set.weight || 0) * (set.reps || 0))
+                          : setSum + volume;
+                      }, 0), 0
+                    )} {getWeightUnit()} total volume
                   </div>
                 </div>
                 <div className="text-sm text-gray-500">
@@ -340,6 +443,19 @@ export default function WorkoutLogger() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Exercise Picker Modal */}
+      {showExercisePicker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <ExercisePicker
+              onSelect={handleSelectExercise}
+              onClose={() => setShowExercisePicker(false)}
+              excludeIds={exerciseEntries.map(ex => ex.exerciseId)}
+            />
           </div>
         </div>
       )}
