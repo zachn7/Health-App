@@ -1,202 +1,161 @@
-# Third-Party Libraries and Data Sources
+# Third-Party Services Integration
 
-## Core Dependencies
+This document outlines the third-party services integrated into CodePuppy Trainer and their respective licenses and terms.
 
-### Frontend Framework
-- **React**: v18.x - MIT License
-  - Used for component-based UI development
-- **TypeScript**: v5.x - Apache License 2.0
-  - Type safety and enhanced development experience
+## Free Exercise DB
 
-### Routing
-- **React Router DOM**: v6.x - MIT License
-  - Navigation and routing using HashRouter for GitHub Pages compatibility
+**Source:** https://github.com/yuhonas/free-exercise-db
+- **License:** MIT License
+- **Data Format:** JSON
+- **Usage:** Bundled with the application for offline exercise lookup
+- **Data Volume:** ~1,300 exercises with detailed instructions, muscle groups, and equipment requirements
 
-### Storage & Database
-- **Dexie.js**: v3.x - Apache License 2.0
-  - IndexedDB wrapper for offline-first data storage
-  - Provides type-safe database operations and schema migrations
+### Integration Details
+- Exercises are imported into IndexedDB on first app launch
+- Data is stored locally for offline access
+- Search functionality supports name, body part, equipment, and difficulty filters
+- Custom exercises can be added by users and stored separately
 
-### Build Tools
-- **Vite**: v5.x - MIT License
-  - Fast build tool and development server
-- **PostCSS**: v8.x - MIT License
-  - CSS processing and optimization
-- **Tailwind CSS**: v3.x - MIT License
-  - Utility-first CSS framework for styling
+### Terms of Use
+- Free for commercial and non-commercial use
+- No attribution required
+- Data can be modified and distributed
 
-## PWA & Service Worker
-- **Workbox**: v6.x - Apache License 2.0
-  - Service worker utilities for offline functionality
-  - Caching strategies and PWA capabilities
+## WebLLM (by MLC.ai)
 
-## Testing Frameworks
-- **Vitest**: v1.x - MIT License
-  - Unit testing framework
-- **Playwright**: v1.x - Apache License 2.0
-  - End-to-end testing automation
+**Source:** https://llm.mlc.ai/package/web/
+- **License:** Apache 2.0 License
+- **Model:** Llama-3.2-3B-Instruct (and others)
+- **Usage:** In-browser AI model for fitness coaching
+- **Platform:** WebGPU-based inference
 
-## Bundled Data Sources
+### Integration Details
+- Models are downloaded and cached in the browser
+- Runs entirely client-side with no server communication
+- Requires WebGPU support (Chrome, Edge, Safari on supported devices)
+- Domain-restricted to fitness coaching only
+- Opt-in with explicit user consent
 
-### Exercise Library
-- **Source**: Custom-built exercise library
-- **License**: Custom (created for this project)
-- **Size**: ~7.2KB (exercises.seed.json)
-- **Format**: JSON with exercise metadata including:
-  - Exercise names and IDs
-  - Body part focus
-  - Equipment requirements
-  - Difficulty levels
-  - Instructions and coaching cues
-  - Categories (compound vs isolation)
+### Model Information
+- **Primary Model:** Llama-3.2-3B-Instruct (1.2GB download)
+- **Inference:** Client-side WebGPU
+- **Privacy:** No data sent to external servers
+- **Caching:** Persistent across browser sessions
 
-### Food Database
-- **Source**: Custom-built food database
-- **License**: Custom (created for this project)
-- **Size**: ~2.7KB (foods.seed.json)
-- **Format**: JSON with food metadata including:
-  - Food names and serving sizes
-  - Calorie and macronutrient information
-  - Fiber, sugar, and sodium data
-  - Barcodes for future barcode scanning
+### Terms of Use
+- Apache 2.0 License - free for commercial use
+- Models must be redistributed under same license
+- No modification of model weights allowed
+- Proper attribution required
 
-## Optional Online Data Sources (User-Enabled)
+## USDA FoodData Central
 
-### Exercise Data
-- **WGER Workout Manager**: https://wger.de/en/software/api
-  - **License**: Creative Commons Attribution-ShareAlike 3.0 (CC BY-SA 3.0)
-  - **Usage**: Optional exercise database synchronization
-  - **API Key**: Not required
-  - **Note**: Data is cached locally after retrieval for offline use
+**Source:** https://fdc.nal.usda.gov/
+- **License:** Public Domain (U.S. Government work)
+- **API:** REST API requiring free API key
+- **Data:** 400,000+ branded and generic food items
+- **Usage:** Nutritional lookup for food items
 
-### Food Data
-#### Open Food Facts
-- **Source**: https://world.openfoodfacts.org/api
-  - **License**: Open Database License (ODbL)
-  - **Usage**: Barcode product lookup and nutrition information
-  - **API Key**: Not required (rate limited)
-  - **Note**: Results cached in IndexedDB for offline reuse
+### Integration Details
+- Requires user-provided API key from USDA
+- API calls made client-side directly to USDA servers
+- Food items are cached locally in IndexedDB for offline access
+- Supports search by food name, brand, and category
+- Comprehensive nutritional data (macros, vitamins, minerals)
 
-#### USDA FoodData Central
-- **Source**: https://fdc.nal.usda.gov/api-guide.html
-  - **License**: Public Domain (US government data)
-  - **Usage**: Comprehensive nutrition database
-  - **API Key**: Required (user-provided in settings)
-  - **Note**: Advanced users can add their own API key for expanded access
-  - **Rate Limits**: 1,000 requests/hour with API key
+### API Limits
+- **Free Tier:** 1,000 requests per hour
+- **Rate Limiting:** Handled gracefully with user feedback
+- **Data Retention:** Downloaded data is cached locally to reduce API calls
 
-## Development Dependencies
+### Terms of Use
+- Free API key available at https://fdc.nal.usda.gov/data-key-access.html
+- Public domain nutritional data
+- API keys must not be shared or committed to repositories
+- Data is for personal use in dietary tracking applications
 
-### Code Quality
-- **ESLint**: v8.x - MIT License
-  - Code linting and style enforcement
-- **TypeScript Compiler**: v5.x - Apache License 2.0
-  - Type checking and compilation
-
-## Font Assets
-- **System Fonts**: Uses system font stack
-  - No external font dependencies
-  - Reduces bundle size and improves performance
-
-## Icon Library
-- **Heroicons**: v2.x - MIT License
-  - SVG icons used throughout the application
-  - Icons are inlined in JSX (no additional requests)
-
-## Analytics and Tracking
-- **NONE USED** - As per non-negotiable requirements:
-  - No Google Analytics
-  - No third-party tracking pixels
-  - No telemetry or usage monitoring
-  - Complete user privacy
-
-## External API Calls
-
-### Offline-First Approach
-- **Core Functionality**: No external API calls required
-- **All Features Work**: Without internet connection after initial load
-- **Data persistence**: Local IndexedDB storage
-
-### Optional Online Features
-These are user-opt-in and core app works without them:
-1. Exercise data synchronization with WGER
-2. Barcode lookup with Open Food Facts
-3. USDA FoodData Central (user-provided API key)
-
-## Security Considerations
+## Legal and Compliance
 
 ### Data Privacy
-- **Local Storage**: All user data stored locally in IndexedDB
-- **No Server Uploads**: No data transmitted to external servers
-- **Export/Import**: Users maintain full control of their data
+- **WebLLM:** All processing occurs client-side, no data leaves the browser
+- **USDA API:** Only food search queries are sent, no personal data transmitted
+- **Exercise DB:** Local data storage, no external communication required
 
-### API Security
-- **No Required Keys**: Core features don't need API keys
-- **Key Storage**: Optional API keys stored locally in IndexedDB
-- **HTTPS Only**: All API communication over HTTPS
+### Technical Requirements
+- **WebLLM:** WebGPU-compatible browser required
+- **USDA API:** Internet connection for initial searches, cached for offline use
+- **Exercise DB:** Fully functional offline after initial data load
 
-## License Compliance
+### User Consent
+- WebLLM requires explicit opt-in through settings
+- USDA API key is user-controlled and stored locally
+- All integrations can be disabled independently
+- No usage tracking or analytics implemented
 
-### Commercial Usage
-All used libraries have permissive licenses allowing:
-- Commercial use
-- Distribution
-- Modification
-- Private use
+## Support and Updates
 
-### Attribution Requirements
-- **Dexie.js**: Requires license notice
-- **WGER Data**: Requires CC BY-SA 3.0 attribution
-- **Open Food Facts**: Requires ODbL attribution
+### WebLLM
+- Supported by Apache Software Foundation
+- Regular model updates through npm package
+- Community support available through GitHub issues
 
-### Code Attribution
-Appropriate license notices and attributions are included in:
-- Package.json license fields
-- Source code file headers where required
-- Documentation acknowledgments
+### USDA FoodData Central
+- Official government support through USDA contact channels
+- API documentation and developer portal
+- Regular nutritional data updates
 
-## Bundle Size Impact
+### Free Exercise DB
+- Community-maintained open source project
+- GitHub issues for bug reports and feature requests
+- Regular data updates from community contributors
 
-### Total JavaScript Bundle
-- **Main Bundle**: ~112KB gzipped
-- **Vendor Libraries**: ~45KB gzipped
-- **Total**: ~157KB gzipped
+## Alternatives and Considerations
 
-### Largest Dependencies
-1. Workbox/Service Worker: ~74KB (enables offline)
-2. React Router: ~23KB (navigation)
-3. Dexie.js: ~26KB (database operations)
+### WebLLM Alternatives
+- Other WebLLM models (different sizes and capabilities)
+- Server-side LLM APIs (requires backend implementation)
+- Smaller local models for reduced download size
 
-### Optimization Strategies
-- Code splitting for dynamic imports
-- Tree shaking removes unused code
-- Compression and minification
-- Lazy loading of optional features
+### USDA Alternatives
+- Open Food Facts (open database API)
+- Nutritionix (commercial API)
+- Custom food databases
 
-## Future Considerations
+### Exercise Database Alternatives
+- Wger Workout Manager (open source)
+- Nutritionix Exercise Database (commercial)
+- Custom exercise collections
 
-### Potential Additions
-These would require additional evaluation:
-- WebLLM for on-device AI coaching
-- Additional food databases
-- Exercise video integration
-- Progress charting libraries
+## Development Notes
 
-### Security Updates
-- Regular dependency updates for security patches
-- Monitor for CVEs in used libraries
-- Keep TypeScript and build tools current
+### Model Management
+```typescript
+// WebLLM models are loaded on-demand
+await webllmService.initialize(); // Downloads ~1.2GB model
+```
 
-## Data Source Quality
+### API Implementation
+```typescript
+// USDA API calls are rate-limited and cached
+const foods = await usdaService.searchFoods('chicken breast');
+const imported = await usdaService.importFoodItem(fdcId);
+```
 
-### Exercise Data Quality
-- **Accuracy**: Manually reviewed and curated
-- **Completeness**: Comprehensive exercise selection
-- **Safety**: Instructions include proper form cues
-- **Accessibility**: Modifications for different fitness levels
+### Exercise Database
+```typescript
+// Local exercise search with filtering
+const exercises = await ExerciseDBService.searchExercises('squat');
+const byEquipment = await ExerciseDBService.getExercisesByEquipment('barbell');
+```
 
-### Nutrition Data Quality
-- **Accuracy**: Cross-referenced with multiple sources
-- **Completeness**: Standard macronutrient profiles
-- **Standardization**: Consistent serving sizes and units
-- **Verification**: Regular updates and corrections
+### Performance Considerations
+- Initial WebLLM model download may take 30-60 seconds on slower connections
+- Exercise database loads ~1,300 entries (minimal performance impact)
+- USDA API responses are cached to minimize network requests
+- All data is stored in IndexedDB for persistence across sessions
+
+### Future Enhancements
+- Additional WebLLM models (different sizes/capabilities)
+- Offline nutrition database (bulk USDA data import)
+- Exercise image/integration support
+- Voice input for AI coaching

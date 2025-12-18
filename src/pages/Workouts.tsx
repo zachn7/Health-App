@@ -1,15 +1,34 @@
-
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import type { WorkoutPlan, Exercise } from '../types';
+import { ExerciseDBService } from '../lib/exercise-db';
+import { Edit3, Plus, Trash2, X } from 'lucide-react';
+import ExercisePicker from '../components/ExercisePicker';
+import type { WorkoutPlan, ExerciseDBItem } from '../types';
+
+interface ExerciseData {
+  [id: string]: {
+    name: string;
+    instructions: string[];
+  };
+}
+
+interface EditingWorkout {
+  weekIndex: number;
+  dayIndex: number;
+  type?: 'replace' | 'add';
+  exerciseId?: string;
+}
 
 export default function Workouts() {
   const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [, setExercises] = useState<ExerciseDBItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
   const [workoutCompletion, setWorkoutCompletion] = useState<Record<string, Record<string, boolean>>>({});
+  const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [exerciseData, setExerciseData] = useState<ExerciseData>({});
 
   useEffect(() => {
     loadWorkoutData();
@@ -17,12 +36,17 @@ export default function Workouts() {
 
   const loadWorkoutData = async () => {
     try {
-      // Load seed exercises from bundled data
-      const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
-      const exercisesData = await exercisesResponse.json();
-      setExercises(exercisesData);
+      await ExerciseDBService.initialize();
+      const bodyParts = await ExerciseDBService.getAllBodyParts();
       
-      // Load workout plans from database
+      // Load some exercises for display
+      const sampleExercises: ExerciseDBItem[] = [];
+      for (const bodyPart of bodyParts.slice(0, 5)) {
+        const exercises = await ExerciseDBService.getExercisesByBodyPart(bodyPart);
+        sampleExercises.push(...exercises.slice(0, 3));
+      }
+      setExercises(sampleExercises);
+      
       const plans = await repositories.workout.getWorkoutPlans();
       setWorkoutPlans(plans);
     } catch (error) {
@@ -32,21 +56,119 @@ export default function Workouts() {
     }
   };
 
+  const loadExerciseData = async (exerciseIds: string[]) => {
+    const data: ExerciseData = {};
+    for (const id of exerciseIds) {
+      try {
+        const exercise = await ExerciseDBService.getExerciseById(id);
+        if (exercise) {
+          data[id] = {
+            name: exercise.name,
+            instructions: exercise.instructions
+          };
+        }
+      } catch (error) {
+        console.error(`Failed to load exercise ${id}:`, error);
+      }
+    }
+    setExerciseData(prev => ({ ...prev, ...data }));
+  };
+
   const getExerciseName = (exerciseId: string): string => {
-    const exercise = exercises.find(ex => ex.id === exerciseId);
-    return exercise?.name || `Exercise ${exerciseId}`;
+    return exerciseData[exerciseId]?.name || `Exercise ${exerciseId}`;
   };
 
   const getExerciseInstructions = (exerciseId: string): string[] => {
-    const exercise = exercises.find(ex => ex.id === exerciseId);
-    return exercise?.instructions || [];
+    return exerciseData[exerciseId]?.instructions || [];
+  };
+  
+  const replaceExercise = async (weekIndex: number, dayIndex: number, oldExerciseId: string, newExerciseId: string) => {
+    if (!selectedPlan) return;
+    
+    try {
+      const updatedPlan = { ...selectedPlan };
+      const workout = updatedPlan.weeks[weekIndex].workouts[dayIndex];
+      
+      const exerciseIndex = workout.exercises.findIndex(ex => ex.exerciseId === oldExerciseId);
+      if (exerciseIndex !== -1) {
+        workout.exercises[exerciseIndex] = {
+          ...workout.exercises[exerciseIndex],
+          exerciseId: newExerciseId
+        };
+        
+        updatedPlan.updatedAt = new Date().toISOString();
+        await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+        setWorkoutPlans(prev => 
+          prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+        );
+        setSelectedPlan(updatedPlan);
+        
+        // Load new exercise data
+        await loadExerciseData([newExerciseId]);
+      }
+    } catch (error) {
+      console.error('Failed to replace exercise:', error);
+      alert('Failed to replace exercise');
+    }
+  };
+  
+  const addExercise = async (weekIndex: number, dayIndex: number, exerciseId: string) => {
+    if (!selectedPlan) return;
+    
+    try {
+      const updatedPlan = { ...selectedPlan };
+      const workout = updatedPlan.weeks[weekIndex].workouts[dayIndex];
+      
+      workout.exercises.push({
+        exerciseId,
+        sets: {
+          sets: 3,
+          reps: 10,
+          restTime: 60
+        }
+      });
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      setWorkoutPlans(prev => 
+        prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+      );
+      setSelectedPlan(updatedPlan);
+      
+      // Load new exercise data
+      await loadExerciseData([exerciseId]);
+    } catch (error) {
+      console.error('Failed to add exercise:', error);
+      alert('Failed to add exercise');
+    }
+  };
+  
+  const removeExercise = async (weekIndex: number, dayIndex: number, exerciseId: string) => {
+    if (!selectedPlan) return;
+    
+    try {
+      const updatedPlan = { ...selectedPlan };
+      const workout = updatedPlan.weeks[weekIndex].workouts[dayIndex];
+      
+      workout.exercises = workout.exercises.filter(ex => ex.exerciseId !== exerciseId);
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      setWorkoutPlans(prev => 
+        prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+      );
+      setSelectedPlan(updatedPlan);
+    } catch (error) {
+      console.error('Failed to remove exercise:', error);
+      alert('Failed to remove exercise');
+    }
   };
 
   const getCurrentWeek = () => {
     const today = new Date();
     const startOfYear = new Date(today.getFullYear(), 0, 1);
     const weekNumber = Math.ceil((today.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000));
-    return weekNumber % 4; // Cycle through 4-week blocks
+    return weekNumber % 4;
   };
 
   const getWorkoutKey = (planId: string, weekIndex: number, dayIndex: number) => {
@@ -90,18 +212,15 @@ export default function Workouts() {
 
   const generateWorkoutPlan = async () => {
     try {
-      // Get or create profile
       const profile = await repositories.profile.get();
       if (!profile) {
         alert('Please create a profile first!');
         return;
       }
 
-      // Generate plan using the coach engine
       const { generateWorkoutPlan } = await import('../lib/coach-engine');
       const plan = generateWorkoutPlan(profile);
       
-      // Save the plan
       await repositories.workout.createWorkoutPlan(plan);
       setWorkoutPlans([plan, ...workoutPlans]);
       
@@ -128,17 +247,30 @@ export default function Workouts() {
     const workout = plan.weeks[weekIndex]?.workouts[dayIndex];
     if (!workout) return;
 
-    // Navigate to workout logger with the specific workout
     const workoutData = {
       workoutPlanId: plan.id,
       exercises: workout.exercises,
       notes: workout.notes
     };
     
-    // Store in session for the logger to pick up
     sessionStorage.setItem('currentWorkout', JSON.stringify(workoutData));
     window.location.hash = '/log/workout';
   };
+
+  useEffect(() => {
+    if (selectedPlan) {
+      // Load exercise data for all exercises in the selected plan
+      const allExerciseIds: string[] = [];
+      selectedPlan.weeks.forEach(week => {
+        week.workouts.forEach(workout => {
+          workout.exercises.forEach(exercise => {
+            allExerciseIds.push(exercise.exerciseId);
+          });
+        });
+      });
+      loadExerciseData(allExerciseIds);
+    }
+  }, [selectedPlan]);
 
   if (loading) {
     return (
@@ -197,7 +329,6 @@ export default function Workouts() {
                 </div>
               </div>
               
-              {/* Quick Start Current Week */}
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Week {currentWeekIndex + 1} (Current Week)</h4>
                 <div className="space-y-2">
@@ -257,7 +388,6 @@ export default function Workouts() {
           </div>
           
           <div className="space-y-6">
-            {/* Week Navigation */}
             <div>
               <label className="label">Select Week</label>
               <div className="flex space-x-2">
@@ -277,97 +407,165 @@ export default function Workouts() {
               </div>
             </div>
             
-            {/* Current Week Details */}
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 Week {selectedWeek + 1} Workouts
               </h3>
               
               <div className="space-y-4">
-                {selectedPlan.weeks[selectedWeek]?.workouts.map((workout, dayIndex) => (
-                  <div key={dayIndex} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="font-medium text-gray-900">{workout.day}</h4>
-                        {workout.notes && (
-                          <p className="text-sm text-gray-600 mt-1">{workout.notes}</p>
-                        )}
+                {selectedPlan.weeks[selectedWeek]?.workouts.map((workout, dayIndex) => {
+                  const isEditing = editingWorkout?.weekIndex === selectedWeek && 
+                                   editingWorkout?.dayIndex === dayIndex;
+                  
+                  return (
+                    <div key={dayIndex} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{workout.day}</h4>
+                          {workout.notes && (
+                            <p className="text-sm text-gray-600 mt-1">{workout.notes}</p>
+                          )}
+                        </div>
+                        <div className="flex space-x-2">
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => setEditingWorkout(null)}
+                                className="btn btn-secondary text-sm"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setShowExercisePicker(true)}
+                                className="btn btn-primary text-sm"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setEditingWorkout({ weekIndex: selectedWeek, dayIndex })}
+                                className="btn btn-secondary text-sm"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => startWorkout(selectedPlan, selectedWeek, dayIndex)}
+                                className="btn btn-primary text-sm"
+                              >
+                                Start Workout
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => startWorkout(selectedPlan, selectedWeek, dayIndex)}
-                        className="btn btn-primary text-sm"
-                      >
-                        Start Workout
-                      </button>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      {workout.exercises.map((exercise, exIndex) => {
-                        const exerciseName = getExerciseName(exercise.exerciseId);
-                        const instructions = getExerciseInstructions(exercise.exerciseId);
-                        const isComplete = isExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId);
-                        
-                        return (
-                          <div key={exIndex} className={`border-l-4 pl-4 ${isComplete ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
-                            <div className="flex items-start space-x-3">
-                              <input
-                                type="checkbox"
-                                checked={isComplete}
-                                onChange={() => toggleExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId)}
-                                className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <div className="flex-1">
-                                <div className={`font-medium ${isComplete ? 'line-through text-gray-500' : ''}`}>
-                                  {exerciseName}
+                      
+                      <div className="space-y-3">
+                        {workout.exercises.map((exercise, exIndex) => {
+                          const isComplete = isExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId);
+                          const exerciseName = getExerciseName(exercise.exerciseId);
+                          const instructions = getExerciseInstructions(exercise.exerciseId);
+                          
+                          return (
+                            <div key={exIndex} className={`border-l-4 pl-4 ${isComplete ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
+                              <div className="flex items-start space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isComplete}
+                                  onChange={() => toggleExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId)}
+                                  className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div className="flex-1">
+                                  <div className={`font-medium ${isComplete ? 'line-through text-gray-500' : ''}`}>
+                                    {exerciseName}
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    {exercise.sets.repsRange ? 
+                                      `${exercise.sets.sets} sets of ${exercise.sets.repsRange.min}-${exercise.sets.repsRange.max} reps` :
+                                      `${exercise.sets.sets} sets of ${exercise.sets.reps} reps`
+                                    }
+                                    {exercise.sets.weight && ` • ${exercise.sets.weight}kg`}
+                                    {exercise.sets.restTime && ` • ${exercise.sets.restTime}s rest`}
+                                  </div>
+                                  {exercise.sets.notes && (
+                                    <div className="text-sm text-gray-600 italic mt-1">{exercise.sets.notes}</div>
+                                  )}
+                                  {instructions.length > 0 && (
+                                    <details className="mt-2">
+                                      <summary className="text-sm text-blue-600 cursor-pointer">Instructions</summary>
+                                      <ul className="text-sm text-gray-600 mt-2 ml-4 list-disc">
+                                        {instructions.slice(0, 3).map((instruction, i) => (
+                                          <li key={i}>{instruction}</li>
+                                        ))}
+                                      </ul>
+                                    </details>
+                                  )}
                                 </div>
-                                <div className="text-sm text-gray-600">
-                                  {exercise.sets.repsRange ? 
-                                    `${exercise.sets.sets} sets of ${exercise.sets.repsRange.min}-${exercise.sets.repsRange.max} reps` :
-                                    `${exercise.sets.sets} sets of ${exercise.sets.reps} reps`
-                                  }
-                                  {exercise.sets.weight && ` • ${exercise.sets.weight}kg`}
-                                  {exercise.sets.restTime && ` • ${exercise.sets.restTime}s rest`}
-                                </div>
-                                {exercise.sets.notes && (
-                                  <div className="text-sm text-gray-600 italic mt-1">{exercise.sets.notes}</div>
-                                )}
-                                {instructions.length > 0 && (
-                                  <details className="mt-2">
-                                    <summary className="text-sm text-blue-600 cursor-pointer">Instructions</summary>
-                                    <ul className="text-sm text-gray-600 mt-2 ml-4 list-disc">
-                                      {instructions.slice(0, 3).map((instruction, i) => (
-                                        <li key={i}>{instruction}</li>
-                                      ))}
-                                    </ul>
-                                  </details>
+                                {isEditing && (
+                                  <div className="flex space-x-1">
+                                    <button
+                                      onClick={() => setShowExercisePicker(true)}
+                                      className="text-blue-600 hover:text-blue-800"
+                                      title="Replace exercise"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => removeExercise(selectedWeek, dayIndex, exercise.exerciseId)}
+                                      className="text-red-600 hover:text-red-800"
+                                      title="Remove exercise"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </div>
+                          );
+                        })}
+                        
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="flex justify-between items-center">
+                            <div className="text-sm text-gray-600">
+                              Progress: {getWorkoutProgress(selectedPlan.id, selectedWeek, dayIndex, workout.exercises.length).completed} of {workout.exercises.length} exercises
+                            </div>
+                            <button
+                              onClick={() => markWholeWorkoutComplete(selectedPlan.id, selectedWeek, dayIndex, workout.exercises)}
+                              className="btn btn-primary text-sm"
+                            >
+                              Mark Whole Workout Complete
+                            </button>
                           </div>
-                        );
-                      })}
-                      
-                      {/* Workout completion summary and actions */}
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <div className="flex justify-between items-center">
-                          <div className="text-sm text-gray-600">
-                            Progress: {getWorkoutProgress(selectedPlan.id, selectedWeek, dayIndex, workout.exercises.length).completed} of {workout.exercises.length} exercises
-                          </div>
-                          <button
-                            onClick={() => markWholeWorkoutComplete(selectedPlan.id, selectedWeek, dayIndex, workout.exercises)}
-                            className="btn btn-primary text-sm"
-                          >
-                            Mark Whole Workout Complete
-                          </button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Exercise Picker Modal */}
+      {showExercisePicker && editingWorkout && (
+        <ExercisePicker
+          onSelect={(exercise) => {
+            if (editingWorkout && selectedPlan) {
+              if (editingWorkout.exerciseId) {
+                replaceExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, editingWorkout.exerciseId, exercise.id);
+              } else {
+                addExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, exercise.id);
+              }
+            }
+          }}
+          onClose={() => {
+            setShowExercisePicker(false);
+            setEditingWorkout(null);
+          }}
+          excludeIds={selectedPlan?.weeks[selectedWeek]?.workouts[editingWorkout.dayIndex]?.exercises.map(ex => ex.exerciseId) || []}
+        />
       )}
     </div>
   );

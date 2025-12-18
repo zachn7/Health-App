@@ -10,6 +10,7 @@ import WorkoutLogger from './pages/WorkoutLogger';
 import Nutrition from './pages/Nutrition';
 import Progress from './pages/Progress';
 import Injury from './pages/Injury';
+import Settings from './pages/Settings';
 import Privacy from './pages/Privacy';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import TermsOfUse from './pages/legal/TermsOfUse';
@@ -64,6 +65,7 @@ function AppContent() {
         <Route path="/nutrition" element={<Nutrition />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/injury" element={<Injury />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/legal/privacy" element={<PrivacyPolicy />} />
         <Route path="/legal/terms" element={<TermsOfUse />} />

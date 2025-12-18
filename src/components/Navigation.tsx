@@ -10,6 +10,7 @@ import {
   TrendingUp, 
   Heart, 
   Shield,
+  Settings,
   Menu
 } from 'lucide-react';
 
@@ -68,6 +69,12 @@ const navItems: NavItem[] = [
     path: '/injury',
     icon: Heart,
     description: 'Injury guidance'
+  },
+  {
+    name: 'Settings',
+    path: '/settings',
+    icon: Settings,
+    description: 'APIs & integrations'
   },
   {
     name: 'Privacy',

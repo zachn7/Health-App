@@ -270,3 +270,32 @@ export interface InjuryAssessment {
   seekMedicalAttention: boolean;
   createdAt: string;
 }
+
+// Settings Types
+export interface Settings {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  // USDA FoodData Central
+  fdcApiKey?: string;
+  enableUSDALookups: boolean;
+  // WebLLM AI Coach
+  enableWebLLMCoach: boolean;
+  // Future settings can be added here
+}
+
+// Exercise DB Types
+export interface ExerciseDBItem {
+  id: string;
+  name: string;
+  bodyPart: string;
+  category: string;
+  equipment: string[];
+  targetMuscles: string[];
+  synergistMuscles: string[];
+  stabilizerMuscles: string[];
+  instructions: string[];
+  difficulty: ExperienceLevel;
+  forceType?: 'push' | 'pull' | 'static';
+  mechanicsType?: 'compound' | 'isolation';
+}

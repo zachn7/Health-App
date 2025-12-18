@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE, calculateMacroTargets, generateWorkoutPlan } from '../lib/coach-engine';
+import { webllmService } from '../lib/webllm-service';
 import { formatWeight } from '../lib/unit-conversions';
+import { Brain, Send, Loader2, AlertCircle } from 'lucide-react';
 import type { Profile, WorkoutPlan } from '../types';
 
 export default function Coach() {
@@ -16,6 +18,14 @@ export default function Coach() {
   const [selectedGoalId, setSelectedGoalId] = useState<string>('');
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [exercises, setExercises] = useState<any[]>([]);
+  const [webllmEnabled, setWebLLMEnabled] = useState(false);
+  const [webllmModelLoading, setWebLLMModelLoading] = useState(false);
+  const [webllmModelReady, setWebLLMModelReady] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'assistant'; content: string}[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [webllmError, setWebLLMError] = useState<string | null>(null);
   
   const [checkIn, setCheckIn] = useState({
     adherenceRating: 3,
@@ -27,7 +37,18 @@ export default function Coach() {
 
   useEffect(() => {
     loadCoachData();
+    loadWebLLMStatus();
   }, []);
+
+  const loadWebLLMStatus = async () => {
+    try {
+      const enabled = await webllmService.isWebLLMEnabled();
+      setWebLLMEnabled(enabled);
+    } catch (error) {
+      console.error('Failed to load WebLLM status:', error);
+      setWebLLMEnabled(false);
+    }
+  };
 
   const loadCoachData = async () => {
     try {
@@ -177,6 +198,65 @@ export default function Coach() {
       alert('Failed to submit check-in. Please try again.');
     }
   };
+  
+  const initializeWebLLM = async () => {
+    setWebLLMModelLoading(true);
+    setWebLLMError(null);
+    try {
+      await webllmService.initialize();
+      setWebLLMModelReady(true);
+    } catch (error) {
+      console.error('Failed to initialize WebLLM:', error);
+      setWebLLMError(error instanceof Error ? error.message : 'Failed to initialize AI model');
+    } finally {
+      setWebLLMModelLoading(false);
+    }
+  };
+  
+  const sendMessage = async () => {
+    if (!chatMessage.trim() || !webllmModelReady) return;
+    
+    const userMessage = chatMessage;
+    setChatMessage('');
+    setChatLoading(true);
+    
+    // Add user message to chat
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    try {
+      const response = await webllmService.sendMessage(userMessage, profile!, currentPlan || undefined);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
+    } catch (error) {
+      console.error('Failed to send message to AI:', error);
+      setChatMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `I apologize, but I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+  
+  const generateWithWebLLM = async () => {
+    if (!profile || !webllmModelReady) return;
+    
+    setGenerating(true);
+    setGenerationError(null);
+    try {
+      const newPlan = await webllmService.generateWorkoutPlan(profile);
+      if (newPlan) {
+        setGeneratedPlan(newPlan);
+      } else {
+        throw new Error('AI failed to generate a valid workout plan');
+      }
+    } catch (error) {
+      console.error('Failed to generate plan with WebLLM:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setGenerationError(`AI plan generation failed: ${errorMessage}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -208,7 +288,157 @@ export default function Coach() {
       </div>
 
       <div className="space-y-6">
-        {/* Profile Summary */}
+        {/* AI Coach Chat */}
+        {webllmEnabled && (
+          <div className="card">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-medium text-gray-900">AI Coach Chat</h2>
+              <div className="flex items-center space-x-2">
+                {!webllmModelReady && !webllmModelLoading && (
+                  <button
+                    onClick={initializeWebLLM}
+                    className="btn btn-primary text-sm"
+                  >
+                    <Brain className="w-4 h-4 mr-1" />
+                    Load AI Coach
+                  </button>
+                )}
+                {webllmModelLoading && (
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    Loading AI Model...
+                  </div>
+                )}
+                {webllmModelReady && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    AI Ready
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            {webllmError && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="w-4 h-4 mt-0.5 text-yellow-600 mr-2" />
+                  <div className="text-sm text-yellow-800">
+                    <div className="font-medium">AI Model Error</div>
+                    <div>{webllmError}</div>
+                    <button
+                      onClick={() => setWebLLMError(null)}
+                      className="text-xs text-yellow-600 hover:text-yellow-800 underline mt-1"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {webllmModelReady && (
+              <div className="space-y-4">
+                {!showAIChat ? (
+                  <div className="text-center py-8">
+                    <Brain className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600 mb-4">
+                      Your AI coach is ready! Ask questions about workouts, form, nutrition, or plan modifications.
+                    </p>
+                    <button
+                      onClick={() => setShowAIChat(true)}
+                      className="btn btn-primary"
+                    >
+                      Start Chatting
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border rounded-lg">
+                    {/* Chat Messages */}
+                    <div className="h-96 overflow-y-auto p-4 space-y-4">
+                      {chatMessages.length === 0 ? (
+                        <div className="text-center text-gray-500 py-8">
+                          <p>Start a conversation with your AI coach!</p>
+                          <p className="text-sm mt-2">I can help with workout plans, exercise form, nutrition, and more.</p>
+                        </div>
+                      ) : (
+                        chatMessages.map((message, index) => (
+                          <div
+                            key={index}
+                            className={`flex ${
+                              message.role === 'user' ? 'justify-end' : 'justify-start'
+                            }`}
+                          >
+                            <div
+                              className={`max-w-[80%] p-3 rounded-lg ${
+                                message.role === 'user'
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-900'
+                              }`}
+                            >
+                              <p className="whitespace-pre-wrap">{message.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      
+                      {chatLoading && (
+                        <div className="flex justify-start">
+                          <div className="bg-gray-100 text-gray-900 p-3 rounded-lg">
+                            <div className="flex items-center space-x-2">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>AI coach is thinking...</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Chat Input */}
+                    <div className="border-t p-4">
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={chatMessage}
+                          onChange={(e) => setChatMessage(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                          placeholder="Ask about workouts, nutrition, or fitness advice..."
+                          className="input flex-1"
+                          disabled={chatLoading}
+                        />
+                        <button
+                          onClick={sendMessage}
+                          disabled={!chatMessage.trim() || chatLoading}
+                          className="btn btn-primary"
+                        >
+                          {chatLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="mt-2 flex justify-between">
+                        <p className="text-xs text-gray-500">
+                          Specialized for fitness coaching only
+                        </p>
+                        <button
+                          onClick={() => {
+                            setChatMessages([]);
+                            webllmService.clearChatHistory();
+                          }}
+                          className="text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Clear Chat
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* Profile Summary */}
         <div className="card">
           <h2 className="text-xl font-medium text-gray-900 mb-4">Your Profile Summary</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -327,13 +557,40 @@ export default function Coach() {
             </div>
           )}
           
-          <button
-            onClick={generateNewPlan}
-            disabled={generating}
-            className="btn btn-primary"
-          >
-            {generating ? 'Generating...' : 'Generate Workout Plan'}
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={generateNewPlan}
+              disabled={generating}
+              className="btn btn-primary"
+            >
+              {generating ? 'Generating...' : 'Generate with Coach Engine'}
+            </button>
+            
+            {webllmModelReady && (
+              <button
+                onClick={generateWithWebLLM}
+                disabled={generating}
+                className="btn btn-secondary"
+              >
+                <Brain className="w-4 h-4 mr-1" />
+                {generating ? 'Generating...' : 'Generate with AI'}
+              </button>
+            )}
+            
+            {webllmEnabled && !webllmModelReady && (
+              <button
+                onClick={initializeWebLLM}
+                disabled={webllmModelLoading}
+                className="btn btn-secondary"
+              >
+                {webllmModelLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Loading AI...</>
+                ) : (
+                  <><Brain className="w-4 h-4 mr-1" />Enable AI Generation</>
+                )}
+              </button>
+            )}
+          </div>
           
           {/* Error Display */}
           {generationError && (

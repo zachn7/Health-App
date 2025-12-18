@@ -8,7 +8,9 @@ import type {
   FoodItem,
   MealTemplate,
   WeeklyCheckIn,
-  InjuryAssessment
+  InjuryAssessment,
+  Settings,
+  ExerciseDBItem
 } from '@/types';
 
 export class CodePuppyDB extends Dexie {
@@ -22,6 +24,8 @@ export class CodePuppyDB extends Dexie {
   mealTemplates!: Table<MealTemplate>;
   weeklyCheckIns!: Table<WeeklyCheckIn>;
   injuryAssessments!: Table<InjuryAssessment>;
+  settings!: Table<Settings>;
+  exercises!: Table<ExerciseDBItem>;
 
   constructor() {
     super('CodePuppyTrainerDB');
@@ -45,7 +49,16 @@ export class CodePuppyDB extends Dexie {
       weeklyCheckIns: '++id, createdAt',
       
       // Safety
-      injuryAssessments: '++id, createdAt, area, severity'
+      injuryAssessments: '++id, createdAt, area, severity',
+      
+      // Settings
+      settings: 'id, createdAt, updatedAt',
+      
+      // Exercise Database
+      exercises: 'id, name, bodyPart, category, equipment, difficulty, [name+bodyPart]',
+      
+      // Custom Exercises  
+      customExercises: '++id, name, createdAt, updatedAt'
     });
 
     // Schema version 2 - Add indexes for better performance
@@ -58,7 +71,16 @@ export class CodePuppyDB extends Dexie {
       mealTemplates: '++id, name, createdAt, updatedAt',
       weightLogs: '++id, date, weightKg, createdAt, updatedAt, [date+weightKg]',
       weeklyCheckIns: '++id, createdAt, [createdAt]',
-      injuryAssessments: '++id, createdAt, area, severity, [area+severity]'
+      injuryAssessments: '++id, createdAt, area, severity, [area+severity]',
+      
+      // Settings
+      settings: 'id, createdAt, updatedAt',
+      
+      // Exercise Database
+      exercises: 'id, name, bodyPart, category, equipment, difficulty, [name+bodyPart]',
+      
+      // Custom Exercises
+      customExercises: '++id, name, createdAt, updatedAt'
     });
 
     // Schema version 3 - Add PWA cache and sync timestamps
@@ -71,7 +93,16 @@ export class CodePuppyDB extends Dexie {
       mealTemplates: '++id, name, createdAt, updatedAt, lastSync',
       weightLogs: '++id, date, weightKg, createdAt, updatedAt, [date+weightKg], lastSync',
       weeklyCheckIns: '++id, createdAt, [createdAt], lastSync',
-      injuryAssessments: '++id, createdAt, area, severity, [area+severity], lastSync'
+      injuryAssessments: '++id, createdAt, area, severity, [area+severity], lastSync',
+      
+      // Settings
+      settings: 'id, createdAt, updatedAt, lastSync',
+      
+      // Exercise Database
+      exercises: 'id, name, bodyPart, category, equipment, difficulty, [name+bodyPart], lastSync',
+      
+      // Custom Exercises
+      customExercises: '++id, name, createdAt, updatedAt, lastSync'
     });
   }
 }
@@ -95,6 +126,7 @@ import { profileRepository } from './repositories/profile.repository';
 import { workoutRepository } from './repositories/workout.repository';
 import { nutritionRepository } from './repositories/nutrition.repository';
 import { progressRepository } from './repositories/progress.repository';
+import { settingsRepository } from './repositories/settings.repository';
 
 // Export all tables for easy access
 export const tables = {
@@ -106,7 +138,9 @@ export const tables = {
   foodItems: db.foodItems,
   mealTemplates: db.mealTemplates,
   weeklyCheckIns: db.weeklyCheckIns,
-  injuryAssessments: db.injuryAssessments
+  injuryAssessments: db.injuryAssessments,
+  settings: db.settings,
+  exercises: db.exercises
 } as const;
 
 // Export repositories for convenient usage
@@ -114,7 +148,8 @@ export const repositories = {
   profile: profileRepository,
   workout: workoutRepository,
   nutrition: nutritionRepository,
-  progress: progressRepository
+  progress: progressRepository,
+  settings: settingsRepository
 } as const;
 
 // Database utility functions

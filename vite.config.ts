@@ -55,6 +55,19 @@ export default defineConfig({
       }
     })
   ],
+  resolve: {
+    alias: {
+      '@': '/src',
+      '@/components': '/src/components',
+      '@/pages': '/src/pages',
+      '@/lib': '/src/lib',
+      '@/db': '/src/db',
+      '@/types': '/src/types',
+      '@/hooks': '/src/hooks',
+      '@/utils': '/src/utils',
+      '@/assets': '/src/assets'
+    }
+  },
   build: {
     sourcemap: true, // Enable sourcemaps for diagnosis
     rollupOptions: {
