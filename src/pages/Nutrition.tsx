@@ -239,12 +239,24 @@ export default function Nutrition() {
     try {
       const foodItem = await usdaService.importFoodItem(fdcId);
       
-      // Add to current nutrition log with default serving size
+      // Parse the serving size to determine if it's per 100g or has a specific serving
+      const servingSize = foodItem.servingSize;
+      let defaultQuantity = 1;
+      let displayServingSize = servingSize;
+      
+      // If serving size is 100g, default to 1 serving (100g)
+      // If it has a different serving, show that as the default
+      if (servingSize === '100 g') {
+        displayServingSize = '100g';
+        defaultQuantity = 1;
+      }
+      
+      // Create food log item with the actual macro values per serving
       const foodLogItem: FoodLogItem = {
         id: crypto.randomUUID(),
         name: foodItem.name,
-        servingSize: foodItem.servingSize,
-        quantidade: 1,
+        servingSize: displayServingSize,
+        quantidade: defaultQuantity,
         calories: foodItem.calories,
         proteinG: foodItem.proteinG,
         carbsG: foodItem.carbsG,
@@ -276,22 +288,48 @@ export default function Nutrition() {
       const originalItem = currentLog.items.find(item => item.id === foodItemId);
       if (!originalItem) return;
       
-      // Calculate scaling factor
-      const baseQuantity = 1; // Original quantity
-      const scaleFactor = editingServingSize.quantity / baseQuantity;
+      // Calculate scaling factor based on the unit change
+      let scaleFactor: number;
+      let displayServingSize: string;
+      
+      if (editingServingSize.unit === 'g') {
+        // User wants to specify grams directly
+        // Assume originalItem macros are per 100g (standard USDA format)
+        const gramsPer100g = editingServingSize.quantity / 100;
+        
+        // Get the base per-100g values from USDA service if possible
+        // For now, assume originalItem macros are per serving and scale from there
+        const originalServingSize = originalItem.servingSize;
+        
+        if (originalServingSize && originalServingSize.includes('100g')) {
+          // Original is already per-100g, so scale directly
+          scaleFactor = gramsPer100g;
+        } else {
+          // Original is per-serving, so we need to estimate
+          // This is a simplified approach - in a real app you'd store the base per-100g values
+          scaleFactor = editingServingSize.quantity / 100; // Assume original was standard serving
+        }
+        
+        displayServingSize = `${editingServingSize.quantity}g`;
+      } else {
+        // User wants to change number of servings
+        const baseQuantity = 1;
+        scaleFactor = editingServingSize.quantity / baseQuantity;
+        displayServingSize = `${editingServingSize.quantity} ${editingServingSize.unit}`;
+      }
       
       // Update the food item with scaled macros
       const updatedItem: FoodLogItem = {
         ...originalItem,
-        quantidade: editingServingSize.quantity,
-        servingSize: `${editingServingSize.quantity} ${editingServingSize.unit}`,
-        calories: originalItem.calories * scaleFactor,
-        proteinG: originalItem.proteinG * scaleFactor,
-        carbsG: originalItem.carbsG * scaleFactor,
-        fatG: originalItem.fatG * scaleFactor,
-        fiberG: originalItem.fiberG ? originalItem.fiberG * scaleFactor : 0,
-        sugarG: originalItem.sugarG ? originalItem.sugarG * scaleFactor : 0,
-        sodiumMg: originalItem.sodiumMg ? originalItem.sodiumMg * scaleFactor : 0
+        quantidade: editingServingSize.unit === 'g' ? 1 : editingServingSize.quantity,
+        servingSize: displayServingSize,
+        calories: Math.round(originalItem.calories * scaleFactor),
+        proteinG: Math.round((originalItem.proteinG * scaleFactor) * 10) / 10,
+        carbsG: Math.round((originalItem.carbsG * scaleFactor) * 10) / 10,
+        fatG: Math.round((originalItem.fatG * scaleFactor) * 10) / 10,
+        fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * scaleFactor) * 10) / 10 : 0,
+        sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * scaleFactor) * 10) / 10 : 0,
+        sodiumMg: originalItem.sodiumMg ? Math.round((originalItem.sodiumMg * scaleFactor)) : 0
       };
       
       // Update the nutrition log

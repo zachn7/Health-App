@@ -3,6 +3,16 @@ import { settingsRepository } from '@/db/repositories/settings.repository';
 import { z } from 'zod';
 import type { WorkoutPlan, Profile } from '@/types';
 
+export interface WebLLMModelRecord {
+  model_id: string;
+  model_lib: string;
+  model_url: string;
+  estimated_vram_bytes: number;
+  low_resource_required: boolean;
+  required_features: string[];
+  [key: string]: any;
+}
+
 // Validation schemas for AI responses
 const workoutPlanPatchSchema = z.object({
   type: z.enum(['exercise_replacement', 'add_exercise', 'remove_exercise', 'change_sets_reps', 'change_split']),
@@ -35,9 +45,29 @@ export class WebLLMService {
   private static isLoading = false;
   private static isInitialized = false;
   private static chatHistory: ChatMessage[] = [];
+  private static availableModels: WebLLMModelRecord[] = [];
+  private static selectedModelId: string | null = null;
   
-  // Model configuration
-  private static readonly MODEL_ID = 'Llama-3.2-3B-Instruct-q4f16_1';
+  // static getAvailableModels(): WebLLMModelRecord[] {
+  //   // Return models from webllm.prebuiltAppConfig.model_list
+  //   try {
+  //     return webllm.prebuiltAppConfig.model_list as WebLLMModelRecord[];
+  //   } catch (error) {
+  //     console.error('Failed to get available models:', error);
+  //     return [];
+  //   }
+  // }
+  
+  static async getAvailableModels(): Promise<WebLLMModelRecord[]> {
+    try {
+      // Access the prebuiltAppConfig.model_list from webllm
+      const models = (webllm as any).prebuiltAppConfig?.model_list || [];
+      return models;
+    } catch (error) {
+      console.error('Failed to get available models:', error);
+      return [];
+    }
+  }
   
   static async isWebLLMEnabled(): Promise<boolean> {
     try {
@@ -45,6 +75,69 @@ export class WebLLMService {
     } catch (error) {
       console.error('Failed to check WebLLM status:', error);
       return false;
+    }
+  }
+  
+  static async getSelectedModelId(): Promise<string> {
+    if (this.selectedModelId) {
+      return this.selectedModelId;
+    }
+    
+    try {
+      // Try to get saved model from settings
+      const savedModelId = await settingsRepository.getWebLLMModelId();
+      if (savedModelId) {
+        // Validate that the saved model is still available
+        const availableModels = await this.getAvailableModels();
+        const modelExists = availableModels.some(model => model.model_id === savedModelId);
+        
+        if (modelExists) {
+          this.selectedModelId = savedModelId;
+          return savedModelId;
+        } else {
+          console.warn(`Saved model ${savedModelId} not found in available models, falling back to default`);
+          // Clear the invalid model and fallback
+          await settingsRepository.setWebLLMModelId(null);
+        }
+      }
+      
+      // Fallback to first available safe model
+      const availableModels = await this.getAvailableModels();
+      const safeModels = availableModels.filter(model => !model.low_resource_required && model.required_features.length === 0);
+      const defaultModel = safeModels.length > 0 ? safeModels[0] : availableModels[0];
+      
+      if (defaultModel) {
+        this.selectedModelId = defaultModel.model_id;
+        await settingsRepository.setWebLLMModelId(this.selectedModelId);
+        return this.selectedModelId;
+      }
+      
+      throw new Error('No WebLLM models available');
+    } catch (error) {
+      console.error('Failed to get selected model:', error);
+      throw error;
+    }
+  }
+  
+  static async setSelectedModelId(modelId: string): Promise<void> {
+    try {
+      const availableModels = await this.getAvailableModels();
+      const modelExists = availableModels.some(model => model.model_id === modelId);
+      
+      if (!modelExists) {
+        throw new Error(`Model ${modelId} not found in available models`);
+      }
+      
+      this.selectedModelId = modelId;
+      await settingsRepository.setWebLLMModelId(modelId);
+      
+      // If engine is initialized, reload with new model
+      if (this.isInitialized && this.engine) {
+        await this.engine.reload(modelId);
+      }
+    } catch (error) {
+      console.error('Failed to set selected model:', error);
+      throw error;
     }
   }
   
@@ -68,9 +161,17 @@ export class WebLLMService {
       
       this.isLoading = true;
       
-      // Initialize the engine
+      // Get the selected model ID (with fallback to first available)
+      const selectedModelId = await this.getSelectedModelId();
+      console.log('Initializing WebLLM with model:', selectedModelId);
+      
+      // Load available models and cache them
+      this.availableModels = await this.getAvailableModels();
+      console.log('Available models:', this.availableModels.map(m => m.model_id));
+      
+      // Initialize the engine with selected model
       this.engine = await webllm.CreateMLCEngine(
-        this.MODEL_ID,
+        selectedModelId,
         { initProgressCallback: this.onProgressCallback.bind(this) }
       ) as webllm.MLCEngineInterface;
       

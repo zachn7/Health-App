@@ -1,9 +1,9 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Download } from 'lucide-react';
 import { repositories } from '../db';
 import ExercisePicker from '../components/ExercisePicker';
-import { kgToLbs } from '../lib/unit-conversions';
+
 import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan } from '../types';
 
 interface CurrentWorkout {
@@ -38,6 +38,8 @@ export default function WorkoutLogger() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
   const [showImportFromProgram, setShowImportFromProgram] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+  const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadWorkoutData();
@@ -55,7 +57,7 @@ export default function WorkoutLogger() {
       }
       
       // Load workout for selected date
-      const dateLog = await repositories.workout.getWorkoutLog(selectedDate);
+      const dateLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
       setWorkoutLog(dateLog || null);
       
       // Load recent workouts
@@ -106,6 +108,47 @@ export default function WorkoutLogger() {
     setExerciseEntries(updatedEntries);
   };
 
+  const autosaveWorkout = async () => {
+    if (!exerciseEntries.length || !exerciseEntries.some(entry => entry.sets.length > 0)) {
+      return; // Don't save empty workouts
+    }
+    
+    setSaveStatus('saving');
+    
+    try {
+      const duration = startTime ? Math.round((new Date().getTime() - startTime.getTime()) / 1000 / 60) : 0;
+      
+      const log: WorkoutLog = {
+        id: workoutLog?.id || crypto.randomUUID(),
+        date: selectedDate, // Use selected date, not today
+        workoutPlanId: currentWorkout?.workoutPlanId,
+        entries: exerciseEntries.filter(entry => entry.sets.length > 0),
+        cardioEntries: [],
+        sessionNotes: sessionNotes,
+        duration: duration,
+        createdAt: workoutLog?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      if (workoutLog) {
+        // Update existing log
+        await repositories.workout.updateWorkoutLog(workoutLog.id, log);
+        setWorkoutLog(log);
+      } else {
+        // Create new log
+        await repositories.workout.createWorkoutLog(log);
+        setWorkoutLog(log);
+      }
+      
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(null), 2000); // Clear saved status after 2 seconds
+    } catch (error) {
+      console.error('Failed to autosave workout:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(null), 3000);
+    }
+  };
+  
   const updateSet = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight', value: number | undefined) => {
     const updatedEntries = [...exerciseEntries];
     if (field === 'reps') {
@@ -114,6 +157,12 @@ export default function WorkoutLogger() {
       updatedEntries[exerciseIndex].sets[setIndex].weight = value;
     }
     setExerciseEntries(updatedEntries);
+    
+    // Trigger autosave with debounce
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+    autosaveTimeoutRef.current = setTimeout(autosaveWorkout, 2000); // 2 second debounce
   };
 
   const removeSet = (exerciseIndex: number, setIndex: number) => {
@@ -124,36 +173,32 @@ export default function WorkoutLogger() {
       set.set = idx + 1;
     });
     setExerciseEntries(updatedEntries);
+    
+    // Trigger autosave with debounce
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+    autosaveTimeoutRef.current = setTimeout(autosaveWorkout, 2000);
   };
 
   const finishWorkout = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const duration = startTime ? Math.round((new Date().getTime() - startTime.getTime()) / 1000 / 60) : 0;
-      
-      const log: WorkoutLog = {
-        id: crypto.randomUUID(),
-        date: today,
-        workoutPlanId: currentWorkout?.workoutPlanId,
-        entries: exerciseEntries.filter(entry => entry.sets.length > 0),
-        cardioEntries: [],
-        sessionNotes: sessionNotes,
-        duration: duration,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      await repositories.workout.createWorkoutLog(log);
-      setWorkoutLog(log);
+      await autosaveWorkout(); // Save final state
       setIsLogging(false);
-      alert('Workout logged successfully! Great job! 💪');
+      
+      // Show success message
+      const successDiv = document.createElement('div');
+      successDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50';
+      successDiv.innerHTML = '✓ Workout logged successfully! Great job! 💪';
+      document.body.appendChild(successDiv);
+      setTimeout(() => document.body.removeChild(successDiv), 3000);
       
       // Reload recent workouts
       const updated = await repositories.workout.getWorkoutLogs();
       setRecentWorkouts(updated.slice(0, 5));
     } catch (error) {
-      console.error('Failed to save workout log:', error);
-      alert('Failed to save workout log. Please try again.');
+      console.error('Failed to finish workout:', error);
+      alert('Failed to finish workout. Please try again.');
     }
   };
 
@@ -189,45 +234,70 @@ export default function WorkoutLogger() {
     }
   };
 
-  const importFromProgram = (plan: WorkoutPlan, weekIndex: number = 0, dayIndex: number = 0) => {
-    const currentWeek = plan.weeks[weekIndex];
-    if (!currentWeek || !currentWeek.workouts) {
-      alert('No workouts found for this day in the program');
-      return;
-    }
+  const importFromProgram = async (plan: WorkoutPlan, weekIndex: number = 0, dayIndex: number = 0) => {
+    try {
+      if (!plan.weeks || plan.weeks.length === 0) {
+        throw new Error('No weeks found in this workout plan');
+      }
 
-    const workout = currentWeek.workouts[dayIndex];
-    if (!workout) {
-      alert('No workout found for this day in the program');
-      return;
-    }
+      const currentWeek = plan.weeks[weekIndex];
+      if (!currentWeek || !currentWeek.workouts) {
+        throw new Error('No workouts found in this week of the program');
+      }
 
-    // Load exercises for names
-    fetch('/src/assets/data/exercises.seed.json')
-      .then(response => response.json())
-      .then(exercisesData => {
-        const entries: ExerciseLogEntry[] = workout.exercises.map((ex: any) => {
-          const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
-          return {
-            exerciseId: ex.exerciseId,
-            exerciseName: exercise?.name || `Exercise ${ex.exerciseId}`,
-            sets: []
-          };
-        });
-        
-        setExerciseEntries(entries);
-        setCurrentWorkout({
-          workoutPlanId: plan.id,
-          exercises: workout.exercises,
-          notes: workout.notes
-        });
-        setShowImportFromProgram(false);
-        setManualWorkoutMode(false);
-      })
-      .catch(error => {
-        console.error('Failed to import exercises:', error);
-        alert('Failed to import exercises from program');
+      const workout = currentWeek.workouts[dayIndex];
+      if (!workout) {
+        throw new Error('No workout found for this day in the program');
+      }
+
+      // Load exercises for names
+      const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
+      const exercisesData = await exercisesResponse.json();
+      
+      const entries: ExerciseLogEntry[] = workout.exercises.map((ex: any) => {
+        const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
+        return {
+          exerciseId: ex.exerciseId,
+          exerciseName: exercise?.name || `Exercise ${ex.exerciseId}`,
+          sets: []
+        };
       });
+      
+      setExerciseEntries(entries);
+      setCurrentWorkout({
+        workoutPlanId: plan.id,
+        exercises: workout.exercises,
+        notes: workout.notes
+      });
+      setShowImportFromProgram(false);
+      setManualWorkoutMode(false);
+      setIsLogging(true); // Start logging mode
+      setStartTime(new Date()); // Start the timer
+      
+      // Clear any existing workout log for this date first
+      const existingLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
+      if (existingLog) {
+        await repositories.workout.deleteWorkoutLog(existingLog.id);
+      }
+      
+      // Show success message
+      const successDiv = document.createElement('div');
+      successDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50';
+      successDiv.innerHTML = `✓ Imported workout: ${workout.day}`;
+      document.body.appendChild(successDiv);
+      setTimeout(() => document.body.removeChild(successDiv), 3000);
+      
+    } catch (error) {
+      console.error('Failed to import exercises:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import exercises from program';
+      
+      // Show error in UI instead of alert
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg z-50';
+      errorDiv.innerHTML = `✗ ${errorMessage}`;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => document.body.removeChild(errorDiv), 5000);
+    }
   };
 
   const getWorkoutDuration = () => {
@@ -246,6 +316,37 @@ export default function WorkoutLogger() {
     setShowExercisePicker(true);
   };
 
+  const navigateToLog = (log: WorkoutLog) => {
+    // Load the selected log's date and data
+    setSelectedDate(log.date);
+    
+    // Load the workout data for that date
+    loadWorkoutDataForDate(log.date);
+  };
+  
+  const loadWorkoutDataForDate = async (date: string) => {
+    try {
+      const dateLog = await repositories.workout.getWorkoutLogByDate(date);
+      setWorkoutLog(dateLog || null);
+      
+      if (dateLog) {
+        setExerciseEntries(dateLog.entries);
+        setSessionNotes(dateLog.sessionNotes || '');
+        setIsLogging(true);
+        setCurrentWorkout(null);
+        setManualWorkoutMode(false);
+      } else {
+        setExerciseEntries([]);
+        setSessionNotes('');
+        setIsLogging(false);
+        setCurrentWorkout(null);
+        setManualWorkoutMode(false);
+      }
+    } catch (error) {
+      console.error('Failed to load workout data for date:', date, error);
+    }
+  };
+  
   const handleSelectExercise = (exercise: ExerciseDBItem) => {
     const newEntry: ExerciseLogEntry = {
       exerciseId: exercise.id,
@@ -279,8 +380,25 @@ export default function WorkoutLogger() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Workout Logger</h1>
-        <p className="mt-2 text-gray-600">Record your training sessions</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Workout Logger</h1>
+            <p className="mt-2 text-gray-600">Record your training sessions</p>
+          </div>
+          
+          {/* Save Status Indicator */}
+          {saveStatus && (
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+              saveStatus === 'saved' ? 'bg-green-100 text-green-800' :
+              saveStatus === 'saving' ? 'bg-blue-100 text-blue-800' :
+              'bg-red-100 text-red-800'
+            }`}>
+              {saveStatus === 'saved' ? '✓ Saved' :
+               saveStatus === 'saving' ? 'Saving...' :
+               '✗ Error'}
+            </div>
+          )}
+        </div>
       </div>
       
       {/* Date Navigation */}
@@ -497,21 +615,16 @@ export default function WorkoutLogger() {
             <div className="mb-4">
               <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-600 mb-2">
                 <div className="col-span-2">Set</div>
-                <div className="col-span-3">Reps</div>
-                <div className="col-span-3">Weight ({getWeightUnit()})</div>
-                <div className="col-span-2">Volume ({getWeightUnit()})</div>
+                <div className="col-span-4">Reps</div>
+                <div className="col-span-4">Weight ({getWeightUnit()})</div>
                 <div className="col-span-2">Actions</div>
               </div>
               
               {exercise.sets.map((set, setIndex) => {
-                const volume = (set.weight || 0) * (set.reps || 0);
-                const displayVolume = profile?.preferredUnits === 'imperial' 
-                  ? (kgToLbs(set.weight || 0) * (set.reps || 0))
-                  : volume;
                 return (
                   <div key={setIndex} className="grid grid-cols-12 gap-2 mb-2">
                     <div className="col-span-2 flex items-center">{set.set}</div>
-                    <div className="col-span-3">
+                    <div className="col-span-4">
                       <input
                         type="number"
                         value={set.reps || ''}
@@ -521,7 +634,7 @@ export default function WorkoutLogger() {
                         max="100"
                       />
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-4">
                       <input
                         type="number"
                         value={set.weight || ''}
@@ -532,7 +645,6 @@ export default function WorkoutLogger() {
                         step="0.5"
                       />
                     </div>
-                    <div className="col-span-2 flex items-center text-sm">{displayVolume} {getWeightUnit()}</div>
                     <div className="col-span-2">
                       <button
                         onClick={() => removeSet(exerciseIndex, setIndex)}
@@ -552,14 +664,6 @@ export default function WorkoutLogger() {
                 >
                   Add Set
                 </button>
-                <span className="ml-4 text-sm text-gray-600">
-                  Total Volume: {exercise.sets.reduce((sum, set) => {
-                    const volume = (set.weight || 0) * (set.reps || 0);
-                    return profile?.preferredUnits === 'imperial' 
-                      ? sum + (kgToLbs(set.weight || 0) * (set.reps || 0))
-                      : sum + volume;
-                  }, 0)} {getWeightUnit()}
-                </span>
               </div>
             </div>
           ) : (
@@ -593,7 +697,15 @@ export default function WorkoutLogger() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">Session Notes (Optional)</h3>
           <textarea
             value={sessionNotes}
-            onChange={(e) => setSessionNotes(e.target.value)}
+            onChange={(e) => {
+              setSessionNotes(e.target.value);
+              
+              // Trigger autosave with debounce
+              if (autosaveTimeoutRef.current) {
+                clearTimeout(autosaveTimeoutRef.current);
+              }
+              autosaveTimeoutRef.current = setTimeout(autosaveWorkout, 2000);
+            }}
             className="input"
             rows={3}
             placeholder="How did the workout feel? Any notes for next time..."
@@ -608,28 +720,21 @@ export default function WorkoutLogger() {
           
           <div className="space-y-3">
             {recentWorkouts.map((log) => (
-              <div key={log.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <button
+                key={log.id}
+                onClick={() => navigateToLog(log)}
+                className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left w-full"
+              >
                 <div>
                   <div className="font-medium">{new Date(log.date).toLocaleDateString()}</div>
                   <div className="text-sm text-gray-600">
-                    {log.entries.length} exercises • {log.duration} minutes
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {log.entries.reduce((sum, entry) => sum + entry.sets.length, 0)} sets • 
-                    {log.entries.reduce((sum, entry) => 
-                      sum + entry.sets.reduce((setSum, set) => {
-                        const volume = (set.weight || 0) * (set.reps || 0);
-                        return profile?.preferredUnits === 'imperial' 
-                          ? setSum + (kgToLbs(set.weight || 0) * (set.reps || 0))
-                          : setSum + volume;
-                      }, 0), 0
-                    )} {getWeightUnit()} total volume
+                    {log.entries.length} exercises • {log.entries.reduce((sum, entry) => sum + entry.sets.length, 0)} sets • {log.duration} minutes
                   </div>
                 </div>
                 <div className="text-sm text-gray-500">
                   {new Date(log.createdAt).toLocaleTimeString()}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

@@ -60,6 +60,10 @@ export class WorkoutRepository {
     return await db.workoutLogs.get(id);
   }
 
+  async getWorkoutLogByDate(date: string): Promise<WorkoutLog | undefined> {
+    return await db.workoutLogs.where('date').equals(date).first();
+  }
+
   async getWorkoutLogsByDateRange(startDate: string, endDate: string): Promise<WorkoutLog[]> {
     return await db.workoutLogs
       .where('date')

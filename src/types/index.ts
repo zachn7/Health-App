@@ -281,6 +281,7 @@ export interface Settings {
   enableUSDALookups: boolean;
   // WebLLM AI Coach
   enableWebLLMCoach: boolean;
+  webllmModelId?: string;
   // Future settings can be added here
 }
 

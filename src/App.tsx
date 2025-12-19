@@ -28,16 +28,21 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 
 function AppContent() {
   const navigate = useNavigate();
-  const [hasAcceptedAgeGate] = useLocalStorage('age_gate_accepted', false);
+  const [hasAcceptedAgeGate, setHasAcceptedAgeGate] = useLocalStorage('age_gate_accepted', false);
   const [hasCompletedOnboarding] = useLocalStorage('onboarding_completed', false);
 
   const handleAgeGatePassed = () => {
-    // Navigate to onboarding if not completed, otherwise to dashboard
-    if (hasCompletedOnboarding) {
-      navigate('/');
-    } else {
-      navigate('/onboarding');
-    }
+    // Force update of the state to trigger re-render
+    setHasAcceptedAgeGate(true);
+    
+    // Navigate immediately after state update
+    setTimeout(() => {
+      if (hasCompletedOnboarding) {
+        navigate('/');
+      } else {
+        navigate('/onboarding');
+      }
+    }, 0);
   };
 
   if (!hasAcceptedAgeGate) {

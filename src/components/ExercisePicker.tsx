@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ExerciseDBService } from '@/lib/exercise-db';
 import type { ExerciseDBItem } from '@/types';
 
@@ -105,8 +106,8 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [] }: E
     setSelectedDifficulty('');
   };
   
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-gray-200">
@@ -243,6 +244,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [] }: E
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

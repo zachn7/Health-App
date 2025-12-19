@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { repositories } from '../db';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { Profile, Goal, UnitSystem } from '../types';
 import { ActivityLevel, ExperienceLevel, GoalType, Sex } from '../types';
 import {
@@ -18,6 +19,7 @@ import {
 
 export default function Profile() {
   const navigate = useNavigate();
+  const [, setOnboardingCompleted] = useLocalStorage('onboarding_completed', false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -66,6 +68,9 @@ export default function Profile() {
       console.log('Saving profile:', profile);
       await repositories.profile.save(profile);
       console.log('Profile saved successfully!');
+      
+      // Mark onboarding as completed
+      setOnboardingCompleted(true);
       
       // Check if this is a new profile (first time setup)
       const isNewProfile = !profile.createdAt || profile.id === '';
@@ -444,8 +449,12 @@ export default function Profile() {
               <label className="label">Age</label>
               <input
                 type="number"
-                value={profile.age || ''}
-                onChange={(e) => updateField('age', parseInt(e.target.value) || undefined)}
+                value={profile.age !== undefined ? profile.age.toString() : ''}
+                onChange={(e) => updateField('age', e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                onBlur={(e) => {
+                  const parsed = parseInt(e.target.value);
+                  updateField('age', isNaN(parsed) ? undefined : Math.max(13, Math.min(120, parsed)));
+                }}
                 className="input"
                 min="13"
                 max="120"

@@ -56,6 +56,15 @@ class SettingsRepository {
     const settings = await this.getSettings();
     return settings?.enableWebLLMCoach || false;
   }
+  
+  async getWebLLMModelId(): Promise<string | null> {
+    const settings = await this.getSettings();
+    return settings?.webllmModelId || null;
+  }
+  
+  async setWebLLMModelId(modelId: string | null): Promise<void> {
+    await this.updateSettings({ webllmModelId: modelId || undefined });
+  }
 }
 
 export const settingsRepository = new SettingsRepository();

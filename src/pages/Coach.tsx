@@ -26,6 +26,9 @@ export default function Coach() {
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'assistant'; content: string}[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [webllmError, setWebLLMError] = useState<string | null>(null);
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   
   const [checkIn, setCheckIn] = useState({
     adherenceRating: 3,
@@ -38,6 +41,7 @@ export default function Coach() {
   useEffect(() => {
     loadCoachData();
     loadWebLLMStatus();
+    loadWebLLMModels();
   }, []);
 
   const loadWebLLMStatus = async () => {
@@ -47,6 +51,30 @@ export default function Coach() {
     } catch (error) {
       console.error('Failed to load WebLLM status:', error);
       setWebLLMEnabled(false);
+    }
+  };
+
+  const loadWebLLMModels = async () => {
+    try {
+      const models = await webllmService.getAvailableModels();
+      setAvailableModels(models);
+      console.log('Available models:', models.map(m => m.model_id));
+      
+      const currentModel = await webllmService.getSelectedModelId();
+      setSelectedModelId(currentModel);
+    } catch (error) {
+      console.error('Failed to load WebLLM models:', error);
+    }
+  };
+
+  const handleModelChange = async (modelId: string) => {
+    try {
+      await webllmService.setSelectedModelId(modelId);
+      setSelectedModelId(modelId);
+      console.log('Model changed to:', modelId);
+    } catch (error) {
+      console.error('Failed to change model:', error);
+      setWebLLMError(error instanceof Error ? error.message : 'Failed to change model');
     }
   };
 
@@ -295,13 +323,33 @@ export default function Coach() {
               <h2 className="text-xl font-medium text-gray-900">AI Coach Chat</h2>
               <div className="flex items-center space-x-2">
                 {!webllmModelReady && !webllmModelLoading && (
-                  <button
-                    onClick={initializeWebLLM}
-                    className="btn btn-primary text-sm"
-                  >
-                    <Brain className="w-4 h-4 mr-1" />
-                    Load AI Coach
-                  </button>
+                  <>
+                    <select
+                      value={selectedModelId}
+                      onChange={(e) => handleModelChange(e.target.value)}
+                      className="input text-sm max-w-xs"
+                      disabled={availableModels.length === 0}
+                    >
+                      {availableModels.length === 0 && (
+                        <option value="">Loading models...</option>
+                      )}
+                      {availableModels.map((model) => (
+                        <option key={model.model_id} value={model.model_id}>
+                          {model.model_id}
+                          {model.low_resource_required && ' (Low Resource)'}
+                          {model.required_features.length > 0 && ' (Requires: ' + model.required_features.join(', ') + ')'}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={initializeWebLLM}
+                      className="btn btn-primary text-sm"
+                      disabled={availableModels.length === 0}
+                    >
+                      <Brain className="w-4 h-4 mr-1" />
+                      Load AI Coach
+                    </button>
+                  </>
                 )}
                 {webllmModelLoading && (
                   <div className="flex items-center text-sm text-gray-600">
@@ -310,12 +358,49 @@ export default function Coach() {
                   </div>
                 )}
                 {webllmModelReady && (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    AI Ready
-                  </span>
+                  <>
+                    <select
+                      value={selectedModelId}
+                      onChange={(e) => handleModelChange(e.target.value)}
+                      className="input text-sm max-w-xs"
+                    >
+                      {availableModels.map((model) => (
+                        <option key={model.model_id} value={model.model_id}>
+                          {model.model_id}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      AI Ready
+                    </span>
+                  </>
                 )}
               </div>
             </div>
+            
+            {/* DEV Diagnostics Panel */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-sm font-medium text-gray-700">DEV Diagnostics</h4>
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    {showDiagnostics ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {showDiagnostics && (
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div><strong>Available Model IDs:</strong> [{availableModels.map(m => m.model_id).join(', ')}]</div>
+                    <div><strong>Selected Model ID:</strong> {selectedModelId}</div>
+                    <div><strong>Selected exists in model_list:</strong> {availableModels.some(m => m.model_id === selectedModelId) ? '✅ Yes' : '❌ No'}</div>
+                    <div><strong>Model Ready:</strong> {webllmModelReady ? '✅ Yes' : '❌ No'}</div>
+                    <div><strong>Model Loading:</strong> {webllmModelLoading ? '🔄 Yes' : '✅ No'}</div>
+                  </div>
+                )}
+              </div>
+            )}
             
             {webllmError && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
