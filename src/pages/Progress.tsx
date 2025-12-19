@@ -1,7 +1,9 @@
 
 import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { repositories } from '../db';
 import { formatWeight } from '../lib/unit-conversions';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { WeightLog, Profile, WorkoutLog } from '../types';
 
 export default function Progress() {
@@ -9,6 +11,8 @@ export default function Progress() {
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddWeight, setShowAddWeight] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [newWeight, setNewWeight] = useState<{
     weightKg: number;
     bodyFat?: number;
@@ -38,6 +42,8 @@ export default function Progress() {
     return profile?.preferredUnits === 'imperial' ? 'lb' : 'kg';
   };
 
+
+
   const loadProgressData = async () => {
     try {
       const [weights, workouts] = await Promise.all([
@@ -56,19 +62,37 @@ export default function Progress() {
 
   const saveWeightLog = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const weightLog = {
-        id: crypto.randomUUID(),
-        date: today,
-        weightKg: newWeight.weightKg,
-        bodyFat: newWeight.bodyFat,
-        notes: newWeight.notes,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      const existingEntry = weightLogs.find(log => log.date === selectedDate);
       
-      await repositories.progress.createWeightLog(weightLog);
-      setWeightLogs([weightLog, ...weightLogs]);
+      if (existingEntry) {
+        // Update existing entry
+        const updatedLog = {
+          ...existingEntry,
+          weightKg: newWeight.weightKg,
+          bodyFat: newWeight.bodyFat,
+          notes: newWeight.notes,
+          updatedAt: new Date().toISOString()
+        };
+        
+        await repositories.progress.updateWeightLog(updatedLog.id, updatedLog);
+        setWeightLogs(prev => prev.map(log => 
+          log.date === selectedDate ? updatedLog : log
+        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      } else {
+        // Create new entry
+        const weightLog = {
+          id: crypto.randomUUID(),
+          date: selectedDate,
+          weightKg: newWeight.weightKg,
+          bodyFat: newWeight.bodyFat,
+          notes: newWeight.notes,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        await repositories.progress.createWeightLog(weightLog);
+        setWeightLogs([weightLog, ...weightLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      }
       
       // Reset form
       setNewWeight({ weightKg: 75, bodyFat: undefined, notes: '' });
@@ -213,9 +237,70 @@ export default function Progress() {
           </button>
         </div>
         
+        {/* Date Navigation */}
+        <div className="flex items-center justify-center mb-6 space-x-4">
+          <button
+            onClick={() => {
+              const date = new Date(selectedDate);
+              date.setDate(date.getDate() - 1);
+              setSelectedDate(date.toISOString().split('T')[0]);
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <button
+            onClick={() => setShowDatePicker(!showDatePicker)}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Calendar className="w-4 h-4" />
+            <span className="font-medium">
+              {new Date(selectedDate).toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+              })}
+            </span>
+          </button>
+          
+          <button
+            onClick={() => {
+              const date = new Date(selectedDate);
+              date.setDate(date.getDate() + 1);
+              setSelectedDate(date.toISOString().split('T')[0]);
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            disabled={selectedDate >= new Date().toISOString().split('T')[0]}
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+        
+        {showDatePicker && (
+          <div className="mb-6">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setShowDatePicker(false);
+              }}
+              max={new Date().toISOString().split('T')[0]}
+              className="input w-auto mx-auto block"
+            />
+          </div>
+        )}
+        
         {showAddWeight && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-lg font-medium mb-4">Log Today's Weight</h3>
+            <h3 className="text-lg font-medium mb-4">
+              Log Weight for {new Date(selectedDate).toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
@@ -273,6 +358,47 @@ export default function Progress() {
               >
                 Save Weight
               </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Weight Trend Chart */}
+        {weightLogs.length > 1 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Weight Trend</h3>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weightLogs.slice(0, 30).reverse().map(log => ({
+                  date: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  weight: profile?.preferredUnits === 'imperial' ? (log.weightKg * 2.20462).toFixed(1) : log.weightKg.toFixed(1),
+                  weightKg: log.weightKg
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12 }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    domain={['dataMin - 1', 'dataMax + 1']}
+                    label={{ value: `Weight (${getWeightUnit()})`, angle: -90, position: 'insideLeft' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                    labelStyle={{ fontWeight: 600 }}
+                    formatter={(value: any) => [`${value} ${getWeightUnit()}`, 'Weight']}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="weight" 
+                    stroke="#3b82f6" 
+                    strokeWidth={2}
+                    dot={{ fill: '#3b82f6', r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
         )}

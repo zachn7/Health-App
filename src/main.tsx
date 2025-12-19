@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
+// Initialize exercise database on app startup
+import { ExerciseDBService } from '@/lib/exercise-db'
+import { initDatabase } from '@/db'
+
 // Service Worker registration with better error handling and security context check
 // This registration is entirely optional - the app works perfectly without it
 const registerServiceWorker = async () => {
@@ -70,11 +74,31 @@ const registerServiceWorker = async () => {
   }
 };
 
+// Initialize app and database
+const initializeApp = async () => {
+  try {
+    // Initialize database first
+    await initDatabase();
+    
+    // Initialize exercise database
+    await ExerciseDBService.initialize();
+    
+    console.log('App initialization complete');
+  } catch (error) {
+    console.error('App initialization failed:', error);
+    // Continue anyway - app should work even if init fails
+  }
+};
+
 // Register SW in a non-blocking way
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', registerServiceWorker);
+  document.addEventListener('DOMContentLoaded', () => {
+    registerServiceWorker();
+    initializeApp();
+  });
 } else {
   registerServiceWorker();
+  initializeApp();
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -62,21 +62,31 @@ export class ExerciseDBService {
     try {
       // Check if exercises are already loaded
       const existingCount = await db.table('exercises').count();
+      console.log(`Existing exercises count: ${existingCount}`);
       
       if (existingCount === 0) {
         console.log('Loading exercise database...');
         
         // Map and load external exercise data
         const mappedExercises = exercisesData.map(mapExerciseToInternal);
+        console.log(`Mapped ${mappedExercises.length} exercises from JSON`);
         
         // Add to database in batches to avoid blocking
         const BATCH_SIZE = 100;
         for (let i = 0; i < mappedExercises.length; i += BATCH_SIZE) {
           const batch = mappedExercises.slice(i, i + BATCH_SIZE);
           await db.table('exercises').bulkPut(batch);
+          console.log(`Loaded batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(mappedExercises.length/BATCH_SIZE)}`);
         }
         
-        console.log(`Loaded ${mappedExercises.length} exercises into database`);
+        console.log(`Successfully loaded ${mappedExercises.length} exercises into database`);
+        
+        // Verify some sample exercises
+        const sampleExercises = await db.table('exercises').limit(5).toArray();
+        console.log('Sample exercises:', sampleExercises.map(e => ({ id: e.id, name: e.name, bodyPart: e.bodyPart })));
+        
+      } else {
+        console.log(`Exercises already loaded: ${existingCount} exercises found`);
       }
       
       this.initialized = true;
@@ -89,19 +99,39 @@ export class ExerciseDBService {
   static async searchExercises(query: string): Promise<ExerciseDBItem[]> {
     await this.initialize();
     
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+    
     try {
-      const searchLower = query.toLowerCase();
-      return await db.table('exercises')
+      const searchLower = query.toLowerCase().trim();
+      console.log(`Searching exercises for: "${searchLower}"`);
+      
+      // First try exact matches and starts-with
+      let results = await db.table('exercises')
         .where('name')
         .startsWithIgnoreCase(searchLower)
         .or('bodyPart')
-        .startsWithIgnoreCase(searchLower)
-        .or('equipment')
         .equalsIgnoreCase(searchLower)
-        .or('targetMuscles')
+        .or('equipment')
         .anyOf([searchLower])
         .limit(50)
         .toArray();
+      
+      // If no results, try contains search
+      if (results.length === 0) {
+        console.log('No starts-with matches, trying contains search...');
+        const allExercises = await db.table('exercises').limit(200).toArray();
+        results = allExercises.filter(exercise => 
+          exercise.name.toLowerCase().includes(searchLower) ||
+          exercise.bodyPart.toLowerCase().includes(searchLower) ||
+          exercise.equipment.some((e: string) => e.toLowerCase().includes(searchLower)) ||
+          exercise.targetMuscles.some((m: string) => m.toLowerCase().includes(searchLower))
+        ).slice(0, 50);
+      }
+      
+      console.log(`Found ${results.length} exercises for "${searchLower}"`);
+      return results;
     } catch (error) {
       console.error('Failed to search exercises:', error);
       return [];
@@ -156,6 +186,7 @@ export class ExerciseDBService {
     try {
       const exercises = await db.table('exercises').toArray();
       const bodyParts = [...new Set(exercises.map(e => e.bodyPart))];
+      console.log(`Found ${bodyParts.length} body parts:`, bodyParts);
       return bodyParts.sort();
     } catch (error) {
       console.error('Failed to get body parts:', error);

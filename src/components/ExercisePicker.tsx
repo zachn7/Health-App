@@ -20,9 +20,14 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [] }: E
   
   useEffect(() => {
     loadFilters();
-    if (searchQuery || selectedBodyPart || selectedEquipment || selectedDifficulty) {
-      searchExercises();
-    }
+    // Auto-search on typing with debounce
+    const timer = setTimeout(() => {
+      if (searchQuery || selectedBodyPart || selectedEquipment || selectedDifficulty) {
+        searchExercises();
+      }
+    }, searchQuery ? 300 : 0); // Debounce text search, immediate filter search
+    
+    return () => clearTimeout(timer);
   }, [searchQuery, selectedBodyPart, selectedEquipment, selectedDifficulty]);
   
   const loadFilters = async () => {

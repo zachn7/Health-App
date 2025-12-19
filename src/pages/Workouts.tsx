@@ -32,6 +32,17 @@ export default function Workouts() {
   const [exerciseData, setExerciseData] = useState<ExerciseData>({});
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<WorkoutPlan | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [showManualBuilder, setShowManualBuilder] = useState(false);
+  const [manualPlan, setManualPlan] = useState<Partial<WorkoutPlan>>({
+    name: '',
+    weeks: [{
+      week: 1,
+      workouts: [{
+        day: 'Day 1',
+        exercises: []
+      }]
+    }]
+  });
 
   useEffect(() => {
     loadWorkoutData();
@@ -314,12 +325,19 @@ export default function Workouts() {
         <p className="mt-2 text-gray-600">Your training plans and exercises</p>
       </div>
       
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap gap-3">
         <button
           onClick={generateWorkoutPlan}
           className="btn btn-primary"
         >
           Generate New Workout Plan
+        </button>
+        <button
+          onClick={() => setShowManualBuilder(true)}
+          className="btn btn-secondary"
+        >
+          <Plus className="w-4 h-4 mr-1" />
+          Create Program Manually
         </button>
       </div>
       
@@ -577,11 +595,40 @@ export default function Workouts() {
       {showExercisePicker && editingWorkout && (
         <ExercisePicker
           onSelect={(exercise) => {
-            if (editingWorkout && selectedPlan) {
-              if (editingWorkout.exerciseId) {
-                replaceExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, editingWorkout.exerciseId, exercise.id);
-              } else {
-                addExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, exercise.id);
+            if (editingWorkout) {
+              if (showManualBuilder) {
+                // Handle manual builder
+                if (editingWorkout.dayIndex !== undefined) {
+                  const updatedWorkouts = [...(manualPlan.weeks?.[0]?.workouts || [])];
+                  const newExercise = {
+                    exerciseId: exercise.id,
+                    exerciseName: exercise.name,
+                    sets: 3,
+                    reps: '8-12',
+                    restTime: 60,
+                    notes: ''
+                  };
+                  
+                  updatedWorkouts[editingWorkout.dayIndex] = {
+                    ...updatedWorkouts[editingWorkout.dayIndex],
+                    exercises: [...updatedWorkouts[editingWorkout.dayIndex].exercises, newExercise as any]
+                  };
+                  
+                  setManualPlan({
+                    ...manualPlan,
+                    weeks: [{
+                      week: 1,
+                      workouts: updatedWorkouts
+                    }]
+                  });
+                }
+              } else if (selectedPlan) {
+                // Handle regular editing
+                if (editingWorkout.exerciseId) {
+                  replaceExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, editingWorkout.exerciseId, exercise.id);
+                } else {
+                  addExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, exercise.id);
+                }
               }
             }
           }}
@@ -627,6 +674,184 @@ export default function Workouts() {
               >
                 Delete Plan
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Manual Program Builder Modal */}
+      {showManualBuilder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Create Manual Workout Program</h2>
+              
+              <div className="mb-4">
+                <label className="label">Program Name</label>
+                <input
+                  type="text"
+                  value={manualPlan.name || ''}
+                  onChange={(e) => setManualPlan({ ...manualPlan, name: e.target.value })}
+                  className="input"
+                  placeholder="e.g., My Push-Pull-Legs Program"
+                />
+              </div>
+              
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-medium text-gray-900">Training Days</h3>
+                  <button
+                    onClick={() => {
+                      const newWorkout = {
+                        day: `Day ${(manualPlan.weeks?.[0]?.workouts?.length || 0) + 1}`,
+                        exercises: []
+                      };
+                      setManualPlan({
+                        ...manualPlan,
+                        weeks: [
+                          {
+                            week: 1,
+                            workouts: [...(manualPlan.weeks?.[0]?.workouts || []), newWorkout]
+                          }
+                        ]
+                      });
+                    }}
+                    className="btn btn-secondary text-sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Day
+                  </button>
+                </div>
+                
+                {manualPlan.weeks?.[0]?.workouts?.map((day, dayIndex) => (
+                  <div key={dayIndex} className="mb-4 p-4 border border-gray-200 rounded-lg">
+                    <div className="flex justify-between items-center mb-3">
+                      <input
+                        type="text"
+                        value={day.day}
+                        onChange={(e) => {
+                          const updatedWorkouts = [...(manualPlan.weeks?.[0]?.workouts || [])];
+                          updatedWorkouts[dayIndex] = { ...day, day: e.target.value };
+                          setManualPlan({
+                            ...manualPlan,
+                            weeks: [{
+                              week: 1,
+                              workouts: updatedWorkouts
+                            }]
+                          });
+                        }}
+                        className="font-medium bg-transparent border-none text-gray-900"
+                      />
+                      <button
+                        onClick={() => {
+                          const updatedWorkouts = manualPlan.weeks?.[0]?.workouts?.filter((_, i) => i !== dayIndex) || [];
+                          setManualPlan({
+                            ...manualPlan,
+                            weeks: [{
+                              week: 1,
+                              workouts: updatedWorkouts
+                            }]
+                          });
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {day.exercises.map((exercise, exerciseIndex) => (
+                        <div key={exerciseIndex} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div>
+                            <div className="font-medium text-sm">{exercise.exerciseId}</div>
+                            <div className="text-xs text-gray-600">
+                              {exercise.sets.sets} sets × {exercise.sets.reps} reps
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const updatedExercises = day.exercises.filter((_, i) => i !== exerciseIndex);
+                              const updatedWorkouts = [...(manualPlan.weeks?.[0]?.workouts || [])];
+                              updatedWorkouts[dayIndex] = { ...day, exercises: updatedExercises };
+                              setManualPlan({
+                                ...manualPlan,
+                                weeks: [{
+                                  week: 1,
+                                  workouts: updatedWorkouts
+                                }]
+                              });
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      
+                      <button
+                        onClick={() => {
+                          setSelectedPlan(null); // Clear selection
+                          setEditingWorkout({ weekIndex: 0, dayIndex, type: 'add' });
+                          setShowExercisePicker(true);
+                        }}
+                        className="btn btn-secondary text-sm w-full"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Exercise
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowManualBuilder(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!manualPlan.name) {
+                      alert('Please enter a program name');
+                      return;
+                    }
+                    
+                    try {
+                      const newPlan: WorkoutPlan = {
+                        id: crypto.randomUUID(),
+                        name: manualPlan.name,
+                        weeks: manualPlan.weeks || [],
+                        generatedBy: 'manual',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                      };
+                      
+                      await repositories.workout.createWorkoutPlan(newPlan);
+                      setWorkoutPlans([newPlan, ...workoutPlans]);
+                      setShowManualBuilder(false);
+                      setManualPlan({
+                        name: '',
+                        weeks: [{
+                          week: 1,
+                          workouts: [{
+                            day: 'Day 1',
+                            exercises: []
+                          }]
+                        }]
+                      });
+                    } catch (error) {
+                      console.error('Failed to save manual program:', error);
+                      alert('Failed to save program. Please try again.');
+                    }
+                  }}
+                  disabled={!manualPlan.name || !manualPlan.weeks?.[0]?.workouts?.length}
+                  className="btn btn-primary"
+                >
+                  Save Program
+                </button>
+              </div>
             </div>
           </div>
         </div>

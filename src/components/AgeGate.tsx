@@ -39,14 +39,17 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
       setAccepted(true);
       setTimestamp(new Date().toISOString());
       
-      // Give localStorage time to update, then call callback
-      setTimeout(() => {
-        setIsLoading(false);
-        // Call the callback to handle navigation
-        if (onAgeGatePassed) {
-          onAgeGatePassed();
-        }
-      }, 100);
+      // Save to localStorage
+      setAccepted(true);
+      setTimestamp(new Date().toISOString());
+      
+      console.log('Age gate passed, navigating...');
+      
+      // Call the callback immediately - localStorage updates are synchronous in React
+      setIsLoading(false);
+      if (onAgeGatePassed) {
+        onAgeGatePassed();
+      }
     } catch (error) {
       setIsLoading(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

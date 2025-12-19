@@ -1,9 +1,10 @@
 
 import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, Download } from 'lucide-react';
 import { repositories } from '../db';
 import ExercisePicker from '../components/ExercisePicker';
 import { kgToLbs } from '../lib/unit-conversions';
-import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile } from '../types';
+import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan } from '../types';
 
 interface CurrentWorkout {
   workoutPlanId?: string;
@@ -33,11 +34,16 @@ export default function WorkoutLogger() {
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [manualWorkoutMode, setManualWorkoutMode] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
+  const [showImportFromProgram, setShowImportFromProgram] = useState(false);
 
   useEffect(() => {
     loadWorkoutData();
     loadProfile();
-  }, []);
+    loadWorkoutPlans();
+  }, [selectedDate]);
 
   const loadWorkoutData = async () => {
     try {
@@ -48,10 +54,9 @@ export default function WorkoutLogger() {
         sessionStorage.removeItem('currentWorkout');
       }
       
-      // Load today's workout if exists
-      const today = new Date().toISOString().split('T')[0];
-      const todayLog = await repositories.workout.getWorkoutLog(today);
-      setWorkoutLog(todayLog || null);
+      // Load workout for selected date
+      const dateLog = await repositories.workout.getWorkoutLog(selectedDate);
+      setWorkoutLog(dateLog || null);
       
       // Load recent workouts
       const recent = await repositories.workout.getWorkoutLogs();
@@ -62,7 +67,7 @@ export default function WorkoutLogger() {
       const exercisesData = await exercisesResponse.json();
       
       // Initialize exercise entries if starting new workout
-      if (currentWorkout && !todayLog) {
+      if (currentWorkout && !dateLog) {
         const entries: ExerciseLogEntry[] = currentWorkout.exercises.map((ex) => {
           const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
           return {
@@ -72,9 +77,9 @@ export default function WorkoutLogger() {
           };
         });
         setExerciseEntries(entries);
-      } else if (todayLog) {
-        setExerciseEntries(todayLog.entries);
-        setSessionNotes(todayLog.sessionNotes || '');
+      } else if (dateLog) {
+        setExerciseEntries(dateLog.entries);
+        setSessionNotes(dateLog.sessionNotes || '');
         setIsLogging(true);
       }
     } catch (error) {
@@ -161,6 +166,70 @@ export default function WorkoutLogger() {
     }
   };
 
+  const loadWorkoutPlans = async () => {
+    try {
+      const plans = await repositories.workout.getWorkoutPlans();
+      setWorkoutPlans(plans);
+    } catch (error) {
+      console.error('Failed to load workout plans:', error);
+    }
+  };
+
+  const navigateDate = (direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'today') {
+      setSelectedDate(new Date().toISOString().split('T')[0]);
+    } else {
+      const date = new Date(selectedDate);
+      if (direction === 'prev') {
+        date.setDate(date.getDate() - 1);
+      } else {
+        date.setDate(date.getDate() + 1);
+      }
+      setSelectedDate(date.toISOString().split('T')[0]);
+    }
+  };
+
+  const importFromProgram = (plan: WorkoutPlan, weekIndex: number = 0, dayIndex: number = 0) => {
+    const currentWeek = plan.weeks[weekIndex];
+    if (!currentWeek || !currentWeek.workouts) {
+      alert('No workouts found for this day in the program');
+      return;
+    }
+
+    const workout = currentWeek.workouts[dayIndex];
+    if (!workout) {
+      alert('No workout found for this day in the program');
+      return;
+    }
+
+    // Load exercises for names
+    fetch('/src/assets/data/exercises.seed.json')
+      .then(response => response.json())
+      .then(exercisesData => {
+        const entries: ExerciseLogEntry[] = workout.exercises.map((ex: any) => {
+          const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
+          return {
+            exerciseId: ex.exerciseId,
+            exerciseName: exercise?.name || `Exercise ${ex.exerciseId}`,
+            sets: []
+          };
+        });
+        
+        setExerciseEntries(entries);
+        setCurrentWorkout({
+          workoutPlanId: plan.id,
+          exercises: workout.exercises,
+          notes: workout.notes
+        });
+        setShowImportFromProgram(false);
+        setManualWorkoutMode(false);
+      })
+      .catch(error => {
+        console.error('Failed to import exercises:', error);
+        alert('Failed to import exercises from program');
+      });
+  };
+
   const getWorkoutDuration = () => {
     if (!startTime) return '0:00';
     const elapsed = Math.round((new Date().getTime() - startTime.getTime()) / 1000);
@@ -212,6 +281,125 @@ export default function WorkoutLogger() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Workout Logger</h1>
         <p className="mt-2 text-gray-600">Record your training sessions</p>
+      </div>
+      
+      {/* Date Navigation */}
+      <div className="flex items-center justify-center mb-6 space-x-4">
+        <button
+          onClick={() => navigateDate('prev')}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        
+        <button
+          onClick={() => setShowDatePicker(!showDatePicker)}
+          className="flex items-center space-x-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <Calendar className="w-4 h-4" />
+          <span className="font-medium">
+            {new Date(selectedDate).toLocaleDateString('en-US', { 
+              weekday: 'short', 
+              month: 'short', 
+              day: 'numeric' 
+            })}
+          </span>
+          {selectedDate === new Date().toISOString().split('T')[0] && (
+            <span className="text-xs text-blue-600 font-medium">Today</span>
+          )}
+        </button>
+        
+        <button
+          onClick={() => navigateDate('next')}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          disabled={selectedDate >= new Date().toISOString().split('T')[0]}
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+        
+        <button
+          onClick={() => navigateDate('today')}
+          className="px-3 py-1 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"
+        >
+          Today
+        </button>
+      </div>
+      
+      {showDatePicker && (
+        <div className="mb-6 text-center">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => {
+              setSelectedDate(e.target.value);
+              setShowDatePicker(false);
+            }}
+            max={new Date().toISOString().split('T')[0]}
+            className="input w-auto mx-auto"
+          />
+        </div>
+      )}
+      
+      {/* Import and Manual Controls */}
+      <div className="mb-6 flex flex-wrap gap-3">
+        <button
+          onClick={() => setShowImportFromProgram(!showImportFromProgram)}
+          className="btn btn-secondary"
+        >
+          <Download className="w-4 h-4 mr-1" />
+          Import from Program
+        </button>
+        
+        <button
+          onClick={() => {
+            setManualWorkoutMode(true);
+            setCurrentWorkout(null);
+            setExerciseEntries([]);
+          }}
+          className="btn btn-outline-secondary"
+        >
+          Manual Workout
+        </button>
+        
+        {showImportFromProgram && (
+          <div className="card mt-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-3">Import from Workout Program</h3>
+            
+            {workoutPlans.length === 0 ? (
+              <p className="text-gray-600">No workout programs found. Create one first!</p>
+            ) : (
+              <div className="space-y-3">
+                {workoutPlans.map((plan) => (
+                  <div key={plan.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="font-medium">{plan.name}</div>
+                    <div className="text-sm text-gray-600 mb-2">{plan.weeks.length} weeks</div>
+                    
+                    {plan.weeks.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {plan.weeks[0].workouts.map((workout, index) => (
+                          <button
+                            key={index}
+                            onClick={() => importFromProgram(plan, 0, index)}
+                            className="btn btn-sm btn-primary"
+                          >
+                            {workout.day || `Day ${index + 1}`}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <button
+              onClick={() => setShowImportFromProgram(false)}
+              className="mt-4 btn btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
       
       {/* Today's Workout Status */}

@@ -13,9 +13,18 @@ export default function Privacy() {
     setIsClearing(true);
     try {
       await clearAllData();
-      alert('All data has been cleared successfully.');
-      window.location.href = '/onboarding';
+      console.log('Data cleared successfully, navigating to age gate...');
+      
+      // Force reload to age gate using hash router
+      window.location.hash = '#/';
+      
+      // Small delay to ensure the hash change propagates
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+      
     } catch (error) {
+      console.error('Failed to clear data:', error);
       alert('Failed to clear data. Please try again.');
     } finally {
       setIsClearing(false);

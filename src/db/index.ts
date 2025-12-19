@@ -155,14 +155,48 @@ export const repositories = {
 // Database utility functions
 export const clearAllData = async (): Promise<void> => {
   try {
+    // First clear all database tables
     await db.transaction('rw', db.tables, async () => {
       await Promise.all(
         db.tables.map(table => table.clear())
       );
     });
     console.log('All data cleared from database');
+    
+    // Clear localStorage and sessionStorage
+    localStorage.clear();
+    sessionStorage.clear();
+    console.log('Local storage cleared');
+    
+    // Clear service worker caches if available
+    if ('caches' in window) {
+      try {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+        console.log('Service worker caches cleared');
+      } catch (error) {
+        console.warn('Failed to clear caches:', error);
+      }
+    }
+    
+    // Unregister service workers
+    if ('serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          registrations.map(registration => registration.unregister())
+        );
+        console.log('Service workers unregistered');
+      } catch (error) {
+        console.warn('Failed to unregister service workers:', error);
+      }
+    }
+    
+    console.log('All data and caches cleared successfully');
   } catch (error) {
-    console.error('Failed to clear database:', error);
+    console.error('Failed to clear all data:', error);
     throw error;
   }
 };

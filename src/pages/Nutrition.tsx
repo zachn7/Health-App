@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService } from '../lib/usda-service';
@@ -28,6 +28,15 @@ export default function Nutrition() {
   const [usdaSearchLoading, setUSDASearching] = useState(false);
   const [usdaImporting, setUSDAImporting] = useState<string[]>([]);
   const [savedFoods, setSavedFoods] = useState<FoodItem[]>([]);
+  const [showServingSizeEdit, setShowServingSizeEdit] = useState<string | null>(null);
+  const [editingServingSize, setEditingServingSize] = useState<{
+    quantity: number;
+    unit: string;
+    calories: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+  }>({ quantity: 1, unit: 'serving', calories: 0, proteinG: 0, carbsG: 0, fatG: 0 });
 
   useEffect(() => {
     loadNutritionData();
@@ -195,8 +204,12 @@ export default function Nutrition() {
     }
   };
 
-  const searchUSDAFoods = async () => {
-    if (!usdaSearchQuery.trim()) return;
+  // Debounced search function
+  const searchUSDAFoods = useCallback(async () => {
+    if (!usdaSearchQuery.trim() || usdaSearchQuery.length < 2) {
+      setUSDAReplies([]);
+      return;
+    }
     
     setUSDASearching(true);
     try {
@@ -204,18 +217,29 @@ export default function Nutrition() {
       setUSDAReplies(results);
     } catch (error) {
       console.error('USDA search failed:', error);
-      alert(`USDA search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Don't show alert for auto-search failures
     } finally {
       setUSDASearching(false);
     }
-  };
+  }, [usdaSearchQuery]);
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isUSDAEnabled && showUSDAImport) {
+        searchUSDAFoods();
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [usdaSearchQuery, isUSDAEnabled, showUSDAImport, searchUSDAFoods]);
 
   const importUSDAFood = async (fdcId: number, description: string) => {
     setUSDAImporting([...usdaImporting, `fdc-${fdcId}`]);
     try {
       const foodItem = await usdaService.importFoodItem(fdcId);
       
-      // Add to current nutrition log
+      // Add to current nutrition log with default serving size
       const foodLogItem: FoodLogItem = {
         id: crypto.randomUUID(),
         name: foodItem.name,
@@ -242,6 +266,70 @@ export default function Nutrition() {
       alert(`Failed to import ${description}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setUSDAImporting(usdaImporting.filter(id => id !== `fdc-${fdcId}`));
     }
+  };
+
+  const updateFoodServingSize = async (foodItemId: string) => {
+    if (!currentLog) return;
+    
+    try {
+      // Find the original food item to get base macros
+      const originalItem = currentLog.items.find(item => item.id === foodItemId);
+      if (!originalItem) return;
+      
+      // Calculate scaling factor
+      const baseQuantity = 1; // Original quantity
+      const scaleFactor = editingServingSize.quantity / baseQuantity;
+      
+      // Update the food item with scaled macros
+      const updatedItem: FoodLogItem = {
+        ...originalItem,
+        quantidade: editingServingSize.quantity,
+        servingSize: `${editingServingSize.quantity} ${editingServingSize.unit}`,
+        calories: originalItem.calories * scaleFactor,
+        proteinG: originalItem.proteinG * scaleFactor,
+        carbsG: originalItem.carbsG * scaleFactor,
+        fatG: originalItem.fatG * scaleFactor,
+        fiberG: originalItem.fiberG ? originalItem.fiberG * scaleFactor : 0,
+        sugarG: originalItem.sugarG ? originalItem.sugarG * scaleFactor : 0,
+        sodiumMg: originalItem.sodiumMg ? originalItem.sodiumMg * scaleFactor : 0
+      };
+      
+      // Update the nutrition log
+      const updatedItems = currentLog.items.map(item => 
+        item.id === foodItemId ? updatedItem : item
+      );
+      
+      const updatedLog: NutritionLog = {
+        ...currentLog,
+        items: updatedItems,
+        totals: calculateTotals(updatedItems),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
+      setCurrentLog(updatedLog);
+      setShowServingSizeEdit(null);
+    } catch (error) {
+      console.error('Failed to update serving size:', error);
+      alert('Failed to update serving size. Please try again.');
+    }
+  };
+
+  const startEditServingSize = (item: FoodLogItem) => {
+    // Parse existing serving size
+    const match = item.servingSize.match(/([\d.]+)\s*(.+)/);
+    const quantity = match ? parseFloat(match[1]) : item.quantidade || 1;
+    const unit = match ? match[2] : 'serving';
+    
+    setEditingServingSize({
+      quantity,
+      unit,
+      calories: item.calories,
+      proteinG: item.proteinG,
+      carbsG: item.carbsG,
+      fatG: item.fatG
+    });
+    setShowServingSizeEdit(item.id);
   };
 
   const saveFoodItem = async (foodItem: FoodLogItem) => {
@@ -460,49 +548,66 @@ export default function Nutrition() {
             Search USDA FoodData Central
           </h3>
           
-          <div className="flex gap-2 mb-4">
+          <div className="mb-4">
             <input
               type="text"
               value={usdaSearchQuery}
               onChange={(e) => setUSDAQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && searchUSDAFoods()}
-              className="input flex-1"
-              placeholder="Search for foods (e.g., chicken breast, brown rice)"
+              className="input w-full"
+              placeholder="Type to search foods (e.g., chicken breast, banana) - results appear automatically"
             />
-            <button
-              onClick={searchUSDAFoods}
-              disabled={usdaSearchLoading || !usdaSearchQuery.trim()}
-              className="btn btn-primary"
-            >
-              {usdaSearchLoading ? 'Searching...' : 'Search'}
-            </button>
+            {usdaSearchLoading && (
+              <div className="mt-2 text-sm text-gray-600">Searching...</div>
+            )}
           </div>
           
           {usdaSearchResults.length > 0 && (
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              <h4 className="font-medium text-gray-700">Search Results:</h4>
-              {usdaSearchResults.map((food) => (
-                <div key={food.fdcId} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="font-medium">{food.description}</div>
-                      {food.brandOwner && (
-                        <div className="text-sm text-gray-500">{food.brandOwner}</div>
-                      )}
-                      {food.foodCategory && (
-                        <div className="text-sm text-gray-500">{food.foodCategory}</div>
-                      )}
+              {usdaSearchResults.length > 0 && (
+                <h4 className="font-medium text-gray-700">Search Results:</h4>
+              )}
+              {usdaSearchResults.map((food) => {
+                // Calculate approximate macros per 100g if available
+                const macrosPer100g = food.foodNutrients ? {
+                  calories: food.foodNutrients.find((n: any) => n.nutrientName === 'Energy')?.value || 0,
+                  protein: food.foodNutrients.find((n: any) => n.nutrientName === 'Protein')?.value || 0,
+                  carbs: food.foodNutrients.find((n: any) => n.nutrientName === 'Carbohydrate, by difference')?.value || 0,
+                  fat: food.foodNutrients.find((n: any) => n.nutrientName === 'Total lipid (fat)')?.value || 0,
+                } : null;
+                
+                return (
+                  <div key={food.fdcId} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{food.description}</div>
+                        {food.brandOwner && (
+                          <div className="text-sm text-gray-500">{food.brandOwner}</div>
+                        )}
+                        {food.foodCategory && (
+                          <div className="text-sm text-gray-500">{food.foodCategory}</div>
+                        )}
+                        
+                        {macrosPer100g && (
+                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
+                            <span className="font-medium">Per 100g:</span>
+                            <span>{Math.round(macrosPer100g.calories)} cal</span>
+                            <span>{macrosPer100g.protein.toFixed(1)}g protein</span>
+                            <span>{macrosPer100g.carbs.toFixed(1)}g carbs</span>
+                            <span>{macrosPer100g.fat.toFixed(1)}g fat</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => importUSDAFood(food.fdcId, food.description)}
+                        disabled={usdaImporting.includes(`fdc-${food.fdcId}`)}
+                        className="btn btn-sm btn-primary ml-4"
+                      >
+                        {usdaImporting.includes(`fdc-${food.fdcId}`) ? 'Importing...' : 'Add'}
+                      </button>
                     </div>
-                    <button
-                      onClick={() => importUSDAFood(food.fdcId, food.description)}
-                      disabled={usdaImporting.includes(`fdc-${food.fdcId}`)}
-                      className="btn btn-sm btn-primary"
-                    >
-                      {usdaImporting.includes(`fdc-${food.fdcId}`) ? 'Importing...' : 'Import'}
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           
@@ -654,25 +759,96 @@ export default function Nutrition() {
           
           <div className="space-y-3">
             {currentLog.items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex-1">
-                  <div className="font-medium">{item.name}</div>
-                  <div className="text-sm text-gray-600">
-                    {item.quantidade} × {item.servingSize}
+              <div key={item.id} className="p-3 bg-gray-50 rounded-lg">
+                {showServingSizeEdit === item.id ? (
+                  // Edit mode
+                  <div className="space-y-3">
+                    <div className="font-medium text-gray-900">Edit: {item.name}</div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label text-xs">Quantity</label>
+                        <input
+                          type="number"
+                          value={editingServingSize.quantity}
+                          onChange={(e) => setEditingServingSize({ ...editingServingSize, quantity: parseFloat(e.target.value) || 1 })}
+                          className="input text-sm"
+                          min="0.1"
+                          step="0.1"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="label text-xs">Unit</label>
+                        <select
+                          value={editingServingSize.unit}
+                          onChange={(e) => setEditingServingSize({ ...editingServingSize, unit: e.target.value })}
+                          className="input text-sm"
+                        >
+                          <option value="serving">serving</option>
+                          <option value="grams">grams</option>
+                          <option value="oz">oz</option>
+                          <option value="cup">cup</option>
+                          <option value="tbsp">tbsp</option>
+                          <option value="tsp">tsp</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">Updated Macros:</span>
+                      <span className="ml-2">{(item.calories * editingServingSize.quantity / item.quantidade).toFixed(0)} cal</span>
+                      <span className="ml-2">{(item.proteinG * editingServingSize.quantity / item.quantidade).toFixed(1)}g protein</span>
+                      <span className="ml-2">{(item.carbsG * editingServingSize.quantity / item.quantidade).toFixed(1)}g carbs</span>
+                      <span className="ml-2">{(item.fatG * editingServingSize.quantity / item.quantidade).toFixed(1)}g fat</span>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setShowServingSizeEdit(null)}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => updateFoodServingSize(item.id)}
+                        className="btn btn-primary btn-sm"
+                      >
+                        Update
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600">
-                    {Math.round(item.calories * item.quantidade)} cal • 
-                    {Math.round(item.proteinG * item.quantidade)}g protein • 
-                    {Math.round(item.carbsG * item.quantidade)}g carbs • 
-                    {Math.round(item.fatG * item.quantidade)}g fat
+                ) : (
+                  // Display mode
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="font-medium">{item.name}</div>
+                      <div className="text-sm text-gray-600">
+                        {item.quantidade} × {item.servingSize}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {Math.round(item.calories)} cal • 
+                        {Math.round(item.proteinG)}g protein • 
+                        {Math.round(item.carbsG)}g carbs • 
+                        {Math.round(item.fatG)}g fat
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => startEditServingSize(item)}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        Edit Serving
+                      </button>
+                      <button
+                        onClick={() => deleteFood(item.id)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <button
-                  onClick={() => deleteFood(item.id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  Delete
-                </button>
+                )}
               </div>
             ))}
           </div>

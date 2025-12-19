@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { repositories } from '../db';
 import type { Profile, Goal, UnitSystem } from '../types';
 import { ActivityLevel, ExperienceLevel, GoalType, Sex } from '../types';
@@ -16,6 +17,7 @@ import {
 } from '../lib/unit-conversions';
 
 export default function Profile() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,10 +67,21 @@ export default function Profile() {
       await repositories.profile.save(profile);
       console.log('Profile saved successfully!');
       
+      // Check if this is a new profile (first time setup)
+      const isNewProfile = !profile.createdAt || profile.id === '';
+      
       // Switch back to view mode and show success
       setEditMode(false);
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      
+      // If this is a new profile, navigate to dashboard immediately
+      if (isNewProfile) {
+        setTimeout(() => {
+          navigate('/');
+        }, 1000);
+      } else {
+        setTimeout(() => setShowSuccess(false), 3000);
+      }
     } catch (error) {
       console.error('Failed to save profile:', error);
       
