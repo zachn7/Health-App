@@ -7,12 +7,13 @@ export class ProgressRepository {
     const now = new Date().toISOString();
     const newLog: WeightLog = {
       ...log,
-      id: crypto.randomUUID(),
+      id: log.date, // Use date as primary key to enforce one entry per day
       createdAt: now,
       updatedAt: now,
     };
     
-    await db.weightLogs.add(newLog);
+    // Use put() to upsert - this will overwrite any existing entry for the same date
+    await db.weightLogs.put(newLog);
     return newLog;
   }
 
@@ -35,18 +36,19 @@ export class ProgressRepository {
       .toArray();
   }
 
-  async updateWeightLog(id: string, updates: Partial<WeightLog>): Promise<WeightLog> {
+  async updateWeightLog(date: string, updates: Partial<WeightLog>): Promise<WeightLog> {
     const now = new Date().toISOString();
-    const updatedLog = { ...updates, updatedAt: now };
+    const updatedLog = { ...updates, id: date, updatedAt: now };
     
-    await db.weightLogs.update(id, updatedLog);
-    const log = await db.weightLogs.get(id);
+    // Use put() to upsert by date
+    await db.weightLogs.put(updatedLog as WeightLog);
+    const log = await db.weightLogs.get(date);
     if (!log) throw new Error('Weight log not found');
     return log;
   }
 
-  async deleteWeightLog(id: string): Promise<void> {
-    await db.weightLogs.delete(id);
+  async deleteWeightLog(date: string): Promise<void> {
+    await db.weightLogs.delete(date);
   }
 
   // Weekly Check-ins

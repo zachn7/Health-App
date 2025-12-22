@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { repositories } from '../db';
-import { formatWeight } from '../lib/unit-conversions';
+import { formatWeight, lbsToKg, kgToLbs } from '../lib/unit-conversions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { WeightLog, Profile, WorkoutLog } from '../types';
 
@@ -42,6 +42,25 @@ export default function Progress() {
     return profile?.preferredUnits === 'imperial' ? 'lb' : 'kg';
   };
 
+  const getWeightInputValue = (): number => {
+    if (profile?.preferredUnits === 'imperial') {
+      // Show imperial value (convert kg to lbs)
+      return kgToLbs(newWeight.weightKg);
+    }
+    // Show metric value (kg)
+    return newWeight.weightKg;
+  };
+
+  const setWeightInputValue = (value: number) => {
+    if (profile?.preferredUnits === 'imperial') {
+      // Convert imperial input to kg for storage
+      setNewWeight({ ...newWeight, weightKg: lbsToKg(value) });
+    } else {
+      // Store metric value directly
+      setNewWeight({ ...newWeight, weightKg: value });
+    }
+  };
+
 
 
   const loadProgressData = async () => {
@@ -62,37 +81,22 @@ export default function Progress() {
 
   const saveWeightLog = async () => {
     try {
-      const existingEntry = weightLogs.find(log => log.date === selectedDate);
+      // Always use the repository upsert method - it will create or overwrite by date
+      const weightLog = {
+        date: selectedDate,
+        weightKg: newWeight.weightKg,
+        bodyFat: newWeight.bodyFat,
+        notes: newWeight.notes
+      };
       
-      if (existingEntry) {
-        // Update existing entry
-        const updatedLog = {
-          ...existingEntry,
-          weightKg: newWeight.weightKg,
-          bodyFat: newWeight.bodyFat,
-          notes: newWeight.notes,
-          updatedAt: new Date().toISOString()
-        };
-        
-        await repositories.progress.updateWeightLog(updatedLog.id, updatedLog);
-        setWeightLogs(prev => prev.map(log => 
-          log.date === selectedDate ? updatedLog : log
-        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      } else {
-        // Create new entry
-        const weightLog = {
-          id: crypto.randomUUID(),
-          date: selectedDate,
-          weightKg: newWeight.weightKg,
-          bodyFat: newWeight.bodyFat,
-          notes: newWeight.notes,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        
-        await repositories.progress.createWeightLog(weightLog);
-        setWeightLogs([weightLog, ...weightLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      }
+      // The repository will create or overwrite by date
+      const savedLog = await repositories.progress.createWeightLog(weightLog);
+      
+      // Update local state - replace existing entry if found, otherwise add to top
+      setWeightLogs(prev => {
+        const filtered = prev.filter(log => log.date !== selectedDate);
+        return [savedLog, ...filtered].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      });
       
       // Reset form
       setNewWeight({ weightKg: 75, bodyFat: undefined, notes: '' });
@@ -307,11 +311,11 @@ export default function Progress() {
                 <label className="label">Weight ({getWeightUnit()})</label>
                 <input
                   type="number"
-                  value={newWeight.weightKg}
-                  onChange={(e) => setNewWeight({ ...newWeight, weightKg: parseFloat(e.target.value) || 0 })}
+                  value={getWeightInputValue()}
+                  onChange={(e) => setWeightInputValue(parseFloat(e.target.value) || 0)}
                   className="input"
-                  min="30"
-                  max="300"
+                  min={profile?.preferredUnits === 'imperial' ? "66" : "30"}
+                  max={profile?.preferredUnits === 'imperial' ? "661" : "300"}
                   step="0.1"
                 />
               </div>

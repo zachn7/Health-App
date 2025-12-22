@@ -89,6 +89,11 @@ export interface Profile {
   equipment: string[];
   schedule: Schedule;
   limitations?: string;
+  macroSplit?: {
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
 }
 
 export interface Exercise {

@@ -104,6 +104,34 @@ export class CodePuppyDB extends Dexie {
       // Custom Exercises
       customExercises: '++id, name, createdAt, updatedAt, lastSync'
     });
+
+    // Schema version 4 - Use date as primary key for weight logs (one entry per day)
+    this.version(4).stores({
+      profiles: 'id, createdAt, updatedAt, age, activityLevel, experienceLevel, lastSync',
+      workoutPlans: '++id, name, generatedBy, createdAt, updatedAt, lastSync',
+      workoutLogs: '++id, date, workoutPlanId, createdAt, updatedAt, [date+workoutPlanId], lastSync',
+      nutritionLogs: '++id, date, createdAt, updatedAt, [date], lastSync',
+      foodItems: '++id, name, barcode, source, createdAt, updatedAt, [name+source], lastSync',
+      mealTemplates: '++id, name, createdAt, updatedAt, lastSync',
+      weightLogs: 'id, date, weightKg, createdAt, updatedAt, lastSync', // Date is now primary key
+      weeklyCheckIns: '++id, createdAt, [createdAt], lastSync',
+      injuryAssessments: '++id, createdAt, area, severity, [area+severity], lastSync',
+      
+      // Settings
+      settings: 'id, createdAt, updatedAt, lastSync',
+      
+      // Exercise Database
+      exercises: 'id, name, bodyPart, category, equipment, difficulty, [name+bodyPart], lastSync',
+      
+      // Custom Exercises
+      customExercises: '++id, name, createdAt, updatedAt, lastSync'
+    }).upgrade(tx => {
+      // Migrate existing weight logs to use date as primary key
+      return tx.table('weightLogs').toCollection().modify(log => {
+        // Set the ID to be the date string for primary key constraint
+        log.id = log.date;
+      });
+    });
   }
 }
 

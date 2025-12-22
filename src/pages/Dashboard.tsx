@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { liveQuery } from 'dexie';
 import { repositories } from '../db';
 import { formatWeight } from '../lib/unit-conversions';
+import { calculateTDEE } from '../lib/coach-engine';
 import type { Profile, WorkoutLog, NutritionLog } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,6 +17,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    
+    // Set up liveQuery for reactive profile updates
+    const profileSubscription = liveQuery(() => 
+      repositories.profile.get()
+    ).subscribe({
+      next: (profile) => {
+        setProfile(profile || null);
+      },
+      error: (error) => {
+        console.error('Profile liveQuery error:', error);
+      }
+    });
+
+    return () => {
+      profileSubscription.unsubscribe();
+    };
   }, []);
 
   const loadDashboardData = async () => {
@@ -149,22 +167,32 @@ export default function Dashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Calories:</span>
                   <span className="font-medium">
-                    {todaysNutrition.totals.calories} / {profile ? Math.round((profile.weightKg * 2.2 * 14) + 500) : 2000}
+                    {todaysNutrition.totals.calories} / {profile ? calculateTDEE(profile).tdee.toFixed(0) : 2000}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Protein:</span>
-                  <span>{todaysNutrition.totals.proteinG}g</span>
+                  <span>{todaysNutrition.totals.proteinG}g / {profile ? Math.round((calculateTDEE(profile).tdee * (profile.macroSplit?.protein || 30) / 100) / 4) : 150}g</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Carbs:</span>
-                  <span>{todaysNutrition.totals.carbsG}g</span>
+                  <span>{todaysNutrition.totals.carbsG}g / {profile ? Math.round((calculateTDEE(profile).tdee * (profile.macroSplit?.carbs || 40) / 100) / 4) : 250}g</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Fat:</span>
-                  <span>{todaysNutrition.totals.fatG}g</span>
+                  <span>{todaysNutrition.totals.fatG}g / {profile ? Math.round((calculateTDEE(profile).tdee * (profile.macroSplit?.fat || 30) / 100) / 9) : 65}g</span>
                 </div>
               </div>
+              {profile?.macroSplit && (
+                <div className="mt-3 pt-3 border-t">
+                  <div className="text-xs text-gray-600 font-medium mb-2">Macro Split:</div>
+                  <div className="flex space-x-2 text-xs">
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">{profile.macroSplit.protein}% Protein</span>
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded">{profile.macroSplit.carbs}% Carbs</span>
+                    <span className="px-2 py-1 bg-red-100 text-red-800 rounded">{profile.macroSplit.fat}% Fat</span>
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-gray-600 mt-3">
                 {todaysNutrition.items.length} meals logged
               </p>

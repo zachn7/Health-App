@@ -106,12 +106,14 @@ export default function Nutrition() {
     }
     
     const tdee = calculateTDEE(profile);
-    // Use TDEE as calorie target (can be adjusted based on goals)
+    const macros = profile.macroSplit || { protein: 30, carbs: 40, fat: 30 };
+    
+    // Use TDEE and custom macro split
     return {
       calories: Math.round(tdee.tdee),
-      proteinG: Math.round(profile.weightKg * 2.2), // ~2g per kg
-      carbsG: Math.round(tdee.tdee * 0.5 / 4), // 50% of calories
-      fatG: Math.round(tdee.tdee * 0.25 / 9) // 25% of calories
+      proteinG: Math.round((tdee.tdee * macros.protein / 100) / 4), // 4 cal per gram
+      carbsG: Math.round((tdee.tdee * macros.carbs / 100) / 4), // 4 cal per gram
+      fatG: Math.round((tdee.tdee * macros.fat / 100) / 9) // 9 cal per gram
     };
   };
 

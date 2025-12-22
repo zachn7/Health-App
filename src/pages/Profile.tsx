@@ -16,6 +16,7 @@ import {
   validateImperialHeight,
   validateImperialWeight
 } from '../lib/unit-conversions';
+import { calculateTDEE } from '../lib/coach-engine';
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -35,6 +36,12 @@ export default function Profile() {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });
+  const [macroSplit, setMacroSplit] = useState({
+    protein: 30,
+    carbs: 40,
+    fat: 30
+  });
+  const [showMacroEditor, setShowMacroEditor] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -129,7 +136,12 @@ export default function Profile() {
         saturday: false,
         sunday: false
       },
-      limitations: ''
+      limitations: '',
+      macroSplit: {
+        protein: 30,
+        carbs: 40,
+        fat: 30
+      }
     };
     setProfile(newProfile);
   };
@@ -145,8 +157,13 @@ export default function Profile() {
         setImperialHeight({ feet: '', inches: '' });
         setImperialWeight('');
       }
+      
+      // Update macro split from profile
+      if (profile.macroSplit) {
+        setMacroSplit(profile.macroSplit);
+      }
     }
-  }, [profile, profile?.preferredUnits, profile?.heightCm, profile?.weightKg]);
+  }, [profile, profile?.preferredUnits, profile?.heightCm, profile?.weightKg, profile?.macroSplit]);
 
   const updateField = (field: keyof Profile, value: any) => {
     if (!profile) return;
@@ -229,6 +246,63 @@ export default function Profile() {
     if (kg !== null) {
       updateField('weightKg', kg);
     }
+  };
+
+  const updateMacroSplit = (field: 'protein' | 'carbs' | 'fat', value: number) => {
+    const newMacroSplit = {
+      ...macroSplit,
+      [field]: Math.max(5, Math.min(80, value)), // Clamp between 5% and 80%
+    };
+    
+    // Redistribute remaining percentages
+    const remainingFields = ['protein', 'carbs', 'fat'].filter(f => f !== field) as Array<'protein' | 'carbs' | 'fat'>;
+    const remainingTotal = remainingFields.reduce((sum, f) => sum + macroSplit[f], 0);
+    
+    if (remainingTotal > 0) {
+      remainingFields.forEach(f => {
+        const proportion = macroSplit[f] / remainingTotal;
+        newMacroSplit[f] = Math.round((100 - newMacroSplit[field]) * proportion);
+      });
+    }
+    
+    // Ensure total is exactly 100 (handle rounding errors)
+    const finalTotal = newMacroSplit.protein + newMacroSplit.carbs + newMacroSplit.fat;
+    if (finalTotal !== 100) {
+      const diff = 100 - finalTotal;
+      // Add/subtract from carbs (middle macro)
+      newMacroSplit.carbs += diff;
+    }
+    
+    setMacroSplit(newMacroSplit);
+    updateField('macroSplit', newMacroSplit);
+  };
+
+  const applyMacroPreset = (preset: 'balanced' | 'high_protein' | 'low_carb' | 'high_carb' | 'keto') => {
+    const presets = {
+      balanced: { protein: 30, carbs: 40, fat: 30 },
+      high_protein: { protein: 40, carbs: 30, fat: 30 },
+      low_carb: { protein: 35, carbs: 25, fat: 40 },
+      high_carb: { protein: 20, carbs: 55, fat: 25 },
+      keto: { protein: 25, carbs: 5, fat: 70 }
+    };
+    
+    const newMacroSplit = presets[preset];
+    setMacroSplit(newMacroSplit);
+    updateField('macroSplit', newMacroSplit);
+  };
+
+  const calculateMacroTargets = () => {
+    if (!profile) return { calories: 2000, proteinG: 150, carbsG: 250, fatG: 65 };
+    
+    const tdee = calculateTDEE(profile);
+    const calories = Math.round(tdee.tdee);
+    
+    return {
+      calories,
+      proteinG: Math.round((calories * macroSplit.protein / 100) / 4), // 4 cal per gram
+      carbsG: Math.round((calories * macroSplit.carbs / 100) / 4), // 4 cal per gram
+      fatG: Math.round((calories * macroSplit.fat / 100) / 9) // 9 cal per gram
+    };
   };
 
   const validateProfile = (profile: Profile): string[] => {
@@ -606,6 +680,190 @@ export default function Profile() {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* Nutrition Macro Split */}
+        <div className="card">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-medium text-gray-900">Nutrition Macro Split</h2>
+            <button
+              onClick={() => setShowMacroEditor(!showMacroEditor)}
+              className="btn btn-secondary"
+            >
+              {showMacroEditor ? 'Hide' : 'Edit'}
+            </button>
+          </div>
+          
+          {!showMacroEditor ? (
+            // View mode - show current split and calculated targets
+            <div>
+              <div className="mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Current Split</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{macroSplit.protein}%</div>
+                    <div className="text-sm text-gray-600">Protein</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">{macroSplit.carbs}%</div>
+                    <div className="text-sm text-gray-600">Carbs</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">{macroSplit.fat}%</div>
+                    <div className="text-sm text-gray-600">Fat</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Daily Targets</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-gray-900">{calculateMacroTargets().calories}</div>
+                    <div className="text-sm text-gray-600">Calories</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-blue-600">{calculateMacroTargets().proteinG}g</div>
+                    <div className="text-sm text-gray-600">Protein</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-yellow-600">{calculateMacroTargets().carbsG}g</div>
+                    <div className="text-sm text-gray-600">Carbs</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-red-600">{calculateMacroTargets().fatG}g</div>
+                    <div className="text-sm text-gray-600">Fat</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Edit mode
+            <div>
+              {/* Presets */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Quick Presets</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  <button
+                    onClick={() => applyMacroPreset('balanced')}
+                    className={`btn btn-sm ${macroSplit.protein === 30 && macroSplit.carbs === 40 && macroSplit.fat === 30 ? 'btn-primary' : 'btn-secondary'}`}
+                  >
+                    Balanced
+                  </button>
+                  <button
+                    onClick={() => applyMacroPreset('high_protein')}
+                    className={`btn btn-sm ${macroSplit.protein === 40 && macroSplit.carbs === 30 && macroSplit.fat === 30 ? 'btn-primary' : 'btn-secondary'}`}
+                  >
+                    High Protein
+                  </button>
+                  <button
+                    onClick={() => applyMacroPreset('low_carb')}
+                    className={`btn btn-sm ${macroSplit.protein === 35 && macroSplit.carbs === 25 && macroSplit.fat === 40 ? 'btn-primary' : 'btn-secondary'}`}
+                  >
+                    Low Carb
+                  </button>
+                  <button
+                    onClick={() => applyMacroPreset('high_carb')}
+                    className={`btn btn-sm ${macroSplit.protein === 20 && macroSplit.carbs === 55 && macroSplit.fat === 25 ? 'btn-primary' : 'btn-secondary'}`}
+                  >
+                    High Carb
+                  </button>
+                  <button
+                    onClick={() => applyMacroPreset('keto')}
+                    className={`btn btn-sm ${macroSplit.protein === 25 && macroSplit.carbs === 5 && macroSplit.fat === 70 ? 'btn-primary' : 'btn-secondary'}`}
+                  >
+                    Keto
+                  </button>
+                </div>
+              </div>
+              
+              {/* Custom Sliders */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Custom Split</h3>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-sm font-medium text-gray-700">Protein</label>
+                      <span className="text-sm font-bold text-blue-600">{macroSplit.protein}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="80"
+                      value={macroSplit.protein}
+                      onChange={(e) => updateMacroSplit('protein', parseInt(e.target.value))}
+                      className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-sm font-medium text-gray-700">Carbs</label>
+                      <span className="text-sm font-bold text-yellow-600">{macroSplit.carbs}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="80"
+                      value={macroSplit.carbs}
+                      onChange={(e) => updateMacroSplit('carbs', parseInt(e.target.value))}
+                      className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-sm font-medium text-gray-700">Fat</label>
+                      <span className="text-sm font-bold text-red-600">{macroSplit.fat}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="80"
+                      value={macroSplit.fat}
+                      onChange={(e) => updateMacroSplit('fat', parseInt(e.target.value))}
+                      className="w-full h-2 bg-red-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-gray-100 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Total:</span>
+                    <span className={`text-sm font-bold ${macroSplit.protein + macroSplit.carbs + macroSplit.fat === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                      {macroSplit.protein + macroSplit.carbs + macroSplit.fat}%
+                    </span>
+                  </div>
+                  {macroSplit.protein + macroSplit.carbs + macroSplit.fat !== 100 && (
+                    <div className="text-xs text-red-600 mt-1">Must equal 100%</div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Updated Targets Preview */}
+              <div className="border-t pt-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Updated Daily Targets</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-gray-900">{calculateMacroTargets().calories}</div>
+                    <div className="text-sm text-gray-600">Calories</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-blue-600">{calculateMacroTargets().proteinG}g</div>
+                    <div className="text-sm text-gray-600">Protein</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-yellow-600">{calculateMacroTargets().carbsG}g</div>
+                    <div className="text-sm text-gray-600">Carbs</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-red-600">{calculateMacroTargets().fatG}g</div>
+                    <div className="text-sm text-gray-600">Fat</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Workout Schedule */}

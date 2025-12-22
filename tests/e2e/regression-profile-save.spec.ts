@@ -1,6 +1,46 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
+  
+  test('should update dashboard immediately when profile is saved', async ({ page }) => {
+    // Start fresh and set up test environment
+    await page.goto('about:blank');
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      // Set age gate to pass
+      localStorage.setItem('age_gate_accepted', 'true');
+      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
+    });
+    
+    // Navigate to profile and create a profile
+    await page.goto('./#/profile');
+    await expect(page.getByText('No Profile Found')).toBeVisible();
+    await page.getByRole('button', { name: 'Create Profile' }).click();
+    
+    // Fill out profile
+    await page.getByLabel('Age').fill('25');
+    await page.getByLabel('Sex').selectOption('male');
+    await page.getByLabel('Activity Level').selectOption('moderate');
+    await page.getByLabel('Experience Level').selectOption('beginner');
+    await page.getByLabel('bodyweight').check();
+    await page.getByLabel('monday').check();
+    await page.getByRole('button', { name: 'Save Profile' }).click();
+    
+    // Should save profile and navigate to dashboard
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
+    
+    // Navigate to dashboard (wait for potential redirect)
+    await page.waitForTimeout(1500);
+    await page.goto('./#/dashboard');
+    await page.waitForLoadState();
+    
+    // Dashboard should show profile information, not onboarding state
+    await expect(page.getByText('Complete your profile first')).not.toBeVisible();
+    await expect(page.getByText('Profile Overview')).toBeVisible();
+    await expect(page.getByText('Activity Level:')).toBeVisible();
+    await expect(page.getByText('moderate')).toBeVisible();
+  });
   test.beforeEach(async ({ page }) => {
     // Start fresh and navigate to profile
     await page.goto('about:blank');

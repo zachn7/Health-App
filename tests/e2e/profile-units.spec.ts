@@ -140,4 +140,36 @@ test.describe('Profile Units Toggle (F02)', () => {
     await expect(page.getByPlaceholder(/100.*250/)).toHaveValue('175'); // 5'9" ≈ 175cm
     await expect(page.getByPlaceholder(/30.*300/)).toHaveValue('75'); // 165.3lbs ≈ 75kg
   });
+
+  test('should handle imperial weight input correctly without double conversion', async ({ page }) => {
+    await page.getByRole('button', { name: 'Create Profile' }).click();
+    
+    // Switch to imperial
+    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByPlaceholder('Feet').fill('6');
+    await page.getByPlaceholder('Inches').fill('0');
+    await page.getByPlaceholder(/66.*661/).fill('180'); // 180 lbs = ~81.8 kg
+    
+    // Fill other required fields
+    await page.getByLabel('Age').fill('30');
+    await page.getByLabel('Sex').selectOption('male');
+    await page.getByLabel('Activity Level').selectOption('moderate');
+    await page.getByLabel('Experience Level').selectOption('beginner');
+    await page.getByLabel('bodyweight').check();
+    await page.getByLabel('monday').check();
+    
+    // Save profile
+    await page.getByRole('button', { name: 'Save Profile' }).click();
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
+    
+    // Navigate to progress and check weight logging
+    await page.goto('./#/progress');
+    await page.waitForLoadState();
+    
+    // Should show weight input for imperial units
+    await expect(page.getByPlaceholder(/66.*661/)).toBeVisible();
+    
+    // The input should be empty (not showing stored kg value)
+    await expect(page.getByPlaceholder(/66.*661/)).toHaveValue('75');
+  });
 });

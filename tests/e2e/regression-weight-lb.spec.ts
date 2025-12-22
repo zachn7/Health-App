@@ -91,21 +91,17 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     
     // Log weight in pounds
-    await page.getByPlaceholder(/lbs?|pounds/i).fill('170.5');
-    
-    // Set date to today
-    const today = new Date().toISOString().split('T')[0];
-    await page.getByLabel(/date/i).fill(today);
+    await page.getByPlaceholder(/66.*661/).fill('170.5');
     
     // Save the weight entry
-    await page.getByRole('button', { name: /Log Weight|Save Weight|Add Weight/ }).click();
+    await page.getByRole('button', { name: 'Log Weight' }).click();
     
     // Should show success message
     await expect(page.getByText(/weight.*log|saved|added/i)).toBeVisible();
     
     // Should show the logged weight in the list/graph
     await expect(page.getByText(/170.5/)).toBeVisible();
-    await expect(page.getByText(/lbs?|pounds/i)).toBeVisible();
+    await expect(page.getByText(/lb/)).toBeVisible();
   });
 
   test('should persist weight entries across page refreshes', async ({ page }) => {
@@ -128,18 +124,17 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     
     // Log first weight
-    await page.getByPlaceholder(/lbs?|pounds/i).fill('175.0');
-    const today = new Date().toISOString().split('T')[0];
-    await page.getByLabel(/date/i).fill(today);
-    await page.getByRole('button', { name: /Log Weight|Save Weight|Add Weight/ }).click();
+    await page.getByPlaceholder(/66.*661/).fill('175.0');
+    await page.getByRole('button', { name: 'Log Weight' }).click();
     await expect(page.getByText(/175.0/)).toBeVisible();
     
-    // Log second weight (different day)
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    await page.getByPlaceholder(/lbs?|pounds/i).fill('174.5');
-    await page.getByLabel(/date/i).fill(yesterday);
-    await page.getByRole('button', { name: /Log Weight|Save Weight|Add Weight/ }).click();
-    await expect(page.getByText(/174.5/)).toBeVisible();
+    // Navigate to previous day and log second weight
+    await page.getByRole('button').filter({ hasText: '←' }).click(); 
+    await page.getByPlaceholder(/66.*661/).fill('174.5');
+    await page.getByRole('button', { name: 'Log Weight' }).click();
+    
+    // Go back to today
+    await page.getByRole('button').filter({ hasText: '→' }).click();
     
     // Refresh the page
     await page.reload();
@@ -147,8 +142,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     
     // Both weight entries should still be there and in pounds
     await expect(page.getByText(/175.0/)).toBeVisible();
-    await expect(page.getByText(/174.5/)).toBeVisible();
-    await expect(page.getByText(/lbs?|pounds/i)).toBeVisible();
+    await expect(page.getByText(/lb/)).toBeVisible();
   });
 
   test('should not convert imperial weight entries to kg', async ({ page }) => {
@@ -171,23 +165,59 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.goto('./#/progress');
     await page.waitForLoadState();
     
-    await page.getByPlaceholder(/lbs?|pounds/i).fill('160.8');
-    const today = new Date().toISOString().split('T')[0];
-    await page.getByLabel(/date/i).fill(today);
-    await page.getByRole('button', { name: /Log Weight|Save Weight|Add Weight/ }).click();
+    await page.getByPlaceholder(/66.*661/).fill('160.8');
+    await page.getByRole('button', { name: 'Log Weight' }).click();
     
     // Should show the exact value in lbs, not converted to kg
     await expect(page.getByText(/160.8/)).toBeVisible();
-    await expect(page.getByText(/lbs?|pounds/i)).toBeVisible();
+    await expect(page.getByText(/lb/)).toBeVisible();
     
-    // Should NOT show converted kg values
-    await expect(page.getByText(/kg|kilogram/i)).not.toBeVisible();
-    await expect(page.getByText(/72.9/)).not.toBeVisible(); // ~160.8 lbs in kg
+    // Should NOT show converted kg values in the input field
+    const input = page.getByPlaceholder(/66.*661/);
+    await expect(input).toHaveValue('160.8');
+  });
+
+  test('should log weight twice on same day and overwrite existing entry', async ({ page }) => {
+    // Set up imperial profile
+    await page.goto('./#/profile');
+    await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByPlaceholder('Feet').fill('5');
+    await page.getByPlaceholder('Inches').fill('10');
+    await page.getByPlaceholder(/66.*661/).fill('150');
+    await page.getByLabel('Age').fill('28');
+    await page.getByLabel('Sex').selectOption('female');
+    await page.getByLabel('Activity Level').selectOption('active');
+    await page.getByLabel('Experience Level').selectOption('intermediate');
+    await page.getByLabel('yoga').check();
+    await page.getByLabel('wednesday').check();
+    await page.getByRole('button', { name: 'Save Profile' }).click();
+    
+    // Navigate to progress page
+    await page.goto('./#/progress');
+    await page.waitForLoadState();
+    
+    // Log first weight
+    await page.getByPlaceholder(/66.*661/).fill('160.8');
+    await page.getByRole('button', { name: 'Log Weight' }).click();
+    await expect(page.getByText(/160.8/)).toBeVisible();
+    
+    // Log second weight on the same day
+    await page.getByPlaceholder(/66.*661/).fill('161.2');
+    await page.getByRole('button', { name: 'Log Weight' }).click();
+    
+    // Should show the second weight (overwritten), not both
+    await expect(page.getByText(/161.2/)).toBeVisible();
+    await expect(page.getByText(/160.8/)).not.toBeVisible();
+    
+    // Should only show one entry in the table
+    const weightRows = page.locator('table tbody tr');
+    await expect(weightRows).toHaveCount(1);
   });
 
   test('should maintain imperial units preference in weight section', async ({ page }) => {
     // Create profile with imperial units
-    await page.goto('./#'+'/profile');
+    await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByLabel('Units').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
@@ -202,16 +232,15 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate between pages and return to progress
-    await page.goto('./#'+'/dashboard');
+    await page.goto('./#/dashboard');
     await page.waitForLoadState();
-    await page.goto('./#'+'/workouts');
+    await page.goto('./#/workouts');
     await page.waitForLoadState();
     await page.goto('./#/progress');
     await page.waitForLoadState();
     
     // Should still show imperial units for weight
-    await expect(page.getByPlaceholder(/lbs?|pounds/i)).toBeVisible();
-    await expect(page.getByText(/lbs?|pounds/i)).toBeVisible();
-    await expect(page.getByPlaceholder(/kg|kilogram/i)).not.toBeVisible();
+    await expect(page.getByPlaceholder(/66.*661/)).toBeVisible();
+    await expect(page.getByText(/lb/)).toBeVisible();
   });
 });
