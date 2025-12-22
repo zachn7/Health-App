@@ -11,3 +11,12 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+interface BuildInfo {
+  commitSha: string
+  buildTimestamp: string
+  appVersion: string
+  isProduction: boolean
+}
+
+declare const __BUILD_INFO__: BuildInfo

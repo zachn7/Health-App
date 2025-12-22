@@ -28,6 +28,12 @@ const registerServiceWorker = async () => {
     return;
   }
 
+  // TEMPORARY: Disable service worker in production until core flows are stable
+  if (import.meta.env.PROD) {
+    console.log('Service Worker registration temporarily disabled in production (stabilization phase)');
+    return;
+  }
+
   try {
     const registration = await navigator.serviceWorker.register('./sw.js', {
       scope: import.meta.env.BASE_URL || '/'

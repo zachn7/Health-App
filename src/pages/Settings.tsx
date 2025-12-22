@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor } from 'lucide-react';
+import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor, GitBranch, Clock, Package, Activity } from 'lucide-react';
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
 
@@ -13,10 +13,14 @@ export default function Settings() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [webgpuAvailable, setWebgpuAvailable] = useState(false);
+  const [swControllerStatus, setSwControllerStatus] = useState<boolean | null>(null);
+  const [buildInfo, setBuildInfo] = useState<typeof __BUILD_INFO__ | null>(null);
   
   useEffect(() => {
     loadSettings();
     checkWebGPU();
+    loadBuildInfo();
+    checkServiceWorkerController();
     
     // Check for environment variable in development
     const envApiKey = import.meta.env.VITE_FDC_API_KEY;
@@ -26,6 +30,33 @@ export default function Settings() {
     }
   }, []);
   
+  const loadBuildInfo = () => {
+    try {
+      // Build info is injected at build time
+      setBuildInfo(__BUILD_INFO__);
+    } catch (error) {
+      console.error('Failed to load build info:', error);
+    }
+  };
+
+  const checkServiceWorkerController = () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        setSwControllerStatus(!!navigator.serviceWorker.controller);
+        
+        // Listen for controller changes
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          setSwControllerStatus(!!navigator.serviceWorker.controller);
+        });
+      } else {
+        setSwControllerStatus(false);
+      }
+    } catch (error) {
+      console.error('Failed to check SW controller:', error);
+      setSwControllerStatus(false);
+    }
+  };
+
   const loadSettings = async () => {
     try {
       const allSettings = await db.settings.toArray();
@@ -361,6 +392,84 @@ export default function Settings() {
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+      
+      {/* Build Information - Always Visible */}
+      {buildInfo && (
+        <div className="mt-8 bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="h-5 w-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-blue-600">Build Information</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-gray-400" />
+              <div>
+                <div className="font-medium text-gray-900">Commit SHA</div>
+                <div className="text-gray-600 font-mono">{buildInfo.commitSha}</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-gray-400" />
+              <div>
+                <div className="font-medium text-gray-900">Build Time</div>
+                <div className="text-gray-600">{new Date(buildInfo.buildTimestamp).toLocaleString()}</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-gray-400" />
+              <div>
+                <div className="font-medium text-gray-900">App Version</div>
+                <div className="text-gray-600">v{buildInfo.appVersion}</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-gray-400" />
+              <div>
+                <div className="font-medium text-gray-900">Service Worker</div>
+                <div className="flex items-center gap-2">
+                  {swControllerStatus === null ? (
+                    <span className="text-gray-500">Checking...</span>
+                  ) : swControllerStatus ? (
+                    <>
+                      <span className="text-green-600">Active</span>
+                      <span className="text-gray-500 text-xs">(controlling page)</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-orange-600">Inactive</span>
+                      <span className="text-gray-500 text-xs">(not controlling)</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 md:col-span-2">
+              <div className="flex-1">
+                <div className="font-medium text-gray-900">Environment</div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    buildInfo.isProduction 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {buildInfo.isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}
+                  </span>
+                  {buildInfo.isProduction && !swControllerStatus && (
+                    <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                      SW Disabled (Temporary)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       
