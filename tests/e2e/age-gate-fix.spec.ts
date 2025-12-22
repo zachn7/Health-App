@@ -2,13 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Age Gate Continue Fix', () => {
   test.beforeEach(async ({ page }) => {
-    // Clear local storage before each test
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.goto('./');
+    // Navigate to the app - Playwright creates fresh browser context per test
+    await page.goto('/');
   });
 
   test('should navigate to onboarding when age >= 13', async ({ page }) => {
