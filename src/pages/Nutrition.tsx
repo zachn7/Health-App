@@ -18,7 +18,9 @@ export default function Nutrition() {
     calories: 0,
     proteinG: 0,
     carbsG: 0,
-    fatG: 0
+    fatG: 0,
+    baseUnit: 'serving',
+    servingGrams: 100
   });
   const [showAddFood, setShowAddFood] = useState(false);
   const [showUSDAImport, setShowUSDAImport] = useState(false);
@@ -31,11 +33,15 @@ export default function Nutrition() {
   const [showServingSizeEdit, setShowServingSizeEdit] = useState<string | null>(null);
   const [editingServingSize, setEditingServingSize] = useState<{
     quantity: number;
-    unit: string;
+    unit: 'serving' | 'grams' | 'g';
     calories: number;
     proteinG: number;
     carbsG: number;
     fatG: number;
+    fiberG?: number;
+    sugarG?: number;
+    sodiumMg?: number;
+    originalItem?: FoodLogItem;
   }>({ quantity: 1, unit: 'serving', calories: 0, proteinG: 0, carbsG: 0, fatG: 0 });
 
   useEffect(() => {
@@ -113,11 +119,14 @@ export default function Nutrition() {
     try {
       const dateStr = selectedDate.toISOString().split('T')[0];
       
-      // Create a deep copy to avoid shared references
-      const foodToSave: FoodLogItem = {
+      // Create a completely new object with unique ID to avoid shared references
+      const foodToSave: FoodLogItem = JSON.parse(JSON.stringify({
         ...newFood,
-        id: crypto.randomUUID() // Ensure unique ID for each entry
-      };
+        id: crypto.randomUUID(), // Ensure unique ID for each entry,
+        createdAt: new Date().toISOString(),
+        baseUnit: newFood.baseUnit || 'serving',
+        servingGrams: newFood.servingGrams || 100
+      }));
       
       if (!currentLog) {
         // Create new log for selected date
@@ -125,19 +134,19 @@ export default function Nutrition() {
           id: crypto.randomUUID(),
           date: dateStr,
           items: [foodToSave],
-          totals: calculateTotals([foodToSave]),
+          totals: calculateTotals([foodToSave]), // Calculate from persisted entries
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
         await repositories.nutrition.createNutritionLog(newLog);
         setCurrentLog(newLog);
       } else {
-        // Add to existing log
+        // Add to existing log - create new array to avoid reference issues
         const updatedItems = [...currentLog.items, foodToSave];
-        const updatedLog = {
+        const updatedLog: NutritionLog = {
           ...currentLog,
           items: updatedItems,
-          totals: calculateTotals(updatedItems),
+          totals: calculateTotals(updatedItems), // Calculate from persisted entries
           updatedAt: new Date().toISOString()
         };
         await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
@@ -153,7 +162,9 @@ export default function Nutrition() {
         calories: 0,
         proteinG: 0,
         carbsG: 0,
-        fatG: 0
+        fatG: 0,
+        baseUnit: 'serving',
+        servingGrams: 100
       });
       setShowAddFood(false);
     } catch (error) {
@@ -243,34 +254,9 @@ export default function Nutrition() {
   const importUSDAFood = async (fdcId: number, description: string) => {
     setUSDAImporting([...usdaImporting, `fdc-${fdcId}`]);
     try {
-      const foodItem = await usdaService.importFoodItem(fdcId);
-      
-      // Parse the serving size to determine if it's per 100g or has a specific serving
-      const servingSize = foodItem.servingSize;
-      let defaultQuantity = 1;
-      let displayServingSize = servingSize;
-      
-      // If serving size is 100g, default to 1 serving (100g)
-      // If it has a different serving, show that as the default
-      if (servingSize === '100 g') {
-        displayServingSize = '100g';
-        defaultQuantity = 1;
-      }
-      
-      // Create food log item with the actual macro values per serving
-      const foodLogItem: FoodLogItem = {
-        id: crypto.randomUUID(),
-        name: foodItem.name,
-        servingSize: displayServingSize,
-        quantidade: defaultQuantity,
-        calories: foodItem.calories,
-        proteinG: foodItem.proteinG,
-        carbsG: foodItem.carbsG,
-        fatG: foodItem.fatG,
-        fiberG: foodItem.fiberG,
-        sugarG: foodItem.sugarG,
-        sodiumMg: foodItem.sodiumMg
-      };
+      // Use the new normalized method to create food log item
+      // Default to 1 serving with proper macro normalization
+      const foodLogItem = await usdaService.createFoodLogItem(fdcId, 1, 'serving');
       
       await saveFoodItem(foodLogItem);
       
@@ -300,48 +286,59 @@ export default function Nutrition() {
       const originalItem = currentLog.items.find(item => item.id === foodItemId);
       if (!originalItem) return;
       
+      // Get the original base macros and serving info
+      const baseServingGrams = originalItem.servingGrams || 100; // Fallback to 100g
+      const isUnitGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
+      
       // Calculate scaling factor based on the unit change
       let scaleFactor: number;
       let displayServingSize: string;
+
+      let scaledMacros: Partial<FoodLogItem>;
       
-      if (editingServingSize.unit === 'g') {
-        // User wants to specify grams directly
-        // Assume originalItem macros are per 100g (standard USDA format) if not specified
-        const gramsPer100g = editingServingSize.quantity / 100;
-        
-        // Get the base per-100g values from USDA service if possible
-        // For now, assume originalItem macros are per serving and scale from there
-        const originalServingSize = originalItem.servingSize;
-        
-        if (originalServingSize && originalServingSize.includes('100g')) {
-          // Original is already per-100g, so scale directly
-          scaleFactor = gramsPer100g;
-        } else {
-          // Original is per-serving, so we need to estimate
-          // This is a simplified approach - in a real app you'd store the base per-100g values
-          scaleFactor = editingServingSize.quantity / 100; // Assume original was standard serving
-        }
-        
+      if (isUnitGrams) {
+        // User switched to grams
         displayServingSize = `${editingServingSize.quantity}g`;
+        
+        // Scale macros: (editedGrams / baseServingGrams) * originalMacros
+        scaleFactor = editingServingSize.quantity / baseServingGrams;
+        scaledMacros = {
+          quantidade: 1, // 1 unit of X grams
+          baseUnit: 'grams' as const,
+          servingGrams: editingServingSize.quantity,
+          calories: Math.round(originalItem.calories * scaleFactor),
+          proteinG: Math.round((originalItem.proteinG * scaleFactor) * 10) / 10,
+          carbsG: Math.round((originalItem.carbsG * scaleFactor) * 10) / 10,
+          fatG: Math.round((originalItem.fatG * scaleFactor) * 10) / 10,
+          fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * scaleFactor) * 10) / 10 : undefined,
+          sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * scaleFactor) * 10) / 10 : undefined,
+          sodiumMg: originalItem.sodiumMg ? Math.round(originalItem.sodiumMg * scaleFactor) : undefined
+        };
       } else {
-        // User wants to change number of servings
-        const baseQuantity = 1;
-        scaleFactor = editingServingSize.quantity / baseQuantity;
-        displayServingSize = `${editingServingSize.quantity} ${editingServingSize.unit}`;
+        // User switched to servings or changed serving count
+        displayServingSize = `${editingServingSize.quantity} serving${editingServingSize.quantity !== 1 ? 's' : ''}`;
+        
+        // Scale macros: quantity * originalMacros (assuming original is per 1 serving)
+        scaleFactor = editingServingSize.quantity;
+        scaledMacros = {
+          quantidade: editingServingSize.quantity,
+          baseUnit: 'serving' as const,
+          servingSize: displayServingSize,
+          calories: Math.round(originalItem.calories * scaleFactor),
+          proteinG: Math.round((originalItem.proteinG * scaleFactor) * 10) / 10,
+          carbsG: Math.round((originalItem.carbsG * scaleFactor) * 10) / 10,
+          fatG: Math.round((originalItem.fatG * scaleFactor) * 10) / 10,
+          fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * scaleFactor) * 10) / 10 : undefined,
+          sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * scaleFactor) * 10) / 10 : undefined,
+          sodiumMg: originalItem.sodiumMg ? Math.round(originalItem.sodiumMg * scaleFactor) : undefined
+        };
       }
       
-      // Update the food item with scaled macros
+      // Update the food item with new macros
       const updatedItem: FoodLogItem = {
         ...originalItem,
-        quantidade: editingServingSize.unit === 'g' ? 1 : editingServingSize.quantity,
-        servingSize: displayServingSize,
-        calories: Math.round(originalItem.calories * scaleFactor),
-        proteinG: Math.round((originalItem.proteinG * scaleFactor) * 10) / 10,
-        carbsG: Math.round((originalItem.carbsG * scaleFactor) * 10) / 10,
-        fatG: Math.round((originalItem.fatG * scaleFactor) * 10) / 10,
-        fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * scaleFactor) * 10) / 10 : 0,
-        sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * scaleFactor) * 10) / 10 : 0,
-        sodiumMg: originalItem.sodiumMg ? Math.round((originalItem.sodiumMg * scaleFactor)) : 0
+        ...scaledMacros as any,
+        id: originalItem.id // Keep the same ID
       };
       
       // Update the nutrition log
@@ -352,7 +349,7 @@ export default function Nutrition() {
       const updatedLog: NutritionLog = {
         ...currentLog,
         items: updatedItems,
-        totals: calculateTotals(updatedItems),
+        totals: calculateTotals(updatedItems), // Calculate from persisted entries
         updatedAt: new Date().toISOString()
       };
       
@@ -368,8 +365,15 @@ export default function Nutrition() {
   const startEditServingSize = (item: FoodLogItem) => {
     // Parse existing serving size
     const match = item.servingSize.match(/([\d.]+)\s*(.+)/);
-    const quantity = match ? parseFloat(match[1]) : item.quantidade || 1;
-    const unit = match ? match[2] : 'serving';
+    let quantity = match ? parseFloat(match[1]) : item.quantidade || 1;
+    let unit: 'serving' | 'grams' | 'g' = 'serving';
+    
+    // Detect if current unit is grams
+    const existingUnit = match ? match[2].toLowerCase() : '';
+    if (existingUnit.includes('g')) {
+      unit = 'grams';
+      quantity = item.servingGrams || quantity; // Use stored servingGrams if available
+    }
     
     setEditingServingSize({
       quantity,
@@ -377,7 +381,11 @@ export default function Nutrition() {
       calories: item.calories,
       proteinG: item.proteinG,
       carbsG: item.carbsG,
-      fatG: item.fatG
+      fatG: item.fatG,
+      fiberG: item.fiberG,
+      sugarG: item.sugarG,
+      sodiumMg: item.sodiumMg,
+      originalItem: item // Store reference for calculations
     });
     setShowServingSizeEdit(item.id);
   };
@@ -385,11 +393,13 @@ export default function Nutrition() {
   const saveFoodItem = async (foodItem: FoodLogItem) => {
     const dateStr = selectedDate.toISOString().split('T')[0];
     
-    // Create a deep copy to avoid shared references
-    const foodToSave: FoodLogItem = {
+    // Create a completely new object with unique ID to avoid shared references
+    const foodToSave: FoodLogItem = JSON.parse(JSON.stringify({
       ...foodItem,
-      id: crypto.randomUUID() // Ensure unique ID for each entry
-    };
+      id: crypto.randomUUID(), // Ensure unique ID for each entry,
+      baseUnit: foodItem.baseUnit || 'serving',
+      servingGrams: foodItem.servingGrams || 100
+    }));
     
     if (!currentLog) {
       // Create new log for selected date
@@ -397,19 +407,19 @@ export default function Nutrition() {
         id: crypto.randomUUID(),
         date: dateStr,
         items: [foodToSave],
-        totals: calculateTotals([foodToSave]),
+        totals: calculateTotals([foodToSave]), // Calculate from persisted entries
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       await repositories.nutrition.createNutritionLog(newLog);
       setCurrentLog(newLog);
     } else {
-      // Add to existing log
+      // Add to existing log - create new array to avoid reference issues
       const updatedItems = [...currentLog.items, foodToSave];
-      const updatedLog = {
+      const updatedLog: NutritionLog = {
         ...currentLog,
         items: updatedItems,
-        totals: calculateTotals(updatedItems),
+        totals: calculateTotals(updatedItems), // Calculate from persisted entries
         updatedAt: new Date().toISOString()
       };
       await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
@@ -429,7 +439,9 @@ export default function Nutrition() {
       fatG: food.fatG,
       fiberG: food.fiberG,
       sugarG: food.sugarG,
-      sodiumMg: food.sodiumMg
+      sodiumMg: food.sodiumMg,
+      baseUnit: 'serving',
+      servingGrams: 100
     };
     
     await saveFoodItem(foodLogItem);
@@ -838,15 +850,31 @@ export default function Nutrition() {
                         <label className="label text-xs">Unit</label>
                         <select
                           value={editingServingSize.unit}
-                          onChange={(e) => setEditingServingSize({ ...editingServingSize, unit: e.target.value })}
+                          onChange={(e) => {
+                            const newUnit = e.target.value as 'serving' | 'grams' | 'g';
+                            let newQuantity = editingServingSize.quantity;
+                            
+                            // Handle unit switching logic
+                            if (editingServingSize.originalItem) {
+                              if (newUnit === 'grams' || newUnit === 'g') {
+                                // Switching to grams - set quantity to servingGrams
+                                newQuantity = editingServingSize.originalItem.servingGrams || 100;
+                              } else if (newUnit === 'serving') {
+                                // Switching to serving - set quantity to 1
+                                newQuantity = 1;
+                              }
+                            }
+                            
+                            setEditingServingSize({ 
+                              ...editingServingSize, 
+                              unit: newUnit,
+                              quantity: newQuantity 
+                            });
+                          }}
                           className="input text-sm"
                         >
                           <option value="serving">serving</option>
                           <option value="grams">grams</option>
-                          <option value="oz">oz</option>
-                          <option value="cup">cup</option>
-                          <option value="tbsp">tbsp</option>
-                          <option value="tsp">tsp</option>
                         </select>
                       </div>
                     </div>

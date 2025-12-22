@@ -1,6 +1,6 @@
 import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
-import { FoodItem } from '@/types';
+import { FoodItem, FoodLogItem } from '@/types';
 
 export interface USDFoodSearchResult {
   fdcId: number;
@@ -135,10 +135,13 @@ export class USDAService {
     // Map USDA nutrient data to our format
     const macroNutrients = this.extractMacroNutrients(foodDetail.foodNutrients);
     
+    // Extract serving size information
+    const servingInfo = this.parseServingInfo(foodDetail);
+    
     const foodItem: FoodItem = {
       id: `usda-${fdcId}`,
       name: foodDetail.description,
-      servingSize: this.formatServingSize(foodDetail),
+      servingSize: servingInfo.displaySize,
       calories: macroNutrients.calories,
       proteinG: macroNutrients.proteinG,
       carbsG: macroNutrients.carbsG,
@@ -173,17 +176,95 @@ export class USDAService {
     };
   }
   
-  private static formatServingSize(foodDetail: USDAFoodDetail): string {
+  private static parseServingInfo(foodDetail: USDAFoodDetail): {
+    displaySize: string;
+    gramsPerServing: number;
+    baseUnit: 'serving' | 'grams';
+  } {
+    // Default to 100g if no serving info
+    let gramsPerServing = 100;
+    let displaySize = '100g';
+    let baseUnit: 'serving' | 'grams' = 'grams';
+    
+    // Check if there's a specific serving size
     if (foodDetail.servingSize && foodDetail.servingSizeUnit) {
-      return `${foodDetail.servingSize} ${foodDetail.servingSizeUnit}`;
+      const size = foodDetail.servingSize;
+      const unit = foodDetail.servingSizeUnit.toLowerCase();
+      
+      if (unit.includes('g')) {
+        // Serving is in grams
+        gramsPerServing = size;
+        displaySize = `${size}g`;
+        baseUnit = 'grams';
+      } else {
+        // Serving is in other unit (cups, tbsp, etc.)
+        displaySize = `${size} ${foodDetail.servingSizeUnit}`;
+        baseUnit = 'serving';
+        // For non-gram units, we assume the nutrient values are per serving
+        // gramsPerServing remains as estimated or can be enhanced later
+      }
+    } else if (foodDetail.householdServingFullText) {
+      // Use household serving size
+      displaySize = foodDetail.householdServingFullText;
+      baseUnit = 'serving';
+      // gramsPerServing remains as the USDA nutrient values are per serving
     }
     
-    if (foodDetail.householdServingFullText) {
-      return foodDetail.householdServingFullText;
-    }
-    
-    return '100 g'; // Default serving size
+    return {
+      displaySize,
+      gramsPerServing,
+      baseUnit
+    };
   }
+  
+  /**
+   * Create a FoodLogItem from USDA data with proper macro normalization
+   */
+  static async createFoodLogItem(fdcId: number, customQuantity: number = 1, customUnit: string = 'serving'): Promise<FoodLogItem> {
+    const foodDetail = await this.getFoodDetails(fdcId);
+    const macroNutrients = this.extractMacroNutrients(foodDetail.foodNutrients);
+    const servingInfo = this.parseServingInfo(foodDetail);
+    
+    // Calculate the final macros based on the requested quantity/unit
+    let scaleFactor = 1;
+    let finalServingSize = servingInfo.displaySize;
+    let finalQuantity = customQuantity;
+    
+    if (customUnit === 'grams') {
+      // User wants specific grams
+      scaleFactor = customQuantity / 100; // USDA macros are typically per 100g
+      finalServingSize = `${customQuantity}g`;
+      finalQuantity = 1; // Quantity represents 1 unit of the specified grams
+    } else {
+      // User wants servings
+      scaleFactor = customQuantity;
+      finalServingSize = `${customQuantity} serving${customQuantity !== 1 ? 's' : ''}`;
+    }
+    
+    // Apply scaling to get the final macro values
+    const finalMacros = {
+      calories: Math.round(macroNutrients.calories * scaleFactor),
+      proteinG: Math.round((macroNutrients.proteinG * scaleFactor) * 10) / 10,
+      carbsG: Math.round((macroNutrients.carbsG * scaleFactor) * 10) / 10,
+      fatG: Math.round((macroNutrients.fatG * scaleFactor) * 10) / 10,
+      fiberG: macroNutrients.fiberG ? Math.round((macroNutrients.fiberG * scaleFactor) * 10) / 10 : 0,
+      sugarG: macroNutrients.sugarG ? Math.round((macroNutrients.sugarG * scaleFactor) * 10) / 10 : 0,
+      sodiumMg: macroNutrients.sodiumMg ? Math.round((macroNutrients.sodiumMg * scaleFactor)) : 0
+    };
+    
+    return {
+      id: crypto.randomUUID(),
+      name: foodDetail.description,
+      servingSize: finalServingSize,
+      quantidade: finalQuantity,
+      ...finalMacros,
+      servingGrams: customUnit === 'grams' ? customQuantity : servingInfo.gramsPerServing,
+      baseUnit: customUnit === 'grams' ? 'grams' : servingInfo.baseUnit,
+      fdcId: fdcId
+    };
+  }
+  
+
   
   static async searchAndImport(query: string): Promise<FoodItem[]> {
     try {

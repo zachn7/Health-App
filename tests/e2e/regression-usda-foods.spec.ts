@@ -175,6 +175,58 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await expect(page.getByText('Test Banana')).toBeVisible();
   });
 
+  test('should handle serving<->grams unit switching correctly', async ({ page }) => {
+    // Set up USDA API key and add a food
+    await page.goto('./#/settings');
+    await page.getByLabel('API Key').fill('test-api-key-for-testing');
+    await page.getByRole('button', { name: 'Save Settings' }).click();
+    await page.goto('./#/nutrition');
+    
+    // Add apple
+    await page.getByRole('button', { name: /Add Food|Import|USDA/i }).click();
+    await page.getByPlaceholder(/Search foods|Enter food name/).fill('apple');
+    await expect(page.getByText('Test Apple')).toBeVisible();
+    await page.getByText('Test Apple').click();
+    await expect(page.getByText(/Food logged/)).toBeVisible();
+    
+    // Find the apple item and click edit
+    const appleItem = page.locator('.space-y-3').filter({ hasText: 'Test Apple' });
+    await appleItem.getByRole('button', { name: 'Edit Serving' }).click();
+    
+    // Should be in edit mode
+    await expect(page.getByText('Edit: Test Apple')).toBeVisible();
+    
+    // Check initial quantity (should be 1 serving)
+    const quantityInput = page.locator('input[placeholder*="Quantity"]').first();
+    await expect(quantityInput).toHaveValue('1');
+    
+    const unitSelect = page.locator('select').filter({ hasText: /serving|grams/ });
+    await expect(unitSelect).toHaveValue('serving');
+    
+    // Switch to grams - quantity should auto-update to servingGrams
+    await unitSelect.selectOption('grams');
+    await expect(quantityInput).toHaveValue('100'); // Should default to 100g
+    
+    // Update to 200g and save
+    await quantityInput.fill('200');
+    await page.getByRole('button', { name: 'Update' }).click();
+    
+    // Should save and show updated macros
+    await expect(page.getByText('104 cal')).toBeVisible(); // 52 * 2 = 104
+    
+    // Edit again to test switching back to serving
+    await appleItem.getByRole('button', { name: 'Edit Serving' }).click();
+    await expect(quantityInput).toHaveValue('200'); // Still shows 200g when in grams mode
+    
+    // Switch back to serving
+    await unitSelect.selectOption('serving');
+    await expect(quantityInput).toHaveValue('1'); // Should reset to 1 serving
+    
+    // Save and verify totals are updated correctly
+    await page.getByRole('button', { name: 'Update' }).click();
+    await expect(page.getByText('52 cal')).toBeVisible(); // Back to original per-serving
+  });
+
   test('should handle USDA lookup failures gracefully', async ({ page }) => {
     // Set up invalid API key scenario
     await page.goto('./#/settings');
