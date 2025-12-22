@@ -113,13 +113,19 @@ export default function Nutrition() {
     try {
       const dateStr = selectedDate.toISOString().split('T')[0];
       
+      // Create a deep copy to avoid shared references
+      const foodToSave: FoodLogItem = {
+        ...newFood,
+        id: crypto.randomUUID() // Ensure unique ID for each entry
+      };
+      
       if (!currentLog) {
         // Create new log for selected date
         const newLog: NutritionLog = {
           id: crypto.randomUUID(),
           date: dateStr,
-          items: [newFood],
-          totals: calculateTotals([newFood]),
+          items: [foodToSave],
+          totals: calculateTotals([foodToSave]),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
@@ -127,7 +133,7 @@ export default function Nutrition() {
         setCurrentLog(newLog);
       } else {
         // Add to existing log
-        const updatedItems = [...currentLog.items, newFood];
+        const updatedItems = [...currentLog.items, foodToSave];
         const updatedLog = {
           ...currentLog,
           items: updatedItems,
@@ -284,6 +290,12 @@ export default function Nutrition() {
     if (!currentLog) return;
     
     try {
+      // Validate numeric input
+      if (isNaN(editingServingSize.quantity) || editingServingSize.quantity <= 0) {
+        alert('Please enter a valid positive number for quantity');
+        return;
+      }
+      
       // Find the original food item to get base macros
       const originalItem = currentLog.items.find(item => item.id === foodItemId);
       if (!originalItem) return;
@@ -294,7 +306,7 @@ export default function Nutrition() {
       
       if (editingServingSize.unit === 'g') {
         // User wants to specify grams directly
-        // Assume originalItem macros are per 100g (standard USDA format)
+        // Assume originalItem macros are per 100g (standard USDA format) if not specified
         const gramsPer100g = editingServingSize.quantity / 100;
         
         // Get the base per-100g values from USDA service if possible
@@ -373,13 +385,19 @@ export default function Nutrition() {
   const saveFoodItem = async (foodItem: FoodLogItem) => {
     const dateStr = selectedDate.toISOString().split('T')[0];
     
+    // Create a deep copy to avoid shared references
+    const foodToSave: FoodLogItem = {
+      ...foodItem,
+      id: crypto.randomUUID() // Ensure unique ID for each entry
+    };
+    
     if (!currentLog) {
       // Create new log for selected date
       const newLog: NutritionLog = {
         id: crypto.randomUUID(),
         date: dateStr,
-        items: [foodItem],
-        totals: calculateTotals([foodItem]),
+        items: [foodToSave],
+        totals: calculateTotals([foodToSave]),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -387,7 +405,7 @@ export default function Nutrition() {
       setCurrentLog(newLog);
     } else {
       // Add to existing log
-      const updatedItems = [...currentLog.items, foodItem];
+      const updatedItems = [...currentLog.items, foodToSave];
       const updatedLog = {
         ...currentLog,
         items: updatedItems,

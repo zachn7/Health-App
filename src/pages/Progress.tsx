@@ -368,11 +368,29 @@ export default function Progress() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">Weight Trend</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weightLogs.slice(0, 30).reverse().map(log => ({
-                  date: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                  weight: profile?.preferredUnits === 'imperial' ? (log.weightKg * 2.20462).toFixed(1) : log.weightKg.toFixed(1),
-                  weightKg: log.weightKg
-                }))}>
+                <LineChart data={(() => {
+                  const recentLogs = weightLogs.slice(0, 30).reverse();
+                  return recentLogs.map((log, index) => {
+                    // Calculate 7-day rolling average
+                    const rollingPeriod = 7;
+                    const startIdx = Math.max(0, index - Math.floor(rollingPeriod / 2));
+                    const endIdx = Math.min(recentLogs.length - 1, index + Math.floor(rollingPeriod / 2));
+                    
+                    const periodLogs = recentLogs.slice(startIdx, endIdx + 1);
+                    const rollingAverage = periodLogs.reduce((sum, l) => sum + l.weightKg, 0) / periodLogs.length;
+                    
+                    const displayWeight = profile?.preferredUnits === 'imperial' ? (log.weightKg * 2.20462).toFixed(1) : log.weightKg.toFixed(1);
+                    const displayAverage = profile?.preferredUnits === 'imperial' ? (rollingAverage * 2.20462).toFixed(1) : rollingAverage.toFixed(1);
+                    
+                    return {
+                      date: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                      weight: displayWeight,
+                      weightKg: log.weightKg,
+                      average: displayAverage,
+                      averageKg: rollingAverage
+                    };
+                  });
+                })()}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis 
                     dataKey="date" 
@@ -387,7 +405,14 @@ export default function Progress() {
                   <Tooltip 
                     contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px' }}
                     labelStyle={{ fontWeight: 600 }}
-                    formatter={(value: any) => [`${value} ${getWeightUnit()}`, 'Weight']}
+                    formatter={(value: any, name: string) => {
+                      if (name === 'Actual Weight') {
+                        return [`${value} ${getWeightUnit()}`, 'Actual Weight'];
+                      } else if (name === '7-Day Average') {
+                        return [`${value} ${getWeightUnit()}`, '7-Day Average'];
+                      }
+                      return [`${value} ${getWeightUnit()}`, name];
+                    }}
                   />
                   <Line 
                     type="monotone" 
@@ -396,6 +421,16 @@ export default function Progress() {
                     strokeWidth={2}
                     dot={{ fill: '#3b82f6', r: 4 }}
                     activeDot={{ r: 6 }}
+                    name="Actual Weight"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="average" 
+                    stroke="#ef4444" 
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    name="7-Day Average"
                   />
                 </LineChart>
               </ResponsiveContainer>

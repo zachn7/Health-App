@@ -16,17 +16,21 @@ interface ExerciseData {
 interface EditingWorkout {
   weekIndex: number;
   dayIndex: number;
-  type?: 'replace' | 'add';
+  type?: 'replace' | 'add' | 'prescription';
   exerciseId?: string;
+  exerciseIndex?: number;
+  currentSets?: any;
 }
 
 export default function Workouts() {
   const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
   const [, setExercises] = useState<ExerciseDBItem[]>([]);
+  const [importMode, setImportMode] = useState<{ weekIndex: number; dayIndex: number } | null>(null);
+  const [selectedExercises, setSelectedExercises] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
-  const [workoutCompletion, setWorkoutCompletion] = useState<Record<string, Record<string, boolean>>>({});
+
   const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [exerciseData, setExerciseData] = useState<ExerciseData>({});
@@ -192,6 +196,45 @@ export default function Workouts() {
     }
   };
 
+  const editExercisePrescription = (weekIndex: number, dayIndex: number, exerciseIndex: number) => {
+    if (!selectedPlan) return;
+    
+    const exercise = selectedPlan.weeks[weekIndex].workouts[dayIndex].exercises[exerciseIndex];
+    setEditingWorkout({
+      weekIndex,
+      dayIndex,
+      type: 'prescription',
+      exerciseId: exercise.exerciseId,
+      exerciseIndex,
+      currentSets: { ...exercise.sets }
+    });
+  };
+
+  const updateExercisePrescription = async (weekIndex: number, dayIndex: number, exerciseIndex: number, newSets: any) => {
+    if (!selectedPlan) return;
+    
+    try {
+      const updatedPlan = { ...selectedPlan };
+      const workout = updatedPlan.weeks[weekIndex].workouts[dayIndex];
+      
+      workout.exercises[exerciseIndex] = {
+        ...workout.exercises[exerciseIndex],
+        sets: newSets
+      };
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      setWorkoutPlans(prev => 
+        prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+      );
+      setSelectedPlan(updatedPlan);
+      setEditingWorkout(null);
+    } catch (error) {
+      console.error('Failed to update exercise prescription:', error);
+      alert('Failed to update exercise prescription');
+    }
+  };
+
   const getCurrentWeek = () => {
     const today = new Date();
     const startOfYear = new Date(today.getFullYear(), 0, 1);
@@ -199,44 +242,15 @@ export default function Workouts() {
     return weekNumber % 4;
   };
 
-  const getWorkoutKey = (planId: string, weekIndex: number, dayIndex: number) => {
-    return `${planId}-w${weekIndex}-d${dayIndex}`;
-  };
 
-  const toggleExerciseComplete = (planId: string, weekIndex: number, dayIndex: number, exerciseId: string) => {
-    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
-    setWorkoutCompletion(prev => ({
-      ...prev,
-      [workoutKey]: {
-        ...prev[workoutKey],
-        [exerciseId]: !prev[workoutKey]?.[exerciseId]
-      }
-    }));
-  };
 
-  const isExerciseComplete = (planId: string, weekIndex: number, dayIndex: number, exerciseId: string) => {
-    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
-    return workoutCompletion[workoutKey]?.[exerciseId] || false;
-  };
 
-  const getWorkoutProgress = (planId: string, weekIndex: number, dayIndex: number, totalExercises: number) => {
-    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
-    const completed = Object.values(workoutCompletion[workoutKey] || {}).filter(Boolean).length;
-    return { completed, total: totalExercises, percentage: (completed / totalExercises) * 100 };
-  };
 
-  const markWholeWorkoutComplete = (planId: string, weekIndex: number, dayIndex: number, exercises: any[]) => {
-    const workoutKey = getWorkoutKey(planId, weekIndex, dayIndex);
-    const completion: Record<string, boolean> = {};
-    exercises.forEach(ex => {
-      completion[ex.exerciseId] = true;
-    });
-    
-    setWorkoutCompletion(prev => ({
-      ...prev,
-      [workoutKey]: completion
-    }));
-  };
+
+
+
+
+
 
   const generateWorkoutPlan = async () => {
     try {
@@ -375,30 +389,22 @@ export default function Workouts() {
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Week {currentWeekIndex + 1} (Current Week)</h4>
                 <div className="space-y-2">
-                  {plan.weeks[currentWeekIndex]?.workouts.map((workout, dayIndex) => {
-                    const progress = getWorkoutProgress(plan.id, currentWeekIndex, dayIndex, workout.exercises.length);
-                    return (
-                      <div key={dayIndex} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">{workout.day}</div>
-                          <div className="text-xs text-gray-600">
-                            {workout.exercises.length} exercises
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="text-xs text-gray-600">
-                            {progress.completed}/{progress.total}
-                          </div>
-                          <button
-                            onClick={() => setSelectedPlan(plan)}
-                            className="btn btn-secondary text-xs py-1 px-2"
-                          >
-                            View Details
-                          </button>
+                  {plan.weeks[currentWeekIndex]?.workouts.map((workout, dayIndex) => (
+                    <div key={dayIndex} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{workout.day}</div>
+                        <div className="text-xs text-gray-600">
+                          {workout.exercises.length} exercises
                         </div>
                       </div>
-                    );
-                  })}
+                      <button
+                        onClick={() => setSelectedPlan(plan)}
+                        className="btn btn-secondary text-xs py-1 px-2"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -485,6 +491,48 @@ export default function Workouts() {
                                 <Plus className="w-4 h-4" />
                               </button>
                             </>
+                          ) : importMode?.weekIndex === selectedWeek && importMode?.dayIndex === dayIndex ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedExercises(new Set(workout.exercises.map(ex => ex.exerciseId)));
+                                }}
+                                className="btn btn-secondary text-sm"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (selectedExercises.size === 0) {
+                                    alert('Please select at least one exercise to import');
+                                    return;
+                                  }
+                                  
+                                  // Navigate to workout logger with selected exercises
+                                  const selectedWorkoutData = {
+                                    workoutPlanId: selectedPlan.id,
+                                    exercises: workout.exercises.filter(ex => selectedExercises.has(ex.exerciseId)),
+                                    notes: workout.notes,
+                                    weekIndex: selectedWeek,
+                                    dayIndex: dayIndex
+                                  };
+                                  sessionStorage.setItem('currentWorkout', JSON.stringify(selectedWorkoutData));
+                                  window.location.hash = '/log/workout';
+                                }}
+                                className="btn btn-primary text-sm"
+                              >
+                                Import Selected ({selectedExercises.size})
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setImportMode(null);
+                                  setSelectedExercises(new Set());
+                                }}
+                                className="btn btn-secondary text-sm"
+                              >
+                                Cancel Import
+                              </button>
+                            </>
                           ) : (
                             <>
                               <button
@@ -494,8 +542,17 @@ export default function Workouts() {
                                 <Edit3 className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => startWorkout(selectedPlan, selectedWeek, dayIndex)}
+                                onClick={() => {
+                                  setImportMode({ weekIndex: selectedWeek, dayIndex });
+                                  setSelectedExercises(new Set());
+                                }}
                                 className="btn btn-primary text-sm"
+                              >
+                                Import to Log
+                              </button>
+                              <button
+                                onClick={() => startWorkout(selectedPlan, selectedWeek, dayIndex)}
+                                className="btn btn-secondary text-sm"
                               >
                                 Start Workout
                               </button>
@@ -506,21 +563,30 @@ export default function Workouts() {
                       
                       <div className="space-y-3">
                         {workout.exercises.map((exercise, exIndex) => {
-                          const isComplete = isExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId);
                           const exerciseName = getExerciseName(exercise.exerciseId);
                           const instructions = getExerciseInstructions(exercise.exerciseId);
                           
                           return (
-                            <div key={exIndex} className={`border-l-4 pl-4 ${isComplete ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
+                            <div key={exIndex} className={`border-l-4 pl-4 ${selectedExercises.has(exercise.exerciseId) ? 'border-indigo-500 bg-indigo-50' : 'border-blue-500'}`}>
                               <div className="flex items-start space-x-3">
-                                <input
-                                  type="checkbox"
-                                  checked={isComplete}
-                                  onChange={() => toggleExerciseComplete(selectedPlan.id, selectedWeek, dayIndex, exercise.exerciseId)}
-                                  className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
+                                {importMode?.weekIndex === selectedWeek && importMode?.dayIndex === dayIndex && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedExercises.has(exercise.exerciseId)}
+                                    onChange={() => {
+                                      const newSelected = new Set(selectedExercises);
+                                      if (newSelected.has(exercise.exerciseId)) {
+                                        newSelected.delete(exercise.exerciseId);
+                                      } else {
+                                        newSelected.add(exercise.exerciseId);
+                                      }
+                                      setSelectedExercises(newSelected);
+                                    }}
+                                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                )}
                                 <div className="flex-1">
-                                  <div className={`font-medium ${isComplete ? 'line-through text-gray-500' : ''}`}>
+                                  <div className="font-medium">
                                     {exerciseName}
                                   </div>
                                   <div className="text-sm text-gray-600">
@@ -555,6 +621,13 @@ export default function Workouts() {
                                       <Edit3 className="w-4 h-4" />
                                     </button>
                                     <button
+                                      onClick={() => editExercisePrescription(selectedWeek, dayIndex, exIndex)}
+                                      className="text-green-600 hover:text-green-800"
+                                      title="Edit sets/reps/weight"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
                                       onClick={() => removeExercise(selectedWeek, dayIndex, exercise.exerciseId)}
                                       className="text-red-600 hover:text-red-800"
                                       title="Remove exercise"
@@ -567,26 +640,244 @@ export default function Workouts() {
                             </div>
                           );
                         })}
-                        
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <div className="flex justify-between items-center">
-                            <div className="text-sm text-gray-600">
-                              Progress: {getWorkoutProgress(selectedPlan.id, selectedWeek, dayIndex, workout.exercises.length).completed} of {workout.exercises.length} exercises
-                            </div>
-                            <button
-                              onClick={() => markWholeWorkoutComplete(selectedPlan.id, selectedWeek, dayIndex, workout.exercises)}
-                              className="btn btn-primary text-sm"
-                            >
-                              Mark Whole Workout Complete
-                            </button>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Exercise Prescription Edit Modal */}
+      {editingWorkout?.type === 'prescription' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Edit Exercise Prescription</h3>
+              <button
+                onClick={() => setEditingWorkout(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {editingWorkout.currentSets && (
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Exercise</label>
+                  <div className="text-lg font-medium text-gray-900">
+                    {getExerciseName(editingWorkout.exerciseId!)}
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Sets</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={editingWorkout.currentSets.sets || ''}
+                      onChange={(e) => {
+                        const newSets = { ...editingWorkout.currentSets };
+                        newSets.sets = parseInt(e.target.value) || 1;
+                        setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                      }}
+                      className="input"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="label">Rest Time (seconds)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="600"
+                      value={editingWorkout.currentSets.restTime || ''}
+                      onChange={(e) => {
+                        const newSets = { ...editingWorkout.currentSets };
+                        newSets.restTime = parseInt(e.target.value) || 0;
+                        setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                      }}
+                      className="input"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="label">Rep Scheme</label>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="fixed-reps"
+                        name="rep-type"
+                        checked={!editingWorkout.currentSets.repsRange}
+                        onChange={() => {
+                          const newSets = { ...editingWorkout.currentSets };
+                          delete newSets.repsRange;
+                          setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="fixed-reps" className="text-sm text-gray-700">Fixed Reps</label>
+                    </div>
+                    
+                    {!editingWorkout.currentSets.repsRange && (
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={editingWorkout.currentSets.reps || ''}
+                        onChange={(e) => {
+                          const newSets = { ...editingWorkout.currentSets };
+                          newSets.reps = parseInt(e.target.value) || 1;
+                          setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                        }}
+                        className="input ml-6"
+                        placeholder="Reps"
+                      />
+                    )}
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="rep-range"
+                        name="rep-type"
+                        checked={!!editingWorkout.currentSets.repsRange}
+                        onChange={() => {
+                          const newSets = { ...editingWorkout.currentSets };
+                          newSets.repsRange = { min: 8, max: 12 };
+                          delete newSets.reps;
+                          setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="rep-range" className="text-sm text-gray-700">Rep Range</label>
+                    </div>
+                    
+                    {editingWorkout.currentSets.repsRange && (
+                      <div className="flex space-x-2 ml-6">
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          value={editingWorkout.currentSets.repsRange?.min || ''}
+                          onChange={(e) => {
+                            const newSets = { ...editingWorkout.currentSets };
+                            newSets.repsRange = { 
+                              ...newSets.repsRange!, 
+                              min: parseInt(e.target.value) || 1 
+                            };
+                            setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                          }}
+                          className="input w-20"
+                          placeholder="Min"
+                        />
+                        <span className="self-center">to</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          value={editingWorkout.currentSets.repsRange?.max || ''}
+                          onChange={(e) => {
+                            const newSets = { ...editingWorkout.currentSets };
+                            newSets.repsRange = { 
+                              ...newSets.repsRange!, 
+                              max: parseInt(e.target.value) || 1 
+                            };
+                            setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                          }}
+                          className="input w-20"
+                          placeholder="Max"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="label">Weight ({getWeightUnit()})</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={editingWorkout.currentSets.weight || ''}
+                    onChange={(e) => {
+                      const newSets = { ...editingWorkout.currentSets };
+                      newSets.weight = parseFloat(e.target.value) || 0;
+                      setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                    }}
+                    className="input"
+                    placeholder="Leave empty for bodyweight"
+                  />
+                </div>
+                
+                <div>
+                  <label className="label">RPE (Rate of Perceived Exertion)</label>
+                  <select
+                    value={editingWorkout.currentSets.rpe || ''}
+                    onChange={(e) => {
+                      const newSets = { ...editingWorkout.currentSets };
+                      newSets.rpe = e.target.value ? parseFloat(e.target.value) : undefined;
+                      setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                    }}
+                    className="input"
+                  >
+                    <option value="">Not specified</option>
+                    <option value="6">6 - Very light</option>
+                    <option value="7">7 - Light</option>
+                    <option value="8">8 - Moderate</option>
+                    <option value="9">9 - Hard</option>
+                    <option value="10">10 - Maximum effort</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="label">Notes</label>
+                  <textarea
+                    value={editingWorkout.currentSets.notes || ''}
+                    onChange={(e) => {
+                      const newSets = { ...editingWorkout.currentSets };
+                      newSets.notes = e.target.value;
+                      setEditingWorkout({ ...editingWorkout, currentSets: newSets });
+                    }}
+                    className="input"
+                    rows={3}
+                    placeholder="Technique cues, tempo, etc."
+                  />
+                </div>
+                
+                <div className="flex space-x-3 pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      if (editingWorkout.weekIndex !== undefined && 
+                          editingWorkout.dayIndex !== undefined && 
+                          editingWorkout.exerciseIndex !== undefined) {
+                        updateExercisePrescription(
+                          editingWorkout.weekIndex,
+                          editingWorkout.dayIndex,
+                          editingWorkout.exerciseIndex,
+                          editingWorkout.currentSets
+                        );
+                      }
+                    }}
+                    className="btn btn-primary flex-1"
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => setEditingWorkout(null)}
+                    className="btn btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

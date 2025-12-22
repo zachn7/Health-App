@@ -62,6 +62,7 @@ export class WebLLMService {
     try {
       // Access the prebuiltAppConfig.model_list from webllm
       const models = (webllm as any).prebuiltAppConfig?.model_list || [];
+      console.log('WebLLM models from prebuiltAppConfig:', models.map((m: any) => m.model_id));
       return models;
     } catch (error) {
       console.error('Failed to get available models:', error);
@@ -86,9 +87,10 @@ export class WebLLMService {
     try {
       // Try to get saved model from settings
       const savedModelId = await settingsRepository.getWebLLMModelId();
+      const availableModels = await this.getAvailableModels();
+      
       if (savedModelId) {
         // Validate that the saved model is still available
-        const availableModels = await this.getAvailableModels();
         const modelExists = availableModels.some(model => model.model_id === savedModelId);
         
         if (modelExists) {
@@ -96,19 +98,25 @@ export class WebLLMService {
           return savedModelId;
         } else {
           console.warn(`Saved model ${savedModelId} not found in available models, falling back to default`);
+          console.warn('Available models:', availableModels.map(m => m.model_id));
           // Clear the invalid model and fallback
           await settingsRepository.setWebLLMModelId(null);
         }
       }
       
-      // Fallback to first available safe model
-      const availableModels = await this.getAvailableModels();
-      const safeModels = availableModels.filter(model => !model.low_resource_required && model.required_features.length === 0);
-      const defaultModel = safeModels.length > 0 ? safeModels[0] : availableModels[0];
+      // Fallback to first available safe model that ends with -MLC (standard naming)
+      let defaultModel = availableModels.find(model => model.model_id.endsWith('-MLC'));
+      
+      // If no -MLC model, try safe models
+      if (!defaultModel) {
+        const safeModels = availableModels.filter(model => !model.low_resource_required && model.required_features.length === 0);
+        defaultModel = safeModels.length > 0 ? safeModels[0] : availableModels[0];
+      }
       
       if (defaultModel) {
         this.selectedModelId = defaultModel.model_id;
         await settingsRepository.setWebLLMModelId(this.selectedModelId);
+        console.log('Defaulted to model:', this.selectedModelId);
         return this.selectedModelId;
       }
       
@@ -306,7 +314,14 @@ Respond with a structured workout plan in JSON format. Each day should include a
         throw new Error('No JSON found in AI response');
       }
       
-      const planData = JSON.parse(jsonMatch[0]);
+      let planData;
+      try {
+        planData = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error('Failed to parse AI response JSON:', parseError);
+        console.error('Raw JSON string:', jsonMatch[0]);
+        throw new Error('Invalid JSON format in AI response');
+      }
       
       // Convert to our format (simplified for now)
       const workoutPlan: WorkoutPlan = {
@@ -338,7 +353,15 @@ Respond with a structured workout plan in JSON format. Each day should include a
         return null;
       }
       
-      const patchData = JSON.parse(jsonMatch[0]);
+      let patchData;
+      try {
+        patchData = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error('Failed to parse workout plan patch JSON:', parseError);
+        console.error('Raw JSON string:', jsonMatch[0]);
+        return null;
+      }
+      
       return workoutPlanPatchSchema.parse(patchData);
     } catch (error) {
       console.error('Failed to parse workout plan patch:', error);

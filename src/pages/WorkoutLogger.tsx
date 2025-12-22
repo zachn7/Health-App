@@ -30,7 +30,7 @@ export default function WorkoutLogger() {
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [exerciseEntries, setExerciseEntries] = useState<ExerciseLogEntry[]>([]);
   const [sessionNotes, setSessionNotes] = useState('');
-  const [recentWorkouts, setRecentWorkouts] = useState<WorkoutLog[]>([]);
+  
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [manualWorkoutMode, setManualWorkoutMode] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -42,6 +42,12 @@ export default function WorkoutLogger() {
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Reset state for new date
+    setExerciseEntries([]);
+    setCurrentWorkout(null);
+    setIsLogging(false);
+    setStartTime(null);
+    
     loadWorkoutData();
     loadProfile();
     loadWorkoutPlans();
@@ -52,7 +58,18 @@ export default function WorkoutLogger() {
       // Check for workout passed from Workouts page
       const storedWorkout = sessionStorage.getItem('currentWorkout');
       if (storedWorkout) {
-        setCurrentWorkout(JSON.parse(storedWorkout));
+        try {
+          const workoutData = JSON.parse(storedWorkout);
+          // Validate the structure before setting
+          if (workoutData && typeof workoutData === 'object' && workoutData.exercises) {
+            setCurrentWorkout(workoutData);
+          } else {
+            console.warn('Invalid workout data structure in sessionStorage:', workoutData);
+          }
+        } catch (parseError) {
+          console.error('Failed to parse workout data from sessionStorage:', parseError);
+          console.error('Invalid data:', storedWorkout);
+        }
         sessionStorage.removeItem('currentWorkout');
       }
       
@@ -60,9 +77,7 @@ export default function WorkoutLogger() {
       const dateLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
       setWorkoutLog(dateLog || null);
       
-      // Load recent workouts
-      const recent = await repositories.workout.getWorkoutLogs();
-      setRecentWorkouts(recent.slice(0, 5));
+
       
       // Load exercises for names
       const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
@@ -80,6 +95,12 @@ export default function WorkoutLogger() {
         });
         setExerciseEntries(entries);
       } else if (dateLog) {
+        console.log('Loading existing workout log:', dateLog);
+        console.log('Workout entries with sets:', dateLog.entries.map(entry => ({
+          exerciseName: entry.exerciseName,
+          setsCount: entry.sets.length,
+          firstSet: entry.sets[0]
+        })));
         setExerciseEntries(dateLog.entries);
         setSessionNotes(dateLog.sessionNotes || '');
         setIsLogging(true);
@@ -97,10 +118,15 @@ export default function WorkoutLogger() {
   };
 
   const addSet = (exerciseIndex: number) => {
+    const currentSets = exerciseEntries[exerciseIndex].sets;
+    const lastSet = currentSets[currentSets.length - 1];
+    
+    // Autofill from previous set if available
     const newSet = {
-      set: (exerciseEntries[exerciseIndex].sets.length + 1),
-      reps: 0,
-      weight: undefined
+      set: (currentSets.length + 1),
+      reps: lastSet?.reps || 0,
+      weight: lastSet?.weight || undefined,
+      rpe: lastSet?.rpe || undefined
     };
     
     const updatedEntries = [...exerciseEntries];
@@ -193,9 +219,7 @@ export default function WorkoutLogger() {
       document.body.appendChild(successDiv);
       setTimeout(() => document.body.removeChild(successDiv), 3000);
       
-      // Reload recent workouts
-      const updated = await repositories.workout.getWorkoutLogs();
-      setRecentWorkouts(updated.slice(0, 5));
+
     } catch (error) {
       console.error('Failed to finish workout:', error);
       alert('Failed to finish workout. Please try again.');
@@ -316,36 +340,9 @@ export default function WorkoutLogger() {
     setShowExercisePicker(true);
   };
 
-  const navigateToLog = (log: WorkoutLog) => {
-    // Load the selected log's date and data
-    setSelectedDate(log.date);
-    
-    // Load the workout data for that date
-    loadWorkoutDataForDate(log.date);
-  };
+
   
-  const loadWorkoutDataForDate = async (date: string) => {
-    try {
-      const dateLog = await repositories.workout.getWorkoutLogByDate(date);
-      setWorkoutLog(dateLog || null);
-      
-      if (dateLog) {
-        setExerciseEntries(dateLog.entries);
-        setSessionNotes(dateLog.sessionNotes || '');
-        setIsLogging(true);
-        setCurrentWorkout(null);
-        setManualWorkoutMode(false);
-      } else {
-        setExerciseEntries([]);
-        setSessionNotes('');
-        setIsLogging(false);
-        setCurrentWorkout(null);
-        setManualWorkoutMode(false);
-      }
-    } catch (error) {
-      console.error('Failed to load workout data for date:', date, error);
-    }
-  };
+
   
   const handleSelectExercise = (exercise: ExerciseDBItem) => {
     const newEntry: ExerciseLogEntry = {
@@ -713,32 +710,7 @@ export default function WorkoutLogger() {
         </div>
       )}
       
-      {/* Recent Workouts */}
-      {recentWorkouts.length > 0 && (
-        <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Workouts</h2>
-          
-          <div className="space-y-3">
-            {recentWorkouts.map((log) => (
-              <button
-                key={log.id}
-                onClick={() => navigateToLog(log)}
-                className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left w-full"
-              >
-                <div>
-                  <div className="font-medium">{new Date(log.date).toLocaleDateString()}</div>
-                  <div className="text-sm text-gray-600">
-                    {log.entries.length} exercises • {log.entries.reduce((sum, entry) => sum + entry.sets.length, 0)} sets • {log.duration} minutes
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500">
-                  {new Date(log.createdAt).toLocaleTimeString()}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
       
       {/* Exercise Picker Modal */}
       {showExercisePicker && (

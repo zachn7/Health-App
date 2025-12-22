@@ -64,7 +64,11 @@ function AppContent() {
         />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/coach" element={<Coach />} />
+        <Route path="/coach" element={
+          <ErrorBoundary>
+            <Coach />
+          </ErrorBoundary>
+        } />
         <Route path="/workouts" element={<Workouts />} />
         <Route path="/log/workout" element={<WorkoutLogger />} />
         <Route path="/nutrition" element={<Nutrition />} />

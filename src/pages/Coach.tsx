@@ -29,6 +29,8 @@ export default function Coach() {
   const [availableModels, setAvailableModels] = useState<any[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [hasWebGPU, setHasWebGPU] = useState<boolean | null>(null);
+  const [modelValidationWarning, setModelValidationWarning] = useState<string | null>(null);
   
   const [checkIn, setCheckIn] = useState({
     adherenceRating: 3,
@@ -41,8 +43,22 @@ export default function Coach() {
   useEffect(() => {
     loadCoachData();
     loadWebLLMStatus();
+    checkWebGPUSupport();
     loadWebLLMModels();
   }, []);
+
+  const checkWebGPUSupport = async () => {
+    try {
+      const supported = 'gpu' in navigator;
+      setHasWebGPU(supported);
+      if (!supported) {
+        console.log('WebGPU not supported in this browser');
+      }
+    } catch (error) {
+      console.error('Error checking WebGPU support:', error);
+      setHasWebGPU(false);
+    }
+  };
 
   const loadWebLLMStatus = async () => {
     try {
@@ -62,8 +78,15 @@ export default function Coach() {
       
       const currentModel = await webllmService.getSelectedModelId();
       setSelectedModelId(currentModel);
+      
+      // Validate selected model exists in available models
+      const modelExists = models.some(m => m.model_id === currentModel);
+      if (!modelExists) {
+        setModelValidationWarning(`Selected model "${currentModel}" not found in available models. A default will be selected.`);
+      }
     } catch (error) {
       console.error('Failed to load WebLLM models:', error);
+      setModelValidationWarning('Failed to load WebLLM models list. Try refreshing the page.');
     }
   };
 
@@ -71,6 +94,7 @@ export default function Coach() {
     try {
       await webllmService.setSelectedModelId(modelId);
       setSelectedModelId(modelId);
+      setModelValidationWarning(null);
       console.log('Model changed to:', modelId);
     } catch (error) {
       console.error('Failed to change model:', error);
@@ -378,6 +402,25 @@ export default function Coach() {
               </div>
             </div>
             
+            {/* Model Validation Warning */}
+            {modelValidationWarning && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="w-4 h-4 mt-0.5 text-yellow-600 mr-2" />
+                  <div className="text-sm text-yellow-800">
+                    <div className="font-medium">Model Selection Issue</div>
+                    <div>{modelValidationWarning}</div>
+                    <button
+                      onClick={() => setModelValidationWarning(null)}
+                      className="text-xs text-yellow-600 hover:text-yellow-800 underline mt-1"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* DEV Diagnostics Panel */}
             {process.env.NODE_ENV === 'development' && (
               <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -392,11 +435,13 @@ export default function Coach() {
                 </div>
                 {showDiagnostics && (
                   <div className="text-xs text-gray-600 space-y-1">
+                    <div><strong>WebGPU Support:</strong> {hasWebGPU === null ? 'Checking...' : hasWebGPU ? '✅ Yes' : '❌ No'}</div>
                     <div><strong>Available Model IDs:</strong> [{availableModels.map(m => m.model_id).join(', ')}]</div>
                     <div><strong>Selected Model ID:</strong> {selectedModelId}</div>
                     <div><strong>Selected exists in model_list:</strong> {availableModels.some(m => m.model_id === selectedModelId) ? '✅ Yes' : '❌ No'}</div>
                     <div><strong>Model Ready:</strong> {webllmModelReady ? '✅ Yes' : '❌ No'}</div>
                     <div><strong>Model Loading:</strong> {webllmModelLoading ? '🔄 Yes' : '✅ No'}</div>
+                    <div><strong>WebLLM Enabled:</strong> {webllmEnabled ? '✅ Yes' : '❌ No'}</div>
                   </div>
                 )}
               </div>
