@@ -12,7 +12,8 @@
     "build:docs": "tsc && vite build && xcopy /E /I dist docs",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:ci": "playwright test --project=chromium"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
