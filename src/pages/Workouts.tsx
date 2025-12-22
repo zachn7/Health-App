@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { repositories } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
+import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
 import { Edit3, Plus, Trash2, X } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile } from '../types';
@@ -303,8 +304,25 @@ export default function Workouts() {
       notes: workout.notes
     };
     
-    sessionStorage.setItem('currentWorkout', JSON.stringify(workoutData));
-    window.location.hash = '/log/workout';
+    const stringifyResult = safeJSONStringify(workoutData, CurrentWorkoutSchema, 'Workouts page sessionStorage');
+    
+    if (stringifyResult.success && stringifyResult.result) {
+      sessionStorage.setItem('currentWorkout', stringifyResult.result);
+      window.location.hash = '/log/workout';
+    } else {
+      console.error('❌ Failed to prepare workout data:', stringifyResult.error);
+      
+      // Show user-friendly error
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg z-50';
+      errorDiv.innerHTML = `✗ Failed to prepare workout: ${stringifyResult.error || 'Invalid workout data'}`;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => {
+        if (document.body.contains(errorDiv)) {
+          document.body.removeChild(errorDiv);
+        }
+      }, 5000);
+    }
   };
 
   useEffect(() => {
@@ -516,8 +534,26 @@ export default function Workouts() {
                                     weekIndex: selectedWeek,
                                     dayIndex: dayIndex
                                   };
-                                  sessionStorage.setItem('currentWorkout', JSON.stringify(selectedWorkoutData));
-                                  window.location.hash = '/log/workout';
+                                  
+                                  const stringifyResult = safeJSONStringify(selectedWorkoutData, CurrentWorkoutSchema, 'Workouts page selected exercises');
+                                  
+                                  if (stringifyResult.success && stringifyResult.result) {
+                                    sessionStorage.setItem('currentWorkout', stringifyResult.result);
+                                    window.location.hash = '/log/workout';
+                                  } else {
+                                    console.error('❌ Failed to prepare selected exercises:', stringifyResult.error);
+                                    
+                                    // Show user-friendly error
+                                    const errorDiv = document.createElement('div');
+                                    errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg z-50';
+                                    errorDiv.innerHTML = `✗ Failed to prepare exercises: ${stringifyResult.error || 'Invalid exercise data'}`;
+                                    document.body.appendChild(errorDiv);
+                                    setTimeout(() => {
+                                      if (document.body.contains(errorDiv)) {
+                                        document.body.removeChild(errorDiv);
+                                      }
+                                    }, 5000);
+                                  }
                                 }}
                                 className="btn btn-primary text-sm"
                               >

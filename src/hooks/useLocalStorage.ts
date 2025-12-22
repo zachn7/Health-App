@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { safeJSONParse } from '@/lib/schemas';
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
   // Get from local storage then parse stored json or return initialValue
@@ -9,7 +10,20 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
     try {
       const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
+      if (!item) {
+        return initialValue;
+      }
+      
+      // For useLocalStorage, we'll use a more permissive schema since it's generic
+      const dynamicSchema: any = { safeParse: (data: any) => ({ success: true, data }) };
+      const parseResult = safeJSONParse(item, dynamicSchema, `localStorage key "${key}"`);
+      
+      if (parseResult.success && parseResult.data !== undefined) {
+        return parseResult.data as T;
+      } else {
+        console.warn(`Error reading localStorage key "${key}":`, parseResult.error);
+        return initialValue;
+      }
     } catch (error) {
       console.warn(`Error reading localStorage key "${key}":`, error);
       return initialValue;
@@ -40,7 +54,18 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === key && e.newValue !== null) {
-        setStoredValue(JSON.parse(e.newValue));
+        try {
+          const dynamicSchema: any = { safeParse: (data: any) => ({ success: true, data }) };
+          const parseResult = safeJSONParse(e.newValue, dynamicSchema, `localStorage change "${key}"`);
+          
+          if (parseResult.success && parseResult.data !== undefined) {
+            setStoredValue(parseResult.data as T);
+          } else {
+            console.warn(`Error handling storage change for key "${key}":`, parseResult.error);
+          }
+        } catch (error) {
+          console.warn(`Error handling storage change for key "${key}":`, error);
+        }
       }
     };
 

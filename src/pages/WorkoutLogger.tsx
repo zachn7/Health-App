@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Download } from 'lucide-react';
 import { repositories } from '../db';
 import ExercisePicker from '../components/ExercisePicker';
+import { safeJSONParse, CurrentWorkoutSchema } from '../lib/schemas';
 
 import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan } from '../types';
 
@@ -58,18 +59,28 @@ export default function WorkoutLogger() {
       // Check for workout passed from Workouts page
       const storedWorkout = sessionStorage.getItem('currentWorkout');
       if (storedWorkout) {
-        try {
-          const workoutData = JSON.parse(storedWorkout);
-          // Validate the structure before setting
-          if (workoutData && typeof workoutData === 'object' && workoutData.exercises) {
-            setCurrentWorkout(workoutData);
-          } else {
-            console.warn('Invalid workout data structure in sessionStorage:', workoutData);
+        const parseResult = safeJSONParse(storedWorkout, CurrentWorkoutSchema, 'WorkoutLogger sessionStorage');
+        
+        if (parseResult.success && parseResult.data) {
+          setCurrentWorkout(parseResult.data);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ Successfully loaded workout from sessionStorage:', parseResult.data);
           }
-        } catch (parseError) {
-          console.error('Failed to parse workout data from sessionStorage:', parseError);
-          console.error('Invalid data:', storedWorkout);
+        } else {
+          console.error('❌ Failed to load workout from sessionStorage:', parseResult.error);
+          
+          // Show user-friendly error
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg z-50';
+          errorDiv.innerHTML = `✗ Failed to load workout data: ${parseResult.error || 'Invalid data format'}`;
+          document.body.appendChild(errorDiv);
+          setTimeout(() => {
+            if (document.body.contains(errorDiv)) {
+              document.body.removeChild(errorDiv);
+            }
+          }, 5000);
         }
+        
         sessionStorage.removeItem('currentWorkout');
       }
       

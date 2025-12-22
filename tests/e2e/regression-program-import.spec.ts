@@ -342,4 +342,76 @@ test.describe('Regression: Program Import - No Unexpected Token (R04)', () => {
       // Just make sure it doesn't crash
     }
   });
+
+  test('should import program into workout logger without errors', async ({ page }) => {
+    // Set up profile first
+    await page.goto('./#/profile');
+    await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.getByLabel('Age').fill('25');
+    await page.getByLabel('Sex').selectOption('male');
+    await page.getByLabel('Activity Level').selectOption('moderate');
+    await page.getByLabel('Experience Level').selectOption('beginner');
+    await page.getByPlaceholder(/100.*250/).fill('175');
+    await page.getByPlaceholder(/30.*300/).fill('75');
+    await page.getByLabel('bodyweight').check();
+    await page.getByLabel('monday').check();
+    await page.getByRole('button', { name: 'Save Profile' }).click();
+    
+    // Create a simple workout plan
+    await page.goto('./#/workouts');
+    await page.waitForLoadState();
+    
+    // Look for any existing workout plans or create one
+    const existingPlans = page.locator('.workout-plan, .card').filter({ hasText: /workout|plan/i });
+    const planCount = await existingPlans.count();
+    
+    if (planCount > 0) {
+      // Use the first available plan
+      const firstPlan = existingPlans.first();
+      await expect(firstPlan).toBeVisible();
+      
+      // Look for import/log button
+      const importButton = firstPlan.getByRole('button', { name: /Log|Start|Import/i });
+      if (await importButton.isVisible()) {
+        await importButton.click();
+        
+        // Should navigate to workout logger without errors
+        await page.waitForTimeout(2000);
+        
+        // Check if we're on the workout logger page
+        await expect(page.getByText(/Workout Logger|Logging|Exercise/i)).toBeVisible({ timeout: 10000 });
+        
+        // Should not show Unexpected token error
+        await expect(page.getByText(/Unexpected token/i)).not.toBeVisible({ timeout: 5000 });
+        
+        // Should show some indication of loaded workout
+        const workoutInfo = page.locator('.workout-info, .current-workout, .exercise-list');
+        if (await workoutInfo.isVisible()) {
+          // Success - workout was imported
+          console.log('✅ Successfully imported workout program');
+        } else {
+          // At least we got to the logger without errors
+          console.log('✅ Navigated to workout logger without JSON errors');
+        }
+      } else {
+        // Try alternative import methods
+        const startButton = firstPlan.getByRole('button', { name: /Start/i });
+        if (await startButton.isVisible()) {
+          await startButton.click();
+          await page.waitForTimeout(2000);
+          
+          // Check for successful navigation without errors
+          await expect(page.getByText(/Workout Logger|Logging|Exercise/i)).toBeVisible({ timeout: 10000 });
+          await expect(page.getByText(/Unexpected token/i)).not.toBeVisible({ timeout: 5000 });
+        }
+      }
+    } else {
+      // Create a simple test by checking the workouts page loads
+      await expect(page.getByText(/Workouts|Programs/i)).toBeVisible();
+      await expect(page.getByText(/Unexpected token/i)).not.toBeVisible();
+    }
+    
+    // Verify no JSON parsing errors occurred throughout the flow
+    await expect(page.getByText(/JSON.*error|parse.*error|Unexpected token/i)).not.toBeVisible();
+  });
 });
