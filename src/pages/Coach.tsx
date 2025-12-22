@@ -44,8 +44,19 @@ export default function Coach() {
     loadCoachData();
     loadWebLLMStatus();
     checkWebGPUSupport();
-    loadWebLLMModels();
+    
+    // Only load models if WebLLM is enabled
+    if (webllmEnabled) {
+      loadWebLLMModels();
+    }
   }, []);
+  
+  useEffect(() => {
+    // Load models when WebLLM is enabled
+    if (webllmEnabled && availableModels.length === 0) {
+      loadWebLLMModels();
+    }
+  }, [webllmEnabled]);
 
   const checkWebGPUSupport = async () => {
     try {
@@ -74,28 +85,46 @@ export default function Coach() {
     try {
       const models = await webllmService.getAvailableModels();
       setAvailableModels(models);
-      console.log('Available models:', models.map(m => m.model_id));
+      console.log('Available models:', models.length, 'models loaded');
       
       const currentModel = await webllmService.getSelectedModelId();
       setSelectedModelId(currentModel);
       
       // Validate selected model exists in available models
       const modelExists = models.some(m => m.model_id === currentModel);
-      if (!modelExists) {
-        setModelValidationWarning(`Selected model "${currentModel}" not found in available models. A default will be selected.`);
+      if (!modelExists && currentModel) {
+        console.warn(`Selected model "${currentModel}" not found in available models. Available:`, models.map(m => m.model_id));
+        setModelValidationWarning(`Previously selected model "${currentModel}" is not available. A default model will be automatically selected.`);
+      }
+      
+      // If no models available, show appropriate warning
+      if (models.length === 0) {
+        setModelValidationWarning('No WebLLM models are available. Please check your browser compatibility.');
       }
     } catch (error) {
       console.error('Failed to load WebLLM models:', error);
-      setModelValidationWarning('Failed to load WebLLM models list. Try refreshing the page.');
+      setModelValidationWarning('Failed to load WebLLM models. Please try refreshing the page or check your browser compatibility.');
     }
   };
 
   const handleModelChange = async (modelId: string) => {
     try {
+      const model = availableModels.find(m => m.model_id === modelId);
+      if (!model) {
+        throw new Error(`Model "${modelId}" not found in available models`);
+      }
+      
+      setModelValidationWarning(null);
       await webllmService.setSelectedModelId(modelId);
       setSelectedModelId(modelId);
-      setModelValidationWarning(null);
       console.log('Model changed to:', modelId);
+      
+      // If model was already loaded, we might need to reload the engine
+      if (webllmModelReady) {
+        setModelValidationWarning(`Model selection updated to "${modelId}". Reloading AI engine...`);
+        // The user might need to reinitialize if the engine was already loaded
+        setWebLLMModelReady(false);
+      }
     } catch (error) {
       console.error('Failed to change model:', error);
       setWebLLMError(error instanceof Error ? error.message : 'Failed to change model');
@@ -254,13 +283,38 @@ export default function Coach() {
   const initializeWebLLM = async () => {
     setWebLLMModelLoading(true);
     setWebLLMError(null);
+    setModelValidationWarning(null);
+    
     try {
+      // Set up progress callback for better UX
+      webllmService.setInitProgressCallback((progress) => {
+        console.log('WebLLM init progress:', progress);
+        // Could show progress details to user if needed
+      });
+      
       await webllmService.initialize();
       setWebLLMModelReady(true);
+      
+      // Check if the loaded model matches what we expected
+      const engineState = webllmService.getEngineState();
+      const selectedModel = availableModels.find(m => m.model_id === selectedModelId);
+      
+      if (!selectedModel || !availableModels.some(m => m.model_id === engineState.selectedModelId)) {
+        setModelValidationWarning(`Model auto-fallback occurred. Loading: ${engineState.selectedModelId}`);
+      }
     } catch (error) {
       console.error('Failed to initialize WebLLM:', error);
-      setWebLLMError(error instanceof Error ? error.message : 'Failed to initialize AI model');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize AI model';
+      setWebLLMError(errorMessage);
+      
+      // Try to detect specific issues for better user guidance
+      if (errorMessage.includes('WebGPU')) {
+        setWebLLMError('WebGPU is not available in your browser. Please use Chrome, Edge, or another WebGPU-enabled browser.');
+      } else if (errorMessage.includes('disabled')) {
+        setWebLLMError('WebLLM Coach is disabled. Please enable it in Settings.');
+      }
     } finally {
+      webllmService.clearInitProgressCallback();
       setWebLLMModelLoading(false);
     }
   };
@@ -340,7 +394,7 @@ export default function Coach() {
       </div>
 
       <div className="space-y-6">
-        {/* AI Coach Chat */}
+        {/* AI Coach Section */}
         {webllmEnabled && (
           <div className="card">
             <div className="flex justify-between items-center mb-4">
@@ -423,25 +477,55 @@ export default function Coach() {
             
             {/* DEV Diagnostics Panel */}
             {process.env.NODE_ENV === 'development' && (
-              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="mb-4 p-3 bg-gray-900 text-gray-100 border border-gray-700 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-medium text-gray-700">DEV Diagnostics</h4>
+                  <h4 className="text-sm font-medium text-green-400">DEV Diagnostics</h4>
                   <button
                     onClick={() => setShowDiagnostics(!showDiagnostics)}
-                    className="text-xs text-gray-500 hover:text-gray-700"
+                    className="text-xs text-gray-400 hover:text-gray-200"
                   >
                     {showDiagnostics ? 'Hide' : 'Show'}
                   </button>
                 </div>
                 {showDiagnostics && (
-                  <div className="text-xs text-gray-600 space-y-1">
-                    <div><strong>WebGPU Support:</strong> {hasWebGPU === null ? 'Checking...' : hasWebGPU ? '✅ Yes' : '❌ No'}</div>
-                    <div><strong>Available Model IDs:</strong> [{availableModels.map(m => m.model_id).join(', ')}]</div>
-                    <div><strong>Selected Model ID:</strong> {selectedModelId}</div>
-                    <div><strong>Selected exists in model_list:</strong> {availableModels.some(m => m.model_id === selectedModelId) ? '✅ Yes' : '❌ No'}</div>
-                    <div><strong>Model Ready:</strong> {webllmModelReady ? '✅ Yes' : '❌ No'}</div>
-                    <div><strong>Model Loading:</strong> {webllmModelLoading ? '🔄 Yes' : '✅ No'}</div>
-                    <div><strong>WebLLM Enabled:</strong> {webllmEnabled ? '✅ Yes' : '❌ No'}</div>
+                  <div className="text-xs monospace space-y-1">
+                    <div className="flex justify-between"><span className="text-gray-400">hasWebGPU:</span><span className={hasWebGPU ? 'text-green-400' : 'text-red-400'}>{hasWebGPU === null ? 'CHECKING...' : hasWebGPU ? 'TRUE' : 'FALSE'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">selectedModelId:</span><span className="text-yellow-400">{selectedModelId || 'NULL'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">modelListCount:</span><span className="text-blue-400">{availableModels.length}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">modelIdFound:</span><span className={availableModels.some(m => m.model_id === selectedModelId) ? 'text-green-400' : 'text-red-400'}>{availableModels.some(m => m.model_id === selectedModelId) ? 'TRUE' : 'FALSE'}</span></div>
+                    
+                    {(() => {
+                      const engineState = webllmService.getEngineState();
+                      return (
+                        <>
+                          <div className="flex justify-between"><span className="text-gray-400">engineState.isInitialized:</span><span className={engineState.isInitialized ? 'text-green-400' : 'text-red-400'}>{engineState.isInitialized.toString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-400">engineState.isLoading:</span><span className={engineState.isLoading ? 'text-yellow-400' : 'text-green-400'}>{engineState.isLoading.toString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-400">engineState.hasEngine:</span><span className={engineState.hasEngine ? 'text-green-400' : 'text-red-400'}>{engineState.hasEngine.toString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-400">engineState.selectedModelId:</span><span className="text-blue-400">{engineState.selectedModelId || 'NULL'}</span></div>
+                        </>
+                      );
+                    })()}
+                    
+                    <div className="flex justify-between"><span className="text-gray-400">webllmModelReady:</span><span className={webllmModelReady ? 'text-green-400' : 'text-red-400'}>{webllmModelReady.toString()}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">webllmModelLoading:</span><span className={webllmModelLoading ? 'text-yellow-400' : 'text-green-400'}>{webllmModelLoading.toString()}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">webllmEnabled:</span><span className={webllmEnabled ? 'text-green-400' : 'text-red-400'}>{webllmEnabled.toString()}</span></div>
+                    
+                    {/* DEBUG: Reset button */}
+                    <div className="pt-2 border-t border-gray-700">
+                      <button
+                        onClick={() => {
+                          webllmService.reset();
+                          setWebLLMModelReady(false);
+                          setWebLLMModelLoading(false);
+                          setWebLLMError(null);
+                          setModelValidationWarning(null);
+                          setShowDiagnostics(false);
+                        }}
+                        className="text-xs text-red-400 hover:text-red-300 underline"
+                      >
+                        DEBUG: Reset WebLLM Engine
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -565,6 +649,91 @@ export default function Coach() {
                 )}
               </div>
             )}
+          </div>
+        )}
+        
+        {/* Fallback Coach UI when WebLLM is not available */}
+        {(!webllmEnabled || webllmError || (hasWebGPU === false)) && (
+          <div className="card">
+            <div className="flex items-start space-x-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Brain className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-medium text-gray-900 mb-2">Coach Features</h2>
+                
+                {hasWebGPU === false && (
+                  <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-start">
+                      <AlertCircle className="w-4 h-4 mt-0.5 text-orange-600 mr-2" />
+                      <div className="text-sm text-orange-800">
+                        <div className="font-medium">WebGPU Required for AI Features</div>
+                        <div className="mt-1">
+                          Your browser doesn't support WebGPU, which is required for the AI coach. 
+                          Please use Chrome, Edge, or another WebGPU-enabled browser.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {webllmError && (
+                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start">
+                      <AlertCircle className="w-4 h-4 mt-0.5 text-yellow-600 mr-2" />
+                      <div className="text-sm text-yellow-800">
+                        <div className="font-medium">AI Features Unavailable</div>
+                        <div className="mt-1">{webllmError}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-2">Available Coach Features:</h3>
+                    <ul className="space-y-2 text-sm text-gray-600">
+                      <li className="flex items-start">
+                        <span className="text-green-500 mr-2">✓</span>
+                        <span>Workout plan generation using deterministic algorithms</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-500 mr-2">✓</span>
+                        <span>Personalized macro calculations based on your profile</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-500 mr-2">✓</span>
+                        <span>Exercise selection based on your equipment and goals</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-500 mr-2">✓</span>
+                        <span>Weekly check-ins and progress tracking</span>
+                      </li>
+                    </ul>
+                  </div>
+                  
+                  {!webllmEnabled && (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="text-sm text-gray-700">
+                        <div className="font-medium mb-1">Enable AI Features</div>
+                        <div>
+                          Go to <a href="/#/settings" className="text-blue-600 hover:text-blue-700 underline">Settings</a> to enable the AI coach for personalized workout advice and plan modifications.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {hasWebGPU === true && !webllmEnabled && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="text-sm text-green-700">
+                        <div className="font-medium mb-1">WebGPU Supported!</div>
+                        <div>Your browser supports AI features. Enable the AI Coach in Settings to get started.</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

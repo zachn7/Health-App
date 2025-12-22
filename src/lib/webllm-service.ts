@@ -47,16 +47,19 @@ export class WebLLMService {
   private static chatHistory: ChatMessage[] = [];
   private static availableModels: WebLLMModelRecord[] = [];
   private static selectedModelId: string | null = null;
+  private static initializationPromise: Promise<void> | null = null;
+  private static initProgressCallback: ((progress: webllm.InitProgressReport) => void) | null = null;
   
-  // static getAvailableModels(): WebLLMModelRecord[] {
-  //   // Return models from webllm.prebuiltAppConfig.model_list
-  //   try {
-  //     return webllm.prebuiltAppConfig.model_list as WebLLMModelRecord[];
-  //   } catch (error) {
-  //     console.error('Failed to get available models:', error);
-  //     return [];
-  //   }
-  // }
+  /**
+   * Get the engine initialization progress callback
+   */
+  static setInitProgressCallback(callback: (progress: any) => void): void {
+    this.initProgressCallback = callback;
+  }
+
+  static clearInitProgressCallback(): void {
+    this.initProgressCallback = null;
+  }
   
   static async getAvailableModels(): Promise<WebLLMModelRecord[]> {
     try {
@@ -149,18 +152,37 @@ export class WebLLMService {
     }
   }
   
+  /**
+   * Initialize WebLLM engine with lazy loading
+   */
   static async initialize(): Promise<void> {
-    if (this.isInitialized) return;
+    // If already initializing, wait for that to complete
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
     
+    // If already initialized, return
+    if (this.isInitialized) {
+      return;
+    }
+    
+    // Check if WebLLM is enabled
     const enabled = await this.isWebLLMEnabled();
     if (!enabled) {
       throw new Error('WebLLM AI Coach is disabled in settings');
     }
     
+    // If already loading, wait for it to complete
     if (this.isLoading) {
       throw new Error('WebLLM model is currently loading');
     }
     
+    // Create initialization promise
+    this.initializationPromise = this._doInitialize();
+    return this.initializationPromise;
+  }
+  
+  private static async _doInitialize(): Promise<void> {
     try {
       // Check if GPU capabilities are available
       if (!('gpu' in navigator)) {
@@ -175,13 +197,19 @@ export class WebLLMService {
       
       // Load available models and cache them
       this.availableModels = await this.getAvailableModels();
-      console.log('Available models:', this.availableModels.map(m => m.model_id));
+      console.log('Available models:', this.availableModels.length, 'models loaded');
       
       // Initialize the engine with selected model
-      this.engine = await webllm.CreateMLCEngine(
-        selectedModelId,
-        { initProgressCallback: this.onProgressCallback.bind(this) }
-      ) as webllm.MLCEngineInterface;
+      const options = {
+        initProgressCallback: (progress: any) => {
+          if (this.initProgressCallback) {
+            this.initProgressCallback(progress);
+          }
+          this.onProgressCallback(progress);
+        }
+      };
+      
+      this.engine = await webllm.CreateMLCEngine(selectedModelId, options) as webllm.MLCEngineInterface;
       
       this.isInitialized = true;
       this.isLoading = false;
@@ -192,7 +220,39 @@ export class WebLLMService {
       this.isLoading = false;
       console.error('Failed to initialize WebLLM:', error);
       throw error;
+    } finally {
+      this.initializationPromise = null;
     }
+  }
+  
+  /**
+   * Get current engine state for debugging
+   */
+  static getEngineState(): {
+    isInitialized: boolean;
+    isLoading: boolean;
+    hasEngine: boolean;
+    selectedModelId: string | null;
+    availableModelsCount: number;
+  } {
+    return {
+      isInitialized: this.isInitialized,
+      isLoading: this.isLoading,
+      hasEngine: !!this.engine,
+      selectedModelId: this.selectedModelId,
+      availableModelsCount: this.availableModels.length
+    };
+  }
+  
+  /**
+   * Reset engine state (for debugging/recovery)
+   */
+  static reset(): void {
+    this.engine = null;
+    this.isInitialized = false;
+    this.isLoading = false;
+    this.initializationPromise = null;
+    this.chatHistory = [];
   }
   
   private static async setSystemPrompt(): Promise<void> {
@@ -227,8 +287,8 @@ If a request falls outside your fitness expertise, politely refuse and suggest a
     });
   }
   
-  private static onProgressCallback(progress: webllm.InitProgressReport): void {
-    console.log(`WebLLM loading: ${progress.text}`);
+  private static onProgressCallback(progress: any): void {
+    console.log(`WebLLM loading: ${progress.text || progress}`);
     // This could be wired up to UI progress indicator
   }
   
