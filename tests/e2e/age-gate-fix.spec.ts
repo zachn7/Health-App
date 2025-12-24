@@ -40,12 +40,30 @@ test.describe('Age Gate Continue Fix', () => {
     expect(ageGateAccepted).toBeNull();
   });
 
-  test('should show error for invalid age', async ({ page }) => {
-    await page.getByLabel('Confirm your age').fill('abc');
+  test('should show error for age of 0', async ({ page }) => {
+    await page.getByLabel('Confirm your age').fill('0');
     await page.getByRole('button', { name: 'Continue' }).click();
     
-    await expect(page.getByText('Please enter a valid age')).toBeVisible();
+    // Wait for error element to be visible, then check text
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText('Please enter a valid age');
+    await expect(page.getByLabel('Confirm your age')).toBeVisible();
     
+    // Should not set localStorage
+    const ageGateAccepted = await page.evaluate(() => localStorage.getItem('age_gate_accepted'));
+    expect(ageGateAccepted).toBeNull();
+  });
+
+  test('should show error for age over 150', async ({ page }) => {
+    await page.getByLabel('Confirm your age').fill('151');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    
+    // Wait for error element to be visible, then check text
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText('Please enter a valid age');
+    await expect(page.getByLabel('Confirm your age')).toBeVisible();
+    
+    // Should not set localStorage
     const ageGateAccepted = await page.evaluate(() => localStorage.getItem('age_gate_accepted'));
     expect(ageGateAccepted).toBeNull();
   });

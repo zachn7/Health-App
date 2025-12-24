@@ -22,7 +22,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
     
     const ageNum = parseInt(age, 10);
     
-    if (isNaN(ageNum) || ageNum < 1) {
+    if (isNaN(ageNum) || ageNum < 1 || ageNum > 150) {
       setError('Please enter a valid age');
       return;
     }
@@ -75,7 +75,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
         </div>
         
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             <div>
               <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-2">
                 Confirm your age
