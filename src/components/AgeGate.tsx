@@ -95,7 +95,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
                 required
               />
               {error && (
-                <p className="mt-2 text-sm text-red-600" role="alert">
+                <p className="mt-2 text-sm text-red-600" role="alert" data-testid="age-gate-error">
                   {error}
                 </p>
               )}
@@ -106,7 +106,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
                 Age Requirement
               </h3>
               <p className="text-sm text-blue-700">
-                You must be at least {MINIMUM_AGE} years old to use this app.
+                This app is only available to users {MINIMUM_AGE} years or older.
               </p>
             </div>
             

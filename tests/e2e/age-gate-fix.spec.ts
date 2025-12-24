@@ -32,7 +32,7 @@ test.describe('Age Gate Continue Fix', () => {
     await page.getByRole('button', { name: 'Continue' }).click();
     
     // Should show error and stay on age gate
-    await expect(page.getByText('You must be at least 13 years old to use this app.')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText(/You must be at least 13 years old/);
     await expect(page.getByLabel('Confirm your age')).toBeVisible();
     
     // Should not set localStorage
