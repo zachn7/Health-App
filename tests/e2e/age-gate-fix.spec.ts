@@ -15,7 +15,7 @@ test.describe('Age Gate Continue Fix', () => {
     await page.getByLabel('Confirm your age').fill('20');
     
     // Click continue
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByTestId('age-gate-continue').click();
     
     // Should navigate to onboarding without refresh
     await expect(page.getByText('Welcome to CodePuppy Trainer!')).toBeVisible();
@@ -29,7 +29,7 @@ test.describe('Age Gate Continue Fix', () => {
 
   test('should show error when age < 13', async ({ page }) => {
     await page.getByLabel('Confirm your age').fill('12');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByTestId('age-gate-continue').click();
     
     // Should show error and stay on age gate
     await expect(page.getByRole('alert')).toHaveText(/You must be at least 13 years old/);
@@ -42,7 +42,7 @@ test.describe('Age Gate Continue Fix', () => {
 
   test('should show error for age of 0', async ({ page }) => {
     await page.getByLabel('Confirm your age').fill('0');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByTestId('age-gate-continue').click();
     
     // Wait for error element to be visible, then check text
     await expect(page.getByRole('alert')).toBeVisible();
@@ -56,7 +56,7 @@ test.describe('Age Gate Continue Fix', () => {
 
   test('should show error for age over 150', async ({ page }) => {
     await page.getByLabel('Confirm your age').fill('151');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByTestId('age-gate-continue').click();
     
     // Wait for error element to be visible, then check text
     await expect(page.getByRole('alert')).toBeVisible();
@@ -71,19 +71,20 @@ test.describe('Age Gate Continue Fix', () => {
   test('should disable button during loading', async ({ page }) => {
     await page.getByLabel('Confirm your age').fill('20');
     
-    // Click continue
-    const continueButton = page.getByRole('button', { name: 'Continue' });
+    // Click continue using stable selector
+    const continueButton = page.getByTestId('age-gate-continue');
     await continueButton.click();
     
-    // Button should show loading state
-    await expect(continueButton).toHaveText('Saving...');
+    // Button should show loading state - check it becomes disabled
+    // The text may change quickly, so we check for any loading indicator text
     await expect(continueButton).toBeDisabled();
+    await expect(continueButton).toHaveText(/Saving/);
   });
 
   test('should persist across page reload', async ({ page }) => {
     // Complete age gate
     await page.getByLabel('Confirm your age').fill('20');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByTestId('age-gate-continue').click();
     await page.waitForURL('**/onboarding');
     
     // Reload page

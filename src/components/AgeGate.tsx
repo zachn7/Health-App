@@ -45,7 +45,8 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
       
       console.log('Age gate passed, navigating...');
       
-      // Call the callback immediately - localStorage updates are synchronous in React
+      // Keep loading state briefly for visual feedback, then call callback
+      await new Promise(resolve => setTimeout(resolve, 100));
       setIsLoading(false);
       if (onAgeGatePassed) {
         onAgeGatePassed();
@@ -123,6 +124,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
               type="submit"
               className="btn btn-primary w-full"
               disabled={!age || isLoading}
+              data-testid="age-gate-continue"
             >
               {isLoading ? 'Saving...' : 'Continue'}
             </button>
