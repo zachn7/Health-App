@@ -17,7 +17,7 @@ permissions:
   id-token: write
 
 jobs:
-  # Test job
+  # Test job - runs smoke tests only for faster deployment
   test:
     runs-on: ubuntu-latest
     steps:
@@ -39,14 +39,14 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
-      - name: Run E2E tests
+      - name: Run E2E smoke tests
         run: npm run test:e2e:ci
       
-      - name: Upload test results
-        if: always()
+      - name: Upload test results on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-smoke
           path: playwright-report/
           retention-days: 30
 
