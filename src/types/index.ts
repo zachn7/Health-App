@@ -195,10 +195,13 @@ export interface FoodLogItem {
   sugarG?: number;
   sodiumMg?: number;
   barcode?: string;
-  // New fields for proper serving/grams handling
-  servingGrams?: number; // grams per serving (e.g., 45g for 1 serving)
-  baseUnit: 'serving' | 'grams'; // base unit for the stored macros
+  // Canonical serving model
+  servingGrams: number; // grams per unit (gramsPerUnit in canonical model)
+  baseUnit: 'serving' | 'grams'; // Unit being measured
   fdcId?: number; // USDA FDC ID for reference
+  computedTotalGrams: number; // Precomputed: quantidade * servingGrams (total grams invariant)
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface NutritionLog {

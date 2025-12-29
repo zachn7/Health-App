@@ -449,6 +449,9 @@ class USDAService {
       sodiumMg: macroNutrients.sodiumMg !== undefined ? Math.round((macroNutrients.sodiumMg * scaleFactor)) : undefined
     };
     
+    // Canonical model: totalGrams = quantity * gramsPerUnit
+    const computedTotalGrams = finalQuantity * finalServingGrams;
+    
     return {
       id: crypto.randomUUID(),
       name: foodDetail.description,
@@ -457,7 +460,10 @@ class USDAService {
       ...finalMacros,
       servingGrams: finalServingGrams,
       baseUnit: finalBaseUnit,
-      fdcId: fdcId
+      fdcId: fdcId,
+      computedTotalGrams,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
   }
   

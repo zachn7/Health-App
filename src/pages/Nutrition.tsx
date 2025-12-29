@@ -21,7 +21,8 @@ export default function Nutrition() {
     carbsG: 0,
     fatG: 0,
     baseUnit: 'serving',
-    servingGrams: 100
+    servingGrams: 100,
+    computedTotalGrams: 100
   });
   const [showAddFood, setShowAddFood] = useState(false);
   const [showUSDAImport, setShowUSDAImport] = useState(false);
@@ -170,7 +171,8 @@ export default function Nutrition() {
         carbsG: 0,
         fatG: 0,
         baseUnit: 'serving',
-        servingGrams: 100
+        servingGrams: 100,
+        computedTotalGrams: 100
       });
       setShowAddFood(false);
     } catch (error) {
@@ -265,7 +267,9 @@ export default function Nutrition() {
   }, [usdaSearchQuery, isUSDAEnabled, showUSDAImport, searchUSDAFoods]);
 
   const importUSDAFood = async (fdcId: number, description: string) => {
+    // Mark as importing
     setUSDAImporting(new Set([...usdaImporting, fdcId]));
+    
     try {
       // Use the new normalized method to create food log item
       // Default to 1 serving with proper macro normalization
@@ -274,17 +278,30 @@ export default function Nutrition() {
       await saveFoodItem(foodLogItem);
       
       // Remove from importing list
-      setUSDAImporting(new Set([...usdaImporting].filter(id => id !== fdcId)));
+      setUSDAImporting(prev => {
+        const next = new Set(prev);
+        next.delete(fdcId);
+        return next;
+      });
       
       // Also remove from selected if batch add
-      setSelectedUSDAFoods(new Set([...selectedUSDAFoods].filter(id => id !== fdcId)));
+      setSelectedUSDAFoods(prev => {
+        const next = new Set(prev);
+        next.delete(fdcId);
+        return next;
+      });
       
       // Refresh saved foods
       await loadSavedFoods();
     } catch (error) {
       console.error('Failed to import USDA food:', error);
       alert(`Failed to import ${description}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setUSDAImporting(new Set([...usdaImporting].filter(id => id !== fdcId)));
+      // Remove from importing on error
+      setUSDAImporting(prev => {
+        const next = new Set(prev);
+        next.delete(fdcId);
+        return next;
+      });
     }
   };
 
@@ -346,63 +363,82 @@ export default function Nutrition() {
         return;
       }
       
-      // Find the original food item to get base macros
+      // Find the original food item
       const originalItem = currentLog.items.find(item => item.id === foodItemId);
       if (!originalItem) return;
       
-      // Get the original base macros and serving info
-      const baseServingGrams = originalItem.servingGrams || 100; // Fallback to 100g
       const isUnitGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
+      const editedQuantity = editingServingSize.quantity;
+      const isSameUnit = (isUnitGrams && originalItem.baseUnit === 'grams') || 
+                         (!isUnitGrams && originalItem.baseUnit === 'serving');
       
-      // Calculate scaling factor based on the unit change
-      let scaleFactor: number;
+      // Canonical model: totalGrams is the invariant
+      const oldTotalGrams = originalItem.computedTotalGrams || (originalItem.quantidade * originalItem.servingGrams);
+      const oldServingGrams = originalItem.servingGrams;
+      const isOldUnitGrams = originalItem.baseUnit === 'grams';
+      
+      let newServingGrams: number;
+      let newQuantity: number;
       let displayServingSize: string;
-
-      let scaledMacros: Partial<FoodLogItem>;
+      let newBaseUnit: 'serving' | 'grams';
       
-      if (isUnitGrams) {
-        // User switched to grams
-        displayServingSize = `${editingServingSize.quantity}g`;
-        
-        // Scale macros: (editedGrams / baseServingGrams) * originalMacros
-        scaleFactor = editingServingSize.quantity / baseServingGrams;
-        scaledMacros = {
-          quantidade: 1, // 1 unit of X grams
-          baseUnit: 'grams' as const,
-          servingGrams: editingServingSize.quantity,
-          calories: Math.round(originalItem.calories * scaleFactor),
-          proteinG: Math.round((originalItem.proteinG * scaleFactor) * 10) / 10,
-          carbsG: Math.round((originalItem.carbsG * scaleFactor) * 10) / 10,
-          fatG: Math.round((originalItem.fatG * scaleFactor) * 10) / 10,
-          fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * scaleFactor) * 10) / 10 : undefined,
-          sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * scaleFactor) * 10) / 10 : undefined,
-          sodiumMg: originalItem.sodiumMg ? Math.round(originalItem.sodiumMg * scaleFactor) : undefined
-        };
+      if (isSameUnit) {
+        // User changed quantity within the same unit
+        // Preserve same baseUnit and gramsPerUnit, compute new totalGrams from new quantity
+        newBaseUnit = originalItem.baseUnit;
+        newServingGrams = originalItem.servingGrams;
+        newQuantity = editedQuantity;
+        displayServingSize = isUnitGrams 
+          ? `${newQuantity}g`
+          : `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`;
+      } else if (isOldUnitGrams && !isUnitGrams) {
+        // Switching from grams → serving
+        // Preserve totalGrams, compute new quantity
+        newBaseUnit = 'serving';
+        newServingGrams = oldServingGrams > 1 ? oldServingGrams : 100; // Use original serving weight, default to 100g
+        newQuantity = oldTotalGrams / newServingGrams;
+        displayServingSize = `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`;
+      } else if (!isOldUnitGrams && isUnitGrams) {
+        // Switching from serving → grams
+        // Preserve totalGrams, set quantity to totalGrams (since gramsPerUnit = 1)
+        newBaseUnit = 'grams';
+        newServingGrams = 1; // In grams mode, 1 "unit" = 1 gram
+        newQuantity = oldTotalGrams;
+        displayServingSize = `${newQuantity}g`;
       } else {
-        // User switched to servings or changed serving count
-        displayServingSize = `${editingServingSize.quantity} serving${editingServingSize.quantity !== 1 ? 's' : ''}`;
-        
-        // Scale macros: quantity * originalMacros (assuming original is per 1 serving)
-        scaleFactor = editingServingSize.quantity;
-        scaledMacros = {
-          quantidade: editingServingSize.quantity,
-          baseUnit: 'serving' as const,
-          servingSize: displayServingSize,
-          calories: Math.round(originalItem.calories * scaleFactor),
-          proteinG: Math.round((originalItem.proteinG * scaleFactor) * 10) / 10,
-          carbsG: Math.round((originalItem.carbsG * scaleFactor) * 10) / 10,
-          fatG: Math.round((originalItem.fatG * scaleFactor) * 10) / 10,
-          fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * scaleFactor) * 10) / 10 : undefined,
-          sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * scaleFactor) * 10) / 10 : undefined,
-          sodiumMg: originalItem.sodiumMg ? Math.round(originalItem.sodiumMg * scaleFactor) : undefined
-        };
+        // Fallback (shouldn't happen)
+        newBaseUnit = isUnitGrams ? 'grams' : 'serving';
+        newServingGrams = isUnitGrams ? 1 : oldServingGrams;
+        newQuantity = editedQuantity;
+        displayServingSize = isUnitGrams 
+          ? `${newQuantity}g`
+          : `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`;
       }
       
-      // Update the food item with new macros
+      // Ensure quantity is reasonable precision
+      newQuantity = Math.round(newQuantity * 100) / 100;
+      
+      // Compute new totalGrams (canonical invariant)
+      const newTotalGrams = newQuantity * newServingGrams;
+      
+      // Recalculate macros based on the change in total grams
+      const gramRatio = newTotalGrams / oldTotalGrams;
+      
       const updatedItem: FoodLogItem = {
         ...originalItem,
-        ...scaledMacros as any,
-        id: originalItem.id // Keep the same ID
+        servingSize: displayServingSize,
+        quantidade: newQuantity,
+        servingGrams: newServingGrams,
+        baseUnit: newBaseUnit,
+        calories: Math.round(originalItem.calories * gramRatio),
+        proteinG: Math.round((originalItem.proteinG * gramRatio) * 10) / 10,
+        carbsG: Math.round((originalItem.carbsG * gramRatio) * 10) / 10,
+        fatG: Math.round((originalItem.fatG * gramRatio) * 10) / 10,
+        fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * gramRatio) * 10) / 10 : undefined,
+        sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * gramRatio) * 10) / 10 : undefined,
+        sodiumMg: originalItem.sodiumMg ? Math.round(originalItem.sodiumMg * gramRatio) : undefined,
+        computedTotalGrams: newTotalGrams,
+        updatedAt: new Date().toISOString()
       };
       
       // Update the nutrition log
@@ -413,7 +449,7 @@ export default function Nutrition() {
       const updatedLog: NutritionLog = {
         ...currentLog,
         items: updatedItems,
-        totals: calculateTotals(updatedItems), // Calculate from persisted entries
+        totals: calculateTotals(updatedItems),
         updatedAt: new Date().toISOString()
       };
       
@@ -427,17 +463,10 @@ export default function Nutrition() {
   };
 
   const startEditServingSize = (item: FoodLogItem) => {
-    // Parse existing serving size
-    const match = item.servingSize.match(/([\d.]+)\s*(.+)/);
-    let quantity = match ? parseFloat(match[1]) : item.quantidade || 1;
-    let unit: 'serving' | 'grams' | 'g' = 'serving';
-    
-    // Detect if current unit is grams
-    const existingUnit = match ? match[2].toLowerCase() : '';
-    if (existingUnit.includes('g')) {
-      unit = 'grams';
-      quantity = item.servingGrams || quantity; // Use stored servingGrams if available
-    }
+    // Default to the item's current unit and quantity
+    // This ensures we don't incorrectly parse the display string
+    let quantity = item.quantidade || 1;
+    let unit: 'serving' | 'grams' | 'g' = item.baseUnit || 'serving';
     
     setEditingServingSize({
       quantity,
@@ -457,12 +486,18 @@ export default function Nutrition() {
   const saveFoodItem = async (foodItem: FoodLogItem) => {
     const dateStr = selectedDate.toISOString().split('T')[0];
     
+    // Canonical model: computedTotalGrams = quantidade * servingGrams
+    const computedTotalGrams = foodItem.quantidade * (foodItem.servingGrams || 100);
+    
     // Create a completely new object with unique ID to avoid shared references
     const foodToSave: FoodLogItem = JSON.parse(JSON.stringify({
       ...foodItem,
-      id: crypto.randomUUID(), // Ensure unique ID for each entry,
+      id: crypto.randomUUID(), // Ensure unique ID for each entry
       baseUnit: foodItem.baseUnit || 'serving',
-      servingGrams: foodItem.servingGrams || 100
+      servingGrams: foodItem.servingGrams || 100,
+      computedTotalGrams,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }));
     
     if (!currentLog) {
@@ -471,7 +506,7 @@ export default function Nutrition() {
         id: crypto.randomUUID(),
         date: dateStr,
         items: [foodToSave],
-        totals: calculateTotals([foodToSave]), // Calculate from persisted entries
+        totals: calculateTotals([foodToSave]),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -483,7 +518,7 @@ export default function Nutrition() {
       const updatedLog: NutritionLog = {
         ...currentLog,
         items: updatedItems,
-        totals: calculateTotals(updatedItems), // Calculate from persisted entries
+        totals: calculateTotals(updatedItems),
         updatedAt: new Date().toISOString()
       };
       await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
@@ -492,6 +527,13 @@ export default function Nutrition() {
   };
 
   const addSavedFood = async (food: FoodItem) => {
+    // Try to parse servingGrams from servingSize if it includes grams
+    const match = food.servingSize.match(/([\d.]+)\s*g/i);
+    const servingGrams = match ? parseFloat(match[1]) : 100;
+    
+    // Canonical model: computedTotalGrams = quantidade * servingGrams
+    const computedTotalGrams = 1 * servingGrams;
+    
     const foodLogItem: FoodLogItem = {
       id: crypto.randomUUID(),
       name: food.name,
@@ -505,7 +547,8 @@ export default function Nutrition() {
       sugarG: food.sugarG,
       sodiumMg: food.sodiumMg,
       baseUnit: 'serving',
-      servingGrams: 100
+      servingGrams,
+      computedTotalGrams
     };
     
     await saveFoodItem(foodLogItem);
@@ -573,6 +616,9 @@ export default function Nutrition() {
               <span className="text-lg text-gray-500">/{getDailyTargets().calories}</span>
             </div>
             <div className="text-sm text-gray-600">Calories</div>
+            <div data-testid="total-calories" className="hidden">
+              {currentLog ? Math.round(currentLog.totals.calories) : 0}
+            </div>
             {currentLog && (
               <div className="text-xs text-gray-500 mt-1">
                 {Math.round((currentLog.totals.calories / getDailyTargets().calories) * 100)}%
@@ -585,6 +631,9 @@ export default function Nutrition() {
               <span className="text-lg text-gray-500">/{getDailyTargets().proteinG}g</span>
             </div>
             <div className="text-sm text-gray-600">Protein</div>
+            <div data-testid="total-protein" className="hidden">
+              {currentLog ? Math.round(currentLog.totals.proteinG) : 0}
+            </div>
             {currentLog && (
               <div className="text-xs text-gray-500 mt-1">
                 {Math.round((currentLog.totals.proteinG / getDailyTargets().proteinG) * 100)}%
@@ -676,7 +725,7 @@ export default function Nutrition() {
       
       {/* USDA Import Modal */}
       {showUSDAImport && (
-        <div className="card mb-6">
+        <div className="card mb-6" data-testid="usda-import-modal">
           <h3 className="text-lg font-medium text-gray-900 mb-4">
             Search USDA FoodData Central
           </h3>
@@ -1022,7 +1071,7 @@ export default function Nutrition() {
           
           <div className="space-y-3">
             {currentLog.items.map((item) => (
-              <div key={item.id} className="p-3 bg-gray-50 rounded-lg">
+              <div key={item.id} data-testid="nutrition-food-item" className="p-3 bg-gray-50 rounded-lg">
                 {showServingSizeEdit === item.id ? (
                   // Edit mode
                   <div className="space-y-3">
@@ -1038,6 +1087,7 @@ export default function Nutrition() {
                           className="input text-sm"
                           min="0.1"
                           step="0.1"
+                          aria-label="quantity"
                         />
                       </div>
                       
@@ -1047,31 +1097,30 @@ export default function Nutrition() {
                           value={editingServingSize.unit}
                           onChange={(e) => {
                             const newUnit = e.target.value as 'serving' | 'grams' | 'g';
-                            let newQuantity = editingServingSize.quantity;
-                            
-                            // Handle unit switching logic
-                            if (editingServingSize.originalItem) {
-                              if (newUnit === 'grams' || newUnit === 'g') {
-                                // Switching to grams - set quantity to servingGrams
-                                newQuantity = editingServingSize.originalItem.servingGrams || 100;
-                              } else if (newUnit === 'serving') {
-                                // Switching to serving - set quantity to 1
-                                newQuantity = 1;
-                              }
-                            }
-                            
+                            // Just update the unit - the total grams invariant will be preserved on save
                             setEditingServingSize({ 
                               ...editingServingSize, 
-                              unit: newUnit,
-                              quantity: newQuantity 
+                              unit: newUnit as 'serving' | 'grams'
                             });
                           }}
                           className="input text-sm"
+                          aria-label="unit"
                         >
                           <option value="serving">serving</option>
                           <option value="grams">grams</option>
                         </select>
                       </div>
+                    </div>
+                    
+                    <div className="text-sm text-gray-600" data-testid="total-grams-display">
+                      <span className="font-medium">Total:</span>
+                      <span className="ml-2">
+                        {editingServingSize.originalItem && (
+                          <>
+                            {editingServingSize.originalItem.computedTotalGrams || (editingServingSize.originalItem.quantidade * editingServingSize.originalItem.servingGrams)} g
+                          </>
+                        )}
+                      </span>
                     </div>
                     
                     <div className="text-sm text-gray-600">
@@ -1102,20 +1151,21 @@ export default function Nutrition() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="font-medium">{item.name}</div>
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-gray-600" data-testid="serving-size">
                         {item.quantidade} × {item.servingSize}
                       </div>
                       <div className="text-sm text-gray-600">
-                        {Math.round(item.calories)} cal • 
-                        {Math.round(item.proteinG)}g protein • 
-                        {Math.round(item.carbsG)}g carbs • 
-                        {Math.round(item.fatG)}g fat
+                        <span data-testid="food-calories">{Math.round(item.calories)}</span> cal • 
+                        <span data-testid="food-protein">{Math.round(item.proteinG)}</span>g protein • 
+                        <span data-testid="food-carbs">{Math.round(item.carbsG)}</span>g carbs • 
+                        <span data-testid="food-fat">{Math.round(item.fatG)}</span>g fat
                       </div>
                     </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => startEditServingSize(item)}
                         className="text-blue-600 hover:text-blue-800 text-sm"
+                        aria-label="edit serving"
                       >
                         Edit Serving
                       </button>
