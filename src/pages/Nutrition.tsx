@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
-import { usdaService, type SearchDiagnostics } from '../lib/usda-service';
+import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult } from '../lib/usda-service';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
 
 export default function Nutrition() {
@@ -31,7 +31,8 @@ export default function Nutrition() {
   const [usdaSearchLoading, setUSDASearching] = useState(false);
   const [usdaSearchError, setUSDASearchError] = useState<string | null>(null);
   const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
-  const [usdaImporting, setUSDAImporting] = useState<string[]>([]);
+  const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
+  const [selectedUSDAFoods, setSelectedUSDAFoods] = useState<Set<number>>(new Set());
   const [savedFoods, setSavedFoods] = useState<FoodItem[]>([]);
   const [showServingSizeEdit, setShowServingSizeEdit] = useState<string | null>(null);
   const [editingServingSize, setEditingServingSize] = useState<{
@@ -264,7 +265,7 @@ export default function Nutrition() {
   }, [usdaSearchQuery, isUSDAEnabled, showUSDAImport, searchUSDAFoods]);
 
   const importUSDAFood = async (fdcId: number, description: string) => {
-    setUSDAImporting([...usdaImporting, `fdc-${fdcId}`]);
+    setUSDAImporting(new Set([...usdaImporting, fdcId]));
     try {
       // Use the new normalized method to create food log item
       // Default to 1 serving with proper macro normalization
@@ -273,14 +274,65 @@ export default function Nutrition() {
       await saveFoodItem(foodLogItem);
       
       // Remove from importing list
-      setUSDAImporting(usdaImporting.filter(id => id !== `fdc-${fdcId}`));
+      setUSDAImporting(new Set([...usdaImporting].filter(id => id !== fdcId)));
+      
+      // Also remove from selected if batch add
+      setSelectedUSDAFoods(new Set([...selectedUSDAFoods].filter(id => id !== fdcId)));
       
       // Refresh saved foods
       await loadSavedFoods();
     } catch (error) {
       console.error('Failed to import USDA food:', error);
       alert(`Failed to import ${description}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setUSDAImporting(usdaImporting.filter(id => id !== `fdc-${fdcId}`));
+      setUSDAImporting(new Set([...usdaImporting].filter(id => id !== fdcId)));
+    }
+  };
+
+  const toggleUSDAFoodSelection = (fdcId: number) => {
+    const newSelection = new Set(selectedUSDAFoods);
+    if (newSelection.has(fdcId)) {
+      newSelection.delete(fdcId);
+    } else {
+      newSelection.add(fdcId);
+    }
+    setSelectedUSDAFoods(newSelection);
+  };
+
+  const importSelectedUSDAFoods = async () => {
+    if (selectedUSDAFoods.size === 0) return;
+    
+    // Set all selected foods as importing
+    setUSDAImporting(new Set([...usdaImporting, ...selectedUSDAFoods]));
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const fdcId of selectedUSDAFoods) {
+      try {
+        const foodLogItem = await usdaService.createFoodLogItem(fdcId, 1, 'serving');
+        await saveFoodItem(foodLogItem);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to import food ${fdcId}:`, error);
+        failCount++;
+      }
+      // Remove from importing
+      setUSDAImporting(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(fdcId);
+        return newSet;
+      });
+    }
+    
+    // Clear selection after import
+    setSelectedUSDAFoods(new Set());
+    
+    // Refresh saved foods
+    await loadSavedFoods();
+    
+    // Show result summary
+    if (failCount > 0) {
+      alert(`Imported ${successCount} food(s). ${failCount} failed.`);
     }
   };
 
@@ -661,38 +713,92 @@ export default function Nutrition() {
           {usdaSearchResults.length > 0 && (
             <div data-testid="usda-results" className="space-y-2 max-h-80 overflow-y-auto">
               {usdaSearchResults.length > 0 && (
-                <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
+                  {selectedUSDAFoods.size > 0 && (
+                    <button
+                      onClick={importSelectedUSDAFoods}
+                      disabled={usdaImporting.size > 0}
+                      className="btn btn-sm btn-primary"
+                    >
+                      Add Selected ({selectedUSDAFoods.size})
+                    </button>
+                  )}
+                </div>
               )}
               {usdaSearchResults.map((food) => {
+                const macros = extractMacrosFromSearchResult(food);
+                const isImporting = usdaImporting.has(food.fdcId);
+                const isSelected = selectedUSDAFoods.has(food.fdcId);
+                const hasMacros = macros && (macros.calories > 0 || macros.proteinG > 0 || macros.carbsG > 0 || macros.fatG > 0);
+                
                 return (
-                  <div key={food.fdcId} data-testid="usda-result-row" data-fdc-id={food.fdcId} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <div key={food.fdcId} data-testid="usda-result-row" data-fdc-id={food.fdcId} className={`p-3 border border-gray-200 rounded-lg hover:bg-gray-50 ${isSelected ? 'bg-blue-50 border-blue-300' : ''}`}>
                     <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">{food.description}</div>
-                        {food.brandOwner && (
-                          <div className="text-sm text-gray-500">{food.brandOwner}</div>
-                        )}
-                        {food.foodCategory && (
-                          <div className="text-sm text-gray-500">{food.foodCategory}</div>
-                        )}
-                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
-                          <span className="font-medium">Type:</span>
-                          <span>{food.dataType}</span>
-                          {food.gtinUpc && (
-                            <>
-                              <span className="font-medium">| UPC:</span>
-                              <span>{food.gtinUpc}</span>
-                            </>
-                          )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            id={`select-${food.fdcId}`}
+                            checked={isSelected}
+                            onChange={() => toggleUSDAFoodSelection(food.fdcId)}
+                            className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">{food.description}</div>
+                            {food.brandOwner && (
+                              <div className="text-sm text-gray-500">{food.brandOwner}</div>
+                            )}
+                            {food.foodCategory && (
+                              <div className="text-sm text-gray-500">{food.foodCategory}</div>
+                            )}
+                            
+                            {hasMacros && (
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs font-medium">
+                                <span className={macros.calories > 0 ? 'text-gray-900' : 'text-gray-400'}>
+                                  {macros.calories} cal
+                                </span>
+                                <span className={macros.proteinG > 0 ? 'text-blue-600' : 'text-gray-400'}>
+                                  {macros.proteinG.toFixed(1)}g protein
+                                </span>
+                                <span className={macros.carbsG > 0 ? 'text-yellow-600' : 'text-gray-400'}>
+                                  {macros.carbsG.toFixed(1)}g carbs
+                                </span>
+                                <span className={macros.fatG > 0 ? 'text-red-600' : 'text-gray-400'}>
+                                  {macros.fatG.toFixed(1)}g fat
+                                </span>
+                                <span className="text-gray-400">
+                                  ({macros.basis === 'per_100g' ? 'per 100g' : 'per serving'})
+                                </span>
+                              </div>
+                            )}
+                            
+                            {!hasMacros && (
+                              <div className="mt-2 text-xs text-gray-400 italic">
+                                Tap "Add" to fetch detailed nutrition info
+                              </div>
+                            )}
+                            
+                            <div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-1">
+                              <span className="font-medium">Type:</span>
+                              <span>{food.dataType}</span>
+                              {food.gtinUpc && (
+                                <>
+                                  <span className="font-medium">| UPC:</span>
+                                  <span>{food.gtinUpc}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <button
                         data-testid="usda-add-food"
                         onClick={() => importUSDAFood(food.fdcId, food.description)}
-                        disabled={usdaImporting.includes(`fdc-${food.fdcId}`)}
+                        disabled={isImporting}
                         className="btn btn-sm btn-primary ml-4"
                       >
-                        {usdaImporting.includes(`fdc-${food.fdcId}`) ? 'Importing...' : 'Add'}
+                        {isImporting ? 'Adding...' : 'Add'}
                       </button>
                     </div>
                   </div>
@@ -718,6 +824,7 @@ export default function Nutrition() {
                 setUSDAReplies([]);
                 setUSDASearchError(null);
                 setUSDASearchDiagnostics(null);
+                setSelectedUSDAFoods(new Set());
               }}
               className="btn btn-secondary"
             >
