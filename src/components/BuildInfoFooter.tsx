@@ -1,5 +1,17 @@
 import { GitBranch } from 'lucide-react';
 
+/**
+ * Build Info Footer - Shows version, commit SHA, build run, and timestamp
+ * 
+ * Build info is injected by Vite build process via __BUILD_INFO__ global.
+ * This component displays:
+ * - App version (from package.json)
+ * - Short SHA (first 7 chars of commit)
+ * - Build run number from GitHub Actions
+ * - Build timestamp (ISO format)
+ * 
+ * Changes to the build (e.g., new commits) will be visible here.
+ */
 interface BuildInfoFooterProps {
   className?: string;
 }
@@ -34,6 +46,7 @@ export default function BuildInfoFooter({ className = '' }: BuildInfoFooterProps
         </div>
         {buildTimestamp && (
           <div className="text-gray-500">
+            <span className="text-gray-400">Built: </span>
             {new Date(buildTimestamp).toLocaleString()}
           </div>
         )}

@@ -468,6 +468,15 @@ export default function Nutrition() {
     let quantity = item.quantidade || 1;
     let unit: 'serving' | 'grams' | 'g' = item.baseUnit || 'serving';
     
+    // IMPORTANT: If the item was originally added as grams (servingGrams === 1),
+    // don't force it to 'serving' - preserve the user's choice.
+    // Only default to 'serving' if servingGrams is meaningful (not 1g which is used
+    // to indicate 'quantity in grams mode').
+    if (unit === 'grams' && item.servingGrams && item.servingGrams > 1) {
+      // Item has meaningful serving size, default to serving
+      unit = 'serving';
+    }
+    
     setEditingServingSize({
       quantity,
       unit,
@@ -500,30 +509,38 @@ export default function Nutrition() {
       updatedAt: new Date().toISOString()
     }));
     
-    if (!currentLog) {
-      // Create new log for selected date
-      const newLog: NutritionLog = {
-        id: crypto.randomUUID(),
-        date: dateStr,
-        items: [foodToSave],
-        totals: calculateTotals([foodToSave]),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      await repositories.nutrition.createNutritionLog(newLog);
-      setCurrentLog(newLog);
-    } else {
-      // Add to existing log - create new array to avoid reference issues
-      const updatedItems = [...currentLog.items, foodToSave];
-      const updatedLog: NutritionLog = {
-        ...currentLog,
-        items: updatedItems,
-        totals: calculateTotals(updatedItems),
-        updatedAt: new Date().toISOString()
-      };
-      await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
-      setCurrentLog(updatedLog);
+    // Always ensure log exists before adding (atomic check-or-create)
+    let log = currentLog;
+    if (!log) {
+      // Explicitly get or create log for date to avoid race conditions
+      const existingLog = await repositories.nutrition.getNutritionLog(dateStr);
+      if (existingLog) {
+        log = existingLog;
+      } else {
+        // Create new log for selected date
+        const newLog: NutritionLog = {
+          id: crypto.randomUUID(),
+          date: dateStr,
+          items: [],
+          totals: { calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0, sugarG: 0, sodiumMg: 0 },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await repositories.nutrition.createNutritionLog(newLog);
+        log = newLog;
+      }
     }
+    
+    // Add to log - create new array to avoid reference issues
+    const updatedItems = [...(log.items || []), foodToSave];
+    const updatedLog: NutritionLog = {
+      ...log,
+      items: updatedItems,
+      totals: calculateTotals(updatedItems),
+      updatedAt: new Date().toISOString()
+    };
+    await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
+    setCurrentLog(updatedLog);
   };
 
   const addSavedFood = async (food: FoodItem) => {
@@ -940,6 +957,84 @@ export default function Nutrition() {
                 {isUSDAEnabled ? 'YES' : 'NO'}
               </span>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* DEV: Nutrition Entry Diagnostics - Shows last added entry details */}
+      {isDev && currentLog && currentLog.items && currentLog.items.length > 0 && (
+        <div className="mt-6 bg-gray-900 text-gray-100 rounded-lg p-4 font-mono text-xs">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+            <h4 className="text-sm font-semibold text-purple-400">Last Nutrition Entry (DEV)</h4>
+          </div>
+          
+          <div className="space-y-1">
+            {(() => {
+              const lastItem = currentLog!.items![currentLog!.items!.length - 1];
+              return (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Name:</span>
+                    <span className="text-green-400">{lastItem.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Date Key:</span>
+                    <span className="text-yellow-400">{currentLog!.date}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Entry ID:</span>
+                    <span className="text-gray-500 text-[10px]">{lastItem.id.slice(0, 8)}...</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Unit Label:</span>
+                    <span className={lastItem.baseUnit === 'serving' ? 'text-green-400' : 'text-orange-400'}>
+                      {lastItem.baseUnit === 'serving' ? 'serving' : 'grams'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Quantity:</span>
+                    <span className="text-blue-400">{lastItem.quantidade}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Grams Per Unit:</span>
+                    <span className="text-blue-400">{lastItem.servingGrams}g</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total Grams:</span>
+                    <span className="text-purple-400 font-bold">{lastItem.computedTotalGrams}g</span>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-gray-700">
+                    <span className="text-gray-400">Macros:</span>
+                    <span className="ml-2">
+                      <span className="text-green-400">{Math.round(lastItem.calories)} kcal</span>
+                      {' | '}
+                      <span className="text-blue-400">{Math.round(lastItem.proteinG)}g P</span>
+                      {' | '}
+                      <span className="text-yellow-400">{Math.round(lastItem.carbsG)}g C</span>
+                      {' | '}
+                      <span className="text-red-400">{Math.round(lastItem.fatG)}g F</span>
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Invariant Check:</span>
+                    <span className={Math.abs(lastItem.computedTotalGrams - (lastItem.quantidade * lastItem.servingGrams)) < 0.01 ? 'text-green-400' : 'text-red-400'}>
+                      {Math.abs(lastItem.computedTotalGrams - (lastItem.quantidade * lastItem.servingGrams)) < 0.01 ? '✓ PASS' : '✗ FAIL'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">FDC ID:</span>
+                    <span className="text-gray-500">{lastItem.fdcId || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Updated:</span>
+                    <span className="text-gray-500">
+                      {lastItem.updatedAt ? new Date(lastItem.updatedAt).toLocaleTimeString() : 'N/A'}
+                    </span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
