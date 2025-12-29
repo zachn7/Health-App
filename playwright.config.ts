@@ -10,6 +10,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'on-first-retry',
+    serviceWorkers: 'block', // Block SWs to ensure reliable network mocking in CI
   },
   projects: process.env.CI ? [
     {

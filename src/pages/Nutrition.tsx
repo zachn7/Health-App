@@ -580,6 +580,7 @@ export default function Nutrition() {
         
         {isUSDAEnabled && (
           <button
+            data-testid="usda-search-button"
             onClick={() => {
               setShowUSDAImport(true);
               setShowAddFood(false);
@@ -630,6 +631,7 @@ export default function Nutrition() {
           
           <div className="mb-4">
             <input
+              data-testid="usda-search-input"
               type="text"
               value={usdaSearchQuery}
               onChange={(e) => setUSDAQuery(e.target.value)}
@@ -640,7 +642,7 @@ export default function Nutrition() {
               <div className="mt-2 text-sm text-gray-600">Searching...</div>
             )}
             {usdaSearchError && (
-              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div data-testid="usda-error" className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <div className="flex items-start gap-2">
                   <div className="text-red-600">
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -657,13 +659,13 @@ export default function Nutrition() {
           </div>
           
           {usdaSearchResults.length > 0 && (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
+            <div data-testid="usda-results" className="space-y-2 max-h-80 overflow-y-auto">
               {usdaSearchResults.length > 0 && (
                 <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
               )}
               {usdaSearchResults.map((food) => {
                 return (
-                  <div key={food.fdcId} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <div key={food.fdcId} data-testid="usda-result-row" data-fdc-id={food.fdcId} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">{food.description}</div>
@@ -685,6 +687,7 @@ export default function Nutrition() {
                         </div>
                       </div>
                       <button
+                        data-testid="usda-add-food"
                         onClick={() => importUSDAFood(food.fdcId, food.description)}
                         disabled={usdaImporting.includes(`fdc-${food.fdcId}`)}
                         className="btn btn-sm btn-primary ml-4"
@@ -699,7 +702,7 @@ export default function Nutrition() {
           )}
           
           {!usdaSearchLoading && usdaSearchQuery && usdaSearchResults.length === 0 && (
-            <div className="text-center py-4 text-gray-500">
+            <div data-testid="usda-no-results" className="text-center py-4 text-gray-500">
               {usdaSearchError
                 ? usdaSearchError
                 : `No results found for "${usdaSearchQuery}"`

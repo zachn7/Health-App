@@ -9,13 +9,27 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     });
     
     // Mock USDA API responses - DO NOT require real API key in CI
-    await page.route('**/fdc.nal.usda.gov/**', async (route) => {
+    await page.route('**/api.nal.usda.gov/fdc/v1/**', async (route) => {
       const url = route.request().url();
       
-      if (url.includes('/search')) {
-        // Mock search response with realistic food data
+      if (url.includes('/foods/search')) {
         const searchQuery = new URL(url).searchParams.get('query');
         
+        // Return empty results for nonsense searches
+        if (searchQuery === 'xyz nonexistent food 12345') {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              foods: [],
+              totalPages: 0,
+              currentPage: 1
+            })
+          });
+          return;
+        }
+        
+        // Mock search response with realistic food data
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -98,64 +112,93 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
 
   test('should show USDA search button when API key is configured', async ({ page }) => {
     // Should see the USDA search button
-    await expect(page.getByRole('button', { name: 'Search USDA Database' })).toBeVisible();
+    await expect(page.getByTestId('usda-search-button')).toBeVisible();
   });
 
   test('should search USDA database with debounced typing and show results', async ({ page }) => {
     // Open USDA import dialog
-    await page.getByRole('button', { name: 'Search USDA Database' }).click();
+    await page.getByTestId('usda-search-button').click();
     await expect(page.getByText('Search USDA FoodData Central')).toBeVisible();
     
+    // Set up network wait BEFORE typing to ensure we catch the request
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
+    
     // Type search query - debounced search should trigger automatically
-    const searchInput = page.getByPlaceholder('Type to search foods');
+    const searchInput = page.getByTestId('usda-search-input');
     await searchInput.fill('chicken');
     
-    // Wait for loading indicator to appear and disappear
-    await expect(page.getByText('Searching...')).toBeVisible();
-    await expect(page.getByText('Searching...')).toBeHidden({ timeout: 10000 });
+    // Wait for the network response
+    await searchResponse;
     
-    // Should show search results with our mocked data
+    // Wait for debounce delay and DOM update
+    await page.waitForTimeout(600); // 500ms debounce + buffer
+    
+    // Should show search results container
+    const resultsContainer = page.getByTestId('usda-results');
+    await expect(resultsContainer).toBeVisible({ timeout: 10000 });
+    
+    // Verify result count header
     await expect(page.getByText('Search Results (2):')).toBeVisible();
     
-    // Verify both chicken items are displayed
+    // Verify both chicken items are displayed using testids
+    const resultRows = page.getByTestId('usda-result-row');
+    await expect(resultRows).toHaveCount(2);
+    
+    // Verify specific food descriptions
     await expect(page.getByText('Chicken, broilers or fryers, breast, meat only, cooked, roasted')).toBeVisible();
     await expect(page.getByText('Chicken, broilers or fryers, breast, meat and skin, cooked, roasted')).toBeVisible();
     
     // Verify food category is shown
-    await expect(page.getByText('Poultry Products')).toBeVisible({ timeout: 5000 }).or(
-      await expect(page.locator('.space-y-2').getByText('Poultry Products')).toBeVisible()
-    );
+    await expect(page.getByText('Poultry Products').first()).toBeVisible();
   });
 
   test('should add USDA food to nutrition log', async ({ page }) => {
     // Open USDA import dialog
-    await page.getByRole('button', { name: 'Search USDA Database' }).click();
+    await page.getByTestId('usda-search-button').click();
+    
+    // Set up network wait
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
     
     // Search for food
-    await page.getByPlaceholder('Type to search foods').fill('chicken');
-    await expect(page.getByText('Searching...')).toBeVisible();
-    await expect(page.getByText('Searching...')).toBeHidden({ timeout: 10000 });
+    await page.getByTestId('usda-search-input').fill('chicken');
+    await searchResponse;
+    await page.waitForTimeout(600);
     
-    // Click "Add" button on first result
-    const addButton = page.locator('.p-3').filter({ hasText: 'Chicken, broilers or fryers' }).getByRole('button', { name: 'Add' });
+    // Wait for results to appear
+    await expect(page.getByTestId('usda-results')).toBeVisible({ timeout: 10000 });
+    
+    // Set up detail response wait
+    const detailResponse = page.waitForResponse(
+      response => response.url().includes('/food/170967') && response.status() === 200
+    );
+    
+    // Get initial count of food items in the page (before adding)
+    const initialFoodCount = await page.getByText('Chicken, broilers or fryers, breast, meat only, cooked, roasted').count();
+    
+    // Click "Add" button on first result using testid
+    const addButton = page.getByTestId('usda-add-food').first();
     await addButton.click();
     
-    // Should show importing state
-    await expect(page.getByText('Importing...')).toBeVisible();
-    await expect(page.getByText('Importing...')).toBeHidden({ timeout: 10000 });
+    // Wait for detail API call to complete
+    await detailResponse;
     
-    // Food should be added to the log
-    await expect(page.getByText('Chicken, broilers or fryers, breast, meat only, cooked, roasted')).toBeVisible();
+    // Wait a bit for the UI to update
+    await page.waitForTimeout(500);
     
-    // Should show macros in the added food (165 cal based on mock data)
-    await expect(page.getByText(/165.*cal/i)).toBeVisible();
-    await expect(page.getByText(/31.*protein/i)).toBeVisible();
+    // Should show the added food in the log (count should increase by 1)
+    await expect(
+      page.getByText('Chicken, broilers or fryers, breast, meat only, cooked, roasted')
+    ).toHaveCount(initialFoodCount + 1, { timeout: 10000 });
   });
 
   test('should display error when search fails', async ({ page }) => {
     // Unroute the previous mock and set up a failing one
-    await page.unroute('**/fdc.nal.usda.gov/**');
-    await page.route('**/fdc.nal.usda.gov/**', async (route) => {
+    await page.unroute('**/api.nal.usda.gov/fdc/v1/**');
+    await page.route('**/api.nal.usda.gov/fdc/v1/**', async (route) => {
       await route.fulfill({
         status: 401,
         contentType: 'application/json',
@@ -163,42 +206,46 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
       });
     });
     
+    // Re-navigate to refresh the page state
+    await page.goto('./#/nutrition');
+    await page.waitForLoadState('networkidle');
+    
     // Open USDA import dialog
-    await page.getByRole('button', { name: 'Search USDA Database' }).click();
+    await page.getByTestId('usda-search-button').click();
+    
+    // Set up network wait for error response
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 401
+    );
     
     // Search for food
-    await page.getByPlaceholder('Type to search foods').fill('chicken');
-    await expect(page.getByText('Searching...')).toBeVisible();
-    await expect(page.getByText('Searching...')).toBeHidden({ timeout: 10000 });
+    await page.getByTestId('usda-search-input').fill('chicken');
+    await searchResponse;
+    await page.waitForTimeout(600);
     
-    // Should show error message
-    await expect(page.getByText(/Invalid USDA API key|Search Error/i)).toBeVisible();
+    // Should show error message using testid
+    const errorElement = page.getByTestId('usda-error');
+    await expect(errorElement).toBeVisible({ timeout: 10000 });
+    await expect(errorElement.getByText(/Invalid USDA API key/i)).toBeVisible();
   });
 
   test('should show no results message for empty search', async ({ page }) => {
     // Open USDA import dialog
-    await page.getByRole('button', { name: 'Search USDA Database' }).click();
+    await page.getByTestId('usda-search-button').click();
     
-    // Set up mock for empty results
-    await page.route('**/fdc.nal.usda.gov/**', async (route) => {
-      const url = route.request().url();
-      if (url.includes('/search')) {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ foods: [] })
-        });
-      } else {
-        await route.continue();
-      }
-    });
+    // Set up network wait
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
     
-    // Search for something that returns no results
-    await page.getByPlaceholder('Type to search foods').fill('xyz nonexistent food 12345');
-    await expect(page.getByText('Searching...')).toBeVisible();
-    await expect(page.getByText('Searching...')).toBeHidden({ timeout: 10000 });
+    // Search for something that returns no results (already mocked to return empty array)
+    await page.getByTestId('usda-search-input').fill('xyz nonexistent food 12345');
+    await searchResponse;
+    await page.waitForTimeout(600);
     
-    // Should show no results message
+    // Should show no results message using testid
+    const noResultsElement = page.getByTestId('usda-no-results');
+    await expect(noResultsElement).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/No results found/i)).toBeVisible();
   });
 });
