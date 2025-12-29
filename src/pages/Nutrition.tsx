@@ -291,8 +291,8 @@ export default function Nutrition() {
         return next;
       });
       
-      // Refresh saved foods
-      await loadSavedFoods();
+      // Reload nutrition data to ensure currentLog is updated from IndexedDB
+      await loadNutritionData();
     } catch (error) {
       console.error('Failed to import USDA food:', error);
       alert(`Failed to import ${description}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -344,8 +344,8 @@ export default function Nutrition() {
     // Clear selection after import
     setSelectedUSDAFoods(new Set());
     
-    // Refresh saved foods
-    await loadSavedFoods();
+    // Reload nutrition data to ensure currentLog is updated from IndexedDB
+    await loadNutritionData();
     
     // Show result summary
     if (failCount > 0) {
@@ -526,8 +526,11 @@ export default function Nutrition() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
+        // Wait for the create to complete
         await repositories.nutrition.createNutritionLog(newLog);
-        log = newLog;
+        // Fetch the newly created log to ensure we have the complete object
+        const createdLog = await repositories.nutrition.getNutritionLog(dateStr);
+        log = createdLog || newLog;
       }
     }
     
@@ -539,8 +542,15 @@ export default function Nutrition() {
       totals: calculateTotals(updatedItems),
       updatedAt: new Date().toISOString()
     };
+    
+    // Wait for the update to complete
     await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
+    
+    // Update React state
     setCurrentLog(updatedLog);
+    
+    // Small delay to ensure state is propagated
+    await new Promise(resolve => setTimeout(resolve, 50));
   };
 
   const addSavedFood = async (food: FoodItem) => {
