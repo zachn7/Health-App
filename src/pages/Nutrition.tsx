@@ -1164,7 +1164,7 @@ export default function Nutrition() {
             Food Items ({currentLog.items.length})
           </h3>
           
-          <div className="space-y-3">
+          <div className="space-y-3" data-testid="nutrition-log-list">
             {currentLog.items.map((item) => (
               <div key={item.id} data-testid="nutrition-food-item" className="p-3 bg-gray-50 rounded-lg">
                 {showServingSizeEdit === item.id ? (
@@ -1245,11 +1245,11 @@ export default function Nutrition() {
                   // Display mode
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <div className="font-medium">{item.name}</div>
+                      <div className="font-medium" data-testid="nutrition-log-item-name">{item.name}</div>
                       <div className="text-sm text-gray-600" data-testid="serving-size">
                         {item.quantidade} × {item.servingSize}
                       </div>
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-gray-600" data-testid="nutrition-log-item-macros">
                         <span data-testid="food-calories">{Math.round(item.calories)}</span> cal • 
                         <span data-testid="food-protein">{Math.round(item.proteinG)}</span>g protein • 
                         <span data-testid="food-carbs">{Math.round(item.carbsG)}</span>g carbs • 

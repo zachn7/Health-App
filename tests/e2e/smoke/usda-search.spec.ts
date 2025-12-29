@@ -176,8 +176,9 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
       response => response.url().includes('/food/170967') && response.status() === 200
     );
     
-    // Get initial count of food items in the page (before adding)
-    const initialFoodCount = await page.getByText('Chicken, broilers or fryers, breast, meat only, cooked, roasted').count();
+    // Get initial count of nutrition log items using stable testids
+    const nutritionLogList = page.getByTestId('nutrition-log-list');
+    const initialItemsCount = await nutritionLogList.getByTestId('nutrition-food-item').count();
     
     // Click "Add" button on first result using testid
     const addButton = page.getByTestId('usda-add-food').first();
@@ -186,13 +187,40 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Wait for detail API call to complete
     await detailResponse;
     
+    // Wait for "Adding..." to disappear (indicating add is complete)
+    await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
+    
     // Wait a bit for the UI to update
     await page.waitForTimeout(500);
     
+    // If nutrition log list doesn't exist yet, wait for it to appear
+    // This happens when adding the first item to the log
+    await page.waitForTimeout(1000);
+    
     // Should show the added food in the log (count should increase by 1)
-    await expect(
-      page.getByText('Chicken, broilers or fryers, breast, meat only, cooked, roasted')
-    ).toHaveCount(initialFoodCount + 1, { timeout: 10000 });
+    const nutritionLogList = page.getByTestId('nutrition-log-list').first();
+    const nutritionLogItems = nutritionLogList.getByTestId('nutrition-food-item');
+    await expect(nutritionLogItems).toHaveCount(initialItemsCount + 1, { timeout: 10000 });
+    
+    // Verify the last added item has the expected name
+    const lastItem = nutritionLogItems.last();
+    await expect(lastItem.getByTestId('nutrition-log-item-name')).toHaveText(
+      'Chicken, broilers or fryers, breast, meat only, cooked, roasted'
+    );
+    
+    // Verify the added item has non-zero macros (mocked response should include them)
+    const macros = lastItem.getByTestId('nutrition-log-item-macros');
+    await expect(macros).toBeVisible();
+    
+    // Check that calories are not '0' and not empty
+    const calories = lastItem.getByTestId('food-calories');
+    await expect(calories).not.toHaveText('');
+    await expect(calories).not.toHaveText('0');
+    
+    // Check that protein is not '0' and not empty
+    const protein = lastItem.getByTestId('food-protein');
+    await expect(protein).not.toHaveText('');
+    await expect(protein).not.toHaveText('0');
   });
 
   test('should display error when search fails', async ({ page }) => {
