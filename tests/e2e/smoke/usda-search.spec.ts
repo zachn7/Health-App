@@ -193,12 +193,13 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Wait a bit for the UI to update
     await page.waitForTimeout(500);
     
-    // If nutrition log list doesn't exist yet, wait for it to appear
-    // This happens when adding the first item to the log
-    await page.waitForTimeout(1000);
+    // Close the USDA import modal by clicking the search button again (toggles it closed)
+    await page.getByTestId('usda-search-button').click();
     
-    // Should show the added food in the log (count should increase by 1)
-    const nutritionLogList = page.getByTestId('nutrition-log-list').first();
+  // Nutrition log list should now be visible
+    await expect(nutritionLogList).toBeVisible({ timeout: 5000 });
+    
+    // Count nutrition log items using stable testids - count should have increased by 1
     const nutritionLogItems = nutritionLogList.getByTestId('nutrition-food-item');
     await expect(nutritionLogItems).toHaveCount(initialItemsCount + 1, { timeout: 10000 });
     
@@ -209,8 +210,7 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     );
     
     // Verify the added item has non-zero macros (mocked response should include them)
-    const macros = lastItem.getByTestId('nutrition-log-item-macros');
-    await expect(macros).toBeVisible();
+    await expect(lastItem.getByTestId('nutrition-log-item-macros')).toBeVisible();
     
     // Check that calories are not '0' and not empty
     const calories = lastItem.getByTestId('food-calories');

@@ -1157,13 +1157,17 @@ export default function Nutrition() {
         </div>
       )}
       
-      {/* Food Items */}
-      {currentLog && currentLog.items.length > 0 && (
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Food Items ({currentLog.items.length})
-          </h3>
-          
+      {/* Food Items - Always render so testid can be found even when no log exists yet */}
+      <div className="card">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">
+          Food Items ({currentLog?.items.length || 0})
+        </h3>
+        
+        {!currentLog || currentLog.items.length === 0 ? (
+          <div className="text-center py-8" data-testid="nutrition-log-list">
+            <p className="text-gray-600">No food items logged for this date</p>
+          </div>
+        ) : (
           <div className="space-y-3" data-testid="nutrition-log-list">
             {currentLog.items.map((item) => (
               <div key={item.id} data-testid="nutrition-food-item" className="p-3 bg-gray-50 rounded-lg">
@@ -1275,15 +1279,9 @@ export default function Nutrition() {
                 )}
               </div>
             ))}
-          </div>
-        </div>
-      )}
-      
-      {currentLog && currentLog.items.length === 0 && (
-        <div className="card text-center py-8">
-          <p className="text-gray-600">No food items logged for this date</p>
-        </div>
-      )}
+            </div>
+          )}
+      </div>
       
       {!currentLog && (
         <div className="card text-center py-12">
