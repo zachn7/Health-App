@@ -70,6 +70,9 @@ jobs:
       - name: Build
         env:
           BASE_PATH: ${{ github.event.repository.name }}
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_BUILD_RUN: ${{ github.run_number }}
+          VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp }}
         run: npm run build
       
       - name: Verify dist exists

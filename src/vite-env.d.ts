@@ -15,6 +15,7 @@ interface ImportMeta {
 interface BuildInfo {
   commitSha: string
   buildTimestamp: string
+  buildRun: string
   appVersion: string
   isProduction: boolean
 }

@@ -7,26 +7,29 @@ const basePath = process.env.NODE_ENV === 'production' ? '/Health-App/' : '/'
 
 // Build-time information
 const getBuildInfo = () => {
-  try {
-    const commitSha = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
-    const buildTimestamp = new Date().toISOString()
-    const packageJson = require('./package.json')
-    const appVersion = packageJson.version
-    
-    return {
-      commitSha,
-      buildTimestamp,
-      appVersion,
-      isProduction: process.env.NODE_ENV === 'production'
-    }
-  } catch (error) {
-    console.warn('Failed to get build info:', error)
-    return {
-      commitSha: 'unknown',
-      buildTimestamp: new Date().toISOString(),
-      appVersion: '0.1.0',
-      isProduction: process.env.NODE_ENV === 'production'
-    }
+  const packageJson = require('./package.json')
+  const appVersion = packageJson.version
+  
+  // Use GitHub Action env vars if available (production), otherwise use git commands (dev)
+  const buildSha = process.env.VITE_BUILD_SHA
+    ? (process.env.VITE_BUILD_SHA).substring(0, 7) // Short SHA (first 7 chars)
+    : (() => {
+        try {
+          return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
+        } catch (error) {
+          return 'dev'
+        }
+      })()
+  
+  const buildRun = process.env.VITE_BUILD_RUN || 'dev'
+  const buildTimestamp = process.env.VITE_BUILD_TIME || new Date().toISOString()
+  
+  return {
+    commitSha: buildSha,
+    buildRun,
+    buildTimestamp,
+    appVersion,
+    isProduction: process.env.NODE_ENV === 'production'
   }
 }
 

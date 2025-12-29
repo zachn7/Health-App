@@ -431,6 +431,14 @@ export default function Settings() {
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-gray-400" />
               <div>
+                <div className="font-medium text-gray-900">Build Run</div>
+                <div className="text-gray-600 font-mono">#{buildInfo.buildRun || 'dev'}</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 md:col-span-2">
+              <Activity className="h-4 w-4 text-gray-400" />
+              <div>
                 <div className="font-medium text-gray-900">Service Worker</div>
                 <div className="flex items-center gap-2">
                   {swControllerStatus === null ? (
