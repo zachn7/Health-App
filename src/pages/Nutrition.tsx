@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
-import { usdaService } from '../lib/usda-service';
+import { usdaService, type SearchDiagnostics } from '../lib/usda-service';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
 
 export default function Nutrition() {
+  const isDev = process.env.NODE_ENV === 'development';
   const [currentLog, setCurrentLog] = useState<NutritionLog | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -28,6 +29,8 @@ export default function Nutrition() {
   const [usdaSearchResults, setUSDAReplies] = useState<any[]>([]);
   const [isUSDAEnabled, setIsUSDAEnabled] = useState(false);
   const [usdaSearchLoading, setUSDASearching] = useState(false);
+  const [usdaSearchError, setUSDASearchError] = useState<string | null>(null);
+  const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
   const [usdaImporting, setUSDAImporting] = useState<string[]>([]);
   const [savedFoods, setSavedFoods] = useState<FoodItem[]>([]);
   const [showServingSizeEdit, setShowServingSizeEdit] = useState<string | null>(null);
@@ -227,16 +230,23 @@ export default function Nutrition() {
   const searchUSDAFoods = useCallback(async () => {
     if (!usdaSearchQuery.trim() || usdaSearchQuery.length < 2) {
       setUSDAReplies([]);
+      setUSDASearchError(null);
+      setUSDASearchDiagnostics(null);
       return;
     }
     
     setUSDASearching(true);
+    setUSDASearchError(null);
+    
     try {
-      const results = await usdaService.searchFoods(usdaSearchQuery);
+      const { results, diagnostics } = await usdaService.searchFoods(usdaSearchQuery);
       setUSDAReplies(results);
+      setUSDASearchDiagnostics(diagnostics);
     } catch (error) {
       console.error('USDA search failed:', error);
-      // Don't show alert for auto-search failures
+      const errorMessage = error instanceof Error ? error.message : 'Failed to search USDA foods';
+      setUSDASearchError(errorMessage);
+      setUSDAReplies([]);
     } finally {
       setUSDASearching(false);
     }
@@ -629,22 +639,29 @@ export default function Nutrition() {
             {usdaSearchLoading && (
               <div className="mt-2 text-sm text-gray-600">Searching...</div>
             )}
+            {usdaSearchError && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <div className="text-red-600">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-red-800">Search Error</div>
+                    <div className="text-sm text-red-700 mt-1">{usdaSearchError}</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           {usdaSearchResults.length > 0 && (
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {usdaSearchResults.length > 0 && (
-                <h4 className="font-medium text-gray-700">Search Results:</h4>
+                <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
               )}
               {usdaSearchResults.map((food) => {
-                // Calculate approximate macros per 100g if available
-                const macrosPer100g = food.foodNutrients ? {
-                  calories: food.foodNutrients.find((n: any) => n.nutrientName === 'Energy')?.value || 0,
-                  protein: food.foodNutrients.find((n: any) => n.nutrientName === 'Protein')?.value || 0,
-                  carbs: food.foodNutrients.find((n: any) => n.nutrientName === 'Carbohydrate, by difference')?.value || 0,
-                  fat: food.foodNutrients.find((n: any) => n.nutrientName === 'Total lipid (fat)')?.value || 0,
-                } : null;
-                
                 return (
                   <div key={food.fdcId} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
                     <div className="flex justify-between items-start">
@@ -656,16 +673,16 @@ export default function Nutrition() {
                         {food.foodCategory && (
                           <div className="text-sm text-gray-500">{food.foodCategory}</div>
                         )}
-                        
-                        {macrosPer100g && (
-                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
-                            <span className="font-medium">Per 100g:</span>
-                            <span>{Math.round(macrosPer100g.calories)} cal</span>
-                            <span>{macrosPer100g.protein.toFixed(1)}g protein</span>
-                            <span>{macrosPer100g.carbs.toFixed(1)}g carbs</span>
-                            <span>{macrosPer100g.fat.toFixed(1)}g fat</span>
-                          </div>
-                        )}
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
+                          <span className="font-medium">Type:</span>
+                          <span>{food.dataType}</span>
+                          {food.gtinUpc && (
+                            <>
+                              <span className="font-medium">| UPC:</span>
+                              <span>{food.gtinUpc}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <button
                         onClick={() => importUSDAFood(food.fdcId, food.description)}
@@ -683,7 +700,10 @@ export default function Nutrition() {
           
           {!usdaSearchLoading && usdaSearchQuery && usdaSearchResults.length === 0 && (
             <div className="text-center py-4 text-gray-500">
-              No results found for "{usdaSearchQuery}"
+              {usdaSearchError
+                ? usdaSearchError
+                : `No results found for "${usdaSearchQuery}"`
+              }
             </div>
           )}
           
@@ -693,11 +713,74 @@ export default function Nutrition() {
                 setShowUSDAImport(false);
                 setUSDAQuery('');
                 setUSDAReplies([]);
+                setUSDASearchError(null);
+                setUSDASearchDiagnostics(null);
               }}
               className="btn btn-secondary"
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+      
+      {/* DEV: USDA Status Diagnostics */}
+      {isDev && usdaSearchDiagnostics && (
+        <div className="mt-6 bg-gray-900 text-gray-100 rounded-lg p-4 font-mono text-xs">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+            <h4 className="text-sm font-semibold text-blue-400">USDA Search Diagnostics (DEV)</h4>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Query:</span>
+              <span className="text-green-400">{usdaSearchDiagnostics.query}</span>
+            </div>
+            
+            <div className="flex flex-col gap-1">
+              <span className="text-gray-400">Request URL:</span>
+              <span className="text-yellow-400 break-all text-[10px]">
+                {usdaSearchDiagnostics.url.replace(/api_key=[^&]+/, 'api_key=***REDACTED***')}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">Status Code:</span>
+              <span className={
+                usdaSearchDiagnostics.status === 200 ? 'text-green-400' :
+                usdaSearchDiagnostics.status && usdaSearchDiagnostics.status >= 400 ? 'text-red-400' :
+                'text-yellow-400'
+              }>
+                {usdaSearchDiagnostics.status ?? 'PENDING'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">Results:</span>
+              <span className="text-green-400">{usdaSearchDiagnostics.resultCount}</span>
+            </div>
+            
+            {usdaSearchDiagnostics.errorMessage && (
+              <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-gray-700">
+                <span className="text-red-400 font-semibold">Error:</span>
+                <span className="text-red-300">{usdaSearchDiagnostics.errorMessage}</span>
+              </div>
+            )}
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">Timestamp:</span>
+              <span className="text-gray-500">
+                {new Date(usdaSearchDiagnostics.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-gray-400">USDA Enabled:</span>
+              <span className={isUSDAEnabled ? 'text-green-400' : 'text-red-400'}>
+                {isUSDAEnabled ? 'YES' : 'NO'}
+              </span>
+            </div>
           </div>
         </div>
       )}

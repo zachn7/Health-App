@@ -2,6 +2,15 @@ import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
 import { FoodItem, FoodLogItem } from '@/types';
 
+export interface SearchDiagnostics {
+  query: string;
+  url: string;
+  timestamp: string;
+  status: number | null;
+  errorMessage: string | null;
+  resultCount: number;
+}
+
 export interface USDFoodSearchResult {
   fdcId: number;
   description: string;
@@ -13,6 +22,7 @@ export interface USDFoodSearchResult {
   foodCategory?: string;
   allHighlightFields?: string;
   score?: number;
+  foodNutrients?: any[];
 }
 
 export interface USDAFoodDetail {
@@ -58,7 +68,10 @@ export class USDAService {
     }
   }
   
-  static async searchFoods(query: string, pageSize: number = 20): Promise<USDFoodSearchResult[]> {
+  static async searchFoods(
+    query: string, 
+    pageSize: number = 20
+  ): Promise<{ results: USDFoodSearchResult[]; diagnostics: SearchDiagnostics }> {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error('USDA API key not configured');
@@ -69,37 +82,54 @@ export class USDAService {
       throw new Error('USDA lookups are disabled in settings');
     }
     
+    const searchParams = new URLSearchParams({
+      query: query,
+      pageSize: pageSize.toString(),
+      pageNumber: '1',
+      sortBy: 'score',
+      sortOrder: 'desc',
+      api_key: apiKey
+    });
+    
+    const url = `${this.BASE_URL}/foods/search?${searchParams.toString()}`;
+    const diagnostics: SearchDiagnostics = {
+      query,
+      url,
+      timestamp: new Date().toISOString(),
+      status: null,
+      errorMessage: null,
+      resultCount: 0
+    };
+    
     try {
-      const searchParams = new URLSearchParams({
-        query: query,
-        pageSize: pageSize.toString(),
-        pageNumber: '1',
-        sortBy: 'score',
-        sortOrder: 'desc',
-        api_key: apiKey
-      });
-      
-      const response = await fetch(
-        `${this.BASE_URL}/foods/search?${searchParams.toString()}`
-      );
+      const response = await fetch(url);
+      diagnostics.status = response.status;
       
       if (!response.ok) {
+        let errorMessage = `USDA API error: ${response.statusText}`;
         if (response.status === 401) {
-          throw new Error('Invalid USDA API key');
+          errorMessage = 'Invalid USDA API key';
         } else if (response.status === 429) {
-          throw new Error('USDA API rate limit exceeded');
+          errorMessage = 'USDA API rate limit exceeded';
         }
-        throw new Error(`USDA API error: ${response.statusText}`);
+        diagnostics.errorMessage = errorMessage;
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
-      return data.foods || [];
+      const foods = data.foods || [];
+      diagnostics.resultCount = foods.length;
+      
+      return { results: foods, diagnostics };
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Invalid USDA API key')) {
-        throw error;
+      if (error instanceof Error) {
+        diagnostics.errorMessage = error.message;
+      } else {
+        diagnostics.errorMessage = String(error);
       }
+      
       console.error('Failed to search USDA foods:', error);
-      throw new Error('Failed to search USDA foods');
+      throw new Error(diagnostics.errorMessage || 'Failed to search USDA foods');
     }
   }
   
@@ -268,7 +298,7 @@ export class USDAService {
   
   static async searchAndImport(query: string): Promise<FoodItem[]> {
     try {
-      const searchResults = await this.searchFoods(query, 10);
+      const { results: searchResults } = await this.searchFoods(query, 10);
       const importedFoods: FoodItem[] = [];
       
       // Import first 5 results to avoid rate limits
