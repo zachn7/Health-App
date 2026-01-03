@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Calendar, Download } from 'lucide-react';
 import { repositories } from '../db';
 import ExercisePicker from '../components/ExercisePicker';
 import { safeJSONParse, CurrentWorkoutSchema } from '../lib/schemas';
+import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 
 import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan } from '../types';
 
@@ -257,15 +258,9 @@ export default function WorkoutLogger() {
 
   const navigateDate = (direction: 'prev' | 'next' | 'today') => {
     if (direction === 'today') {
-      setSelectedDate(new Date().toISOString().split('T')[0]);
+      setSelectedDate(getTodayLocalDateKey());
     } else {
-      const date = new Date(selectedDate);
-      if (direction === 'prev') {
-        date.setDate(date.getDate() - 1);
-      } else {
-        date.setDate(date.getDate() + 1);
-      }
-      setSelectedDate(date.toISOString().split('T')[0]);
+      setSelectedDate(addDaysToLocalDate(selectedDate, direction === 'next' ? 1 : -1));
     }
   };
 
@@ -424,13 +419,9 @@ export default function WorkoutLogger() {
         >
           <Calendar className="w-4 h-4" />
           <span className="font-medium">
-            {new Date(selectedDate).toLocaleDateString('en-US', { 
-              weekday: 'short', 
-              month: 'short', 
-              day: 'numeric' 
-            })}
+            {formatLocalDate(selectedDate, { weekday: 'short', month: 'short', day: 'numeric' })}
           </span>
-          {selectedDate === new Date().toISOString().split('T')[0] && (
+          {selectedDate === getTodayLocalDateKey() && (
             <span className="text-xs text-blue-600 font-medium">Today</span>
           )}
         </button>
@@ -438,7 +429,6 @@ export default function WorkoutLogger() {
         <button
           onClick={() => navigateDate('next')}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          disabled={selectedDate >= new Date().toISOString().split('T')[0]}
         >
           <ChevronRight className="w-5 h-5" />
         </button>
@@ -460,7 +450,7 @@ export default function WorkoutLogger() {
               setSelectedDate(e.target.value);
               setShowDatePicker(false);
             }}
-            max={new Date().toISOString().split('T')[0]}
+
             className="input w-auto mx-auto"
           />
         </div>

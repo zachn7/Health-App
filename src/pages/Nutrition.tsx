@@ -3,12 +3,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult } from '../lib/usda-service';
+import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
 
 export default function Nutrition() {
   const isDev = process.env.NODE_ENV === 'development';
   const [currentLog, setCurrentLog] = useState<NutritionLog | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(getTodayLocalDateKey());
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [newFood, setNewFood] = useState<FoodLogItem>({
@@ -81,8 +82,7 @@ export default function Nutrition() {
       setProfile(userProfile || null);
 
       // Load nutrition log for selected date
-      const dateStr = selectedDate.toISOString().split('T')[0];
-      const log = await repositories.nutrition.getNutritionLog(dateStr);
+      const log = await repositories.nutrition.getNutritionLog(selectedDate);
       setCurrentLog(log || null);
     } catch (error) {
       console.error('Failed to load nutrition data:', error);
@@ -93,15 +93,9 @@ export default function Nutrition() {
 
   const navigateDate = (direction: 'prev' | 'next' | 'today') => {
     if (direction === 'today') {
-      setSelectedDate(new Date());
+      setSelectedDate(getTodayLocalDateKey());
     } else {
-      const newDate = new Date(selectedDate);
-      if (direction === 'prev') {
-        newDate.setDate(newDate.getDate() - 1);
-      } else {
-        newDate.setDate(newDate.getDate() + 1);
-      }
-      setSelectedDate(newDate);
+      setSelectedDate(addDaysToLocalDate(selectedDate, direction === 'next' ? 1 : -1));
     }
   };
 
@@ -124,7 +118,7 @@ export default function Nutrition() {
 
   const saveFood = async () => {
     try {
-      const dateStr = selectedDate.toISOString().split('T')[0];
+      const dateStr = selectedDate;
       
       // Create a completely new object with unique ID to avoid shared references
       const foodToSave: FoodLogItem = JSON.parse(JSON.stringify({
@@ -205,7 +199,7 @@ export default function Nutrition() {
   };
 
   const deleteFood = async (foodId: string) => {
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = selectedDate;
     
     try {
       // Use the queue-based delete method to ensure atomicity
@@ -344,7 +338,7 @@ export default function Nutrition() {
   };
 
   const updateFoodServingSize = async (foodItemId: string) => {
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = selectedDate;
     
     try {
       // Validate numeric input
@@ -476,7 +470,7 @@ export default function Nutrition() {
   };
 
   const saveFoodItem = async (foodItem: FoodLogItem) => {
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = selectedDate;
     
     // Canonical model: computedTotalGrams = quantidade * servingGrams
     const computedTotalGrams = foodItem.quantidade * (foodItem.servingGrams || 100);
@@ -556,7 +550,7 @@ export default function Nutrition() {
             <button
               onClick={() => navigateDate('today')}
               className={`btn btn-sm ${
-                selectedDate.toDateString() === new Date().toDateString() 
+                selectedDate === getTodayLocalDateKey() 
                   ? 'btn-primary' 
                   : 'btn-secondary'
               }`}
@@ -573,12 +567,7 @@ export default function Nutrition() {
         </div>
         
         <div className="text-center text-lg font-medium mb-4">
-          {selectedDate.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}
+          {formatLocalDate(selectedDate, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </div>
         
         {/* Daily Totals with 0/target format */}

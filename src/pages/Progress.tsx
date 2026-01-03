@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { repositories } from '../db';
 import { formatWeight, lbsToKg, kgToLbs } from '../lib/unit-conversions';
+import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate, formatWeightToOneDecimal } from '../lib/date-utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { WeightLog, Profile, WorkoutLog } from '../types';
 
@@ -11,7 +12,7 @@ export default function Progress() {
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddWeight, setShowAddWeight] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayLocalDateKey());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [newWeight, setNewWeight] = useState<{
     weightKg: number;
@@ -191,7 +192,7 @@ export default function Progress() {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Current Weight</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Scale Weight</h3>
           <div className="text-2xl font-bold text-blue-600">
             {weightStats ? formatWeight(weightStats.currentWeight, profile?.preferredUnits || 'metric') : '—'}
           </div>
@@ -221,11 +222,11 @@ export default function Progress() {
         </div>
         
         <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Total Volume</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Average Weight</h3>
           <div className="text-2xl font-bold text-orange-600">
-            {workoutStats ? `${(workoutStats.totalVolume / 1000).toFixed(0)}k` : '—'}
+            {weightStats ? formatWeight(weightStats.averageWeight, profile?.preferredUnits || 'metric') : '—'}
           </div>
-          <div className="text-sm text-gray-600">{getWeightUnit()} × reps</div>
+          <div className="text-sm text-gray-600">Over all logged days</div>
         </div>
       </div>
       
@@ -245,9 +246,7 @@ export default function Progress() {
         <div className="flex items-center justify-center mb-6 space-x-4">
           <button
             onClick={() => {
-              const date = new Date(selectedDate);
-              date.setDate(date.getDate() - 1);
-              setSelectedDate(date.toISOString().split('T')[0]);
+              setSelectedDate(addDaysToLocalDate(selectedDate, -1));
             }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -260,22 +259,15 @@ export default function Progress() {
           >
             <Calendar className="w-4 h-4" />
             <span className="font-medium">
-              {new Date(selectedDate).toLocaleDateString('en-US', { 
-                weekday: 'short', 
-                month: 'short', 
-                day: 'numeric' 
-              })}
+              {formatLocalDate(selectedDate, { weekday: 'short', month: 'short', day: 'numeric' })}
             </span>
           </button>
           
           <button
             onClick={() => {
-              const date = new Date(selectedDate);
-              date.setDate(date.getDate() + 1);
-              setSelectedDate(date.toISOString().split('T')[0]);
+              setSelectedDate(addDaysToLocalDate(selectedDate, 1));
             }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            disabled={selectedDate >= new Date().toISOString().split('T')[0]}
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -290,7 +282,6 @@ export default function Progress() {
                 setSelectedDate(e.target.value);
                 setShowDatePicker(false);
               }}
-              max={new Date().toISOString().split('T')[0]}
               className="input w-auto mx-auto block"
             />
           </div>
@@ -299,11 +290,7 @@ export default function Progress() {
         {showAddWeight && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <h3 className="text-lg font-medium mb-4">
-              Log Weight for {new Date(selectedDate).toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                month: 'long', 
-                day: 'numeric' 
-              })}
+              Log Weight for {formatLocalDate(selectedDate, { weekday: 'long', month: 'long', day: 'numeric' })}
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -383,8 +370,12 @@ export default function Progress() {
                     const periodLogs = recentLogs.slice(startIdx, endIdx + 1);
                     const rollingAverage = periodLogs.reduce((sum, l) => sum + l.weightKg, 0) / periodLogs.length;
                     
-                    const displayWeight = profile?.preferredUnits === 'imperial' ? (log.weightKg * 2.20462).toFixed(1) : log.weightKg.toFixed(1);
-                    const displayAverage = profile?.preferredUnits === 'imperial' ? (rollingAverage * 2.20462).toFixed(1) : rollingAverage.toFixed(1);
+                    const displayWeight = formatWeightToOneDecimal(
+                      profile?.preferredUnits === 'imperial' ? (log.weightKg * 2.20462) : log.weightKg
+                    );
+                    const displayAverage = formatWeightToOneDecimal(
+                      profile?.preferredUnits === 'imperial' ? (rollingAverage * 2.20462) : rollingAverage
+                    );
                     
                     return {
                       date: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
