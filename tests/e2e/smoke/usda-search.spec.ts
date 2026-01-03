@@ -154,7 +154,7 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await expect(page.getByText('Poultry Products').first()).toBeVisible();
   });
 
-  test('should add USDA food to nutrition log', async ({ page }) => {
+  test('should add USDA food to nutrition log with non-zero macros', async ({ page }) => {
     // Open USDA import dialog
     await page.getByTestId('usda-search-button').click();
     
@@ -196,7 +196,7 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Close the USDA import modal by clicking the search button again (toggles it closed)
     await page.getByTestId('usda-search-button').click();
     
-  // Nutrition log list should now be visible
+    // Nutrition log list should now be visible
     await expect(nutritionLogList).toBeVisible({ timeout: 5000 });
     
     // Count nutrition log items using stable testids - count should have increased by 1
@@ -221,6 +221,70 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     const protein = lastItem.getByTestId('food-protein');
     await expect(protein).not.toHaveText('');
     await expect(protein).not.toHaveText('0');
+    
+    // Check that other macros are present
+    await expect(lastItem.getByTestId('food-carbs')).toBeVisible();
+    await expect(lastItem.getByTestId('food-fat')).toBeVisible();
+  });
+
+  test('should add multiple foods back-to-back without hanging', async ({ page }) => {
+    // Open USDA import dialog
+    await page.getByTestId('usda-search-button').click();
+    
+    // Set up network wait
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
+    
+    // Search for food
+    await page.getByTestId('usda-search-input').fill('chicken');
+    await searchResponse;
+    await page.waitForTimeout(600);
+    
+    // Wait for results to appear
+    await expect(page.getByTestId('usda-results')).toBeVisible({ timeout: 10000 });
+    
+    // Get initial count of nutrition log items
+    const nutritionLogList = page.getByTestId('nutrition-log-list');
+    const initialItemsCount = await nutritionLogList.getByTestId('nutrition-food-item').count();
+    
+    // Set up detail response waits for both foods
+    const detailResponse1 = page.waitForResponse(
+      response => response.url().includes('/food/170967') && response.status() === 200
+    );
+    const detailResponse2 = page.waitForResponse(
+      response => response.url().includes('/food/170968') && response.status() === 200
+    );
+    
+    // Click "Add" on both foods quickly (within 500ms)
+    const addButton1 = page.getByTestId('usda-add-food').nth(0);
+    const addButton2 = page.getByTestId('usda-add-food').nth(1);
+    
+    await addButton1.click();
+    // Add second food quickly without waiting for first to complete
+    await addButton2.click();
+    
+    // Wait for both detail API calls to complete
+    await Promise.all([detailResponse1, detailResponse2]);
+    
+    // Wait for both "Adding..." to disappear
+    await expect(addButton1.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
+    await expect(addButton2.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
+    
+    // Close the USDA import modal
+    await page.getByTestId('usda-search-button').click();
+    await page.waitForTimeout(500);
+    
+    // Count nutrition log items - should have increased by 2
+    const nutritionLogItems = nutritionLogList.getByTestId('nutrition-food-item');
+    await expect(nutritionLogItems).toHaveCount(initialItemsCount + 2, { timeout: 10000 });
+    
+    // Verify both added items have non-zero macros
+    const items = nutritionLogItems.all();
+    for (const item of await items) {
+      await expect(item.getByTestId('food-calories')).not.toHaveText('0');
+      await expect(item.getByTestId('food-protein')).not.toHaveText('0');
+    }
   });
 
   test('should display error when search fails', async ({ page }) => {

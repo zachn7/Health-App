@@ -205,27 +205,17 @@ export default function Nutrition() {
   };
 
   const deleteFood = async (foodId: string) => {
-    if (!currentLog) return;
+    const dateStr = selectedDate.toISOString().split('T')[0];
     
     try {
-      const updatedItems = currentLog.items.filter(item => item.id !== foodId);
-      const updatedLog = {
-        ...currentLog,
-        items: updatedItems,
-        totals: calculateTotals(updatedItems),
-        updatedAt: new Date().toISOString()
-      };
+      // Use the queue-based delete method to ensure atomicity
+      const updatedLog = await repositories.nutrition.deleteFoodFromDayLog(dateStr, foodId);
       
-      if (updatedItems.length === 0) {
-        // Delete the entire log if no items left
-        await repositories.nutrition.deleteNutritionLog(currentLog.id);
-        setCurrentLog(null);
-      } else {
-        await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
-        setCurrentLog(updatedLog);
-      }
+      // Update React state with the DB source of truth
+      setCurrentLog(updatedLog);
     } catch (error) {
       console.error('Failed to delete food:', error);
+      alert('Failed to delete food item. Please try again.');
     }
   };
 
@@ -354,7 +344,7 @@ export default function Nutrition() {
   };
 
   const updateFoodServingSize = async (foodItemId: string) => {
-    if (!currentLog) return;
+    const dateStr = selectedDate.toISOString().split('T')[0];
     
     try {
       // Validate numeric input
@@ -363,9 +353,17 @@ export default function Nutrition() {
         return;
       }
       
-      // Find the original food item
-      const originalItem = currentLog.items.find(item => item.id === foodItemId);
-      if (!originalItem) return;
+      // Get the latest log from DB (not from React state) to avoid stale data
+      const latestLog = await repositories.nutrition.getNutritionLog(dateStr);
+      if (!latestLog) {
+        throw new Error('Nutrition log not found');
+      }
+      
+      // Find the original food item from the latest DB data
+      const originalItem = latestLog.items.find(item => item.id === foodItemId);
+      if (!originalItem) {
+        throw new Error('Food item not found');
+      }
       
       const isUnitGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
       const editedQuantity = editingServingSize.quantity;
@@ -424,8 +422,7 @@ export default function Nutrition() {
       // Recalculate macros based on the change in total grams
       const gramRatio = newTotalGrams / oldTotalGrams;
       
-      const updatedItem: FoodLogItem = {
-        ...originalItem,
+      const updates = {
         servingSize: displayServingSize,
         quantidade: newQuantity,
         servingGrams: newServingGrams,
@@ -441,20 +438,13 @@ export default function Nutrition() {
         updatedAt: new Date().toISOString()
       };
       
-      // Update the nutrition log
-      const updatedItems = currentLog.items.map(item => 
-        item.id === foodItemId ? updatedItem : item
-      );
+      // Use the queue-based update method to ensure atomicity
+      const updatedLog = await repositories.nutrition.updateFoodInDayLog(dateStr, foodItemId, updates);
       
-      const updatedLog: NutritionLog = {
-        ...currentLog,
-        items: updatedItems,
-        totals: calculateTotals(updatedItems),
-        updatedAt: new Date().toISOString()
-      };
-      
-      await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
+      // Update React state with the DB source of truth
       setCurrentLog(updatedLog);
+      
+      // Close the edit modal
       setShowServingSizeEdit(null);
     } catch (error) {
       console.error('Failed to update serving size:', error);
@@ -463,19 +453,12 @@ export default function Nutrition() {
   };
 
   const startEditServingSize = (item: FoodLogItem) => {
-    // Default to the item's current unit and quantity
+    // Default to the item's current unit and - ALWAYS default to 'serving'
     // This ensures we don't incorrectly parse the display string
+    // IMPORTANT: We want to ALWAYS default to serving unit when editing,
+    // regardless of what the user previously selected. This simplifies the UX.
     let quantity = item.quantidade || 1;
-    let unit: 'serving' | 'grams' | 'g' = item.baseUnit || 'serving';
-    
-    // IMPORTANT: If the item was originally added as grams (servingGrams === 1),
-    // don't force it to 'serving' - preserve the user's choice.
-    // Only default to 'serving' if servingGrams is meaningful (not 1g which is used
-    // to indicate 'quantity in grams mode').
-    if (unit === 'grams' && item.servingGrams && item.servingGrams > 1) {
-      // Item has meaningful serving size, default to serving
-      unit = 'serving';
-    }
+    let unit: 'serving' | 'grams' | 'g' = 'serving'; // Always default to serving
     
     setEditingServingSize({
       quantity,
@@ -509,48 +492,11 @@ export default function Nutrition() {
       updatedAt: new Date().toISOString()
     }));
     
-    // Always ensure log exists before adding (atomic check-or-create)
-    let log = currentLog;
-    if (!log) {
-      // Explicitly get or create log for date to avoid race conditions
-      const existingLog = await repositories.nutrition.getNutritionLog(dateStr);
-      if (existingLog) {
-        log = existingLog;
-      } else {
-        // Create new log for selected date
-        const newLog: NutritionLog = {
-          id: crypto.randomUUID(),
-          date: dateStr,
-          items: [],
-          totals: { calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0, sugarG: 0, sodiumMg: 0 },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        // Wait for the create to complete
-        await repositories.nutrition.createNutritionLog(newLog);
-        // Fetch the newly created log to ensure we have the complete object
-        const createdLog = await repositories.nutrition.getNutritionLog(dateStr);
-        log = createdLog || newLog;
-      }
-    }
+    // Use the atomic queue-based add method to prevent race conditions
+    const updatedLog = await repositories.nutrition.addFoodToDayLog(dateStr, foodToSave);
     
-    // Add to log - create new array to avoid reference issues
-    const updatedItems = [...(log.items || []), foodToSave];
-    const updatedLog: NutritionLog = {
-      ...log,
-      items: updatedItems,
-      totals: calculateTotals(updatedItems),
-      updatedAt: new Date().toISOString()
-    };
-    
-    // Wait for the update to complete
-    await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
-    
-    // Update React state
+    // Update React state with the DB source of truth
     setCurrentLog(updatedLog);
-    
-    // Small delay to ensure state is propagated
-    await new Promise(resolve => setTimeout(resolve, 50));
   };
 
   const addSavedFood = async (food: FoodItem) => {
@@ -843,8 +789,8 @@ export default function Nutrition() {
                                 <span className={macros.fatG > 0 ? 'text-red-600' : 'text-gray-400'}>
                                   {macros.fatG.toFixed(1)}g fat
                                 </span>
-                                <span className="text-gray-400">
-                                  ({macros.basis === 'per_100g' ? 'per 100g' : 'per serving'})
+                                <span className="text-gray-500 font">
+                                  {macros.basis === 'per_100g' ? '1 serving (100g)' : '1 serving'}
                                 </span>
                               </div>
                             )}

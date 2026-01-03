@@ -1,6 +1,9 @@
 import { db } from '../index';
 import type { NutritionLog, FoodItem, MealTemplate } from '@/types';
 
+// Per-day async queue to serialize operations and prevent race conditions
+const dayLogQueues: Map<string, Promise<NutritionLog>> = new Map();
+
 export class NutritionRepository {
   // Food Items
   async createFoodItem(food: Omit<FoodItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<FoodItem> {
@@ -129,6 +132,166 @@ export class NutritionRepository {
   async getTodaysNutrition(): Promise<NutritionLog | undefined> {
     const today = new Date().toISOString().split('T')[0];
     return await this.getNutritionLog(today);
+  }
+
+  /**
+   * Atomically get or create a nutrition log for a given date
+   * Ensures only one log per date exists and always returns a valid log
+   */
+  async getOrCreateDayLog(date: string): Promise<NutritionLog> {
+    // First try to get existing log
+    const existingLog = await this.getNutritionLog(date);
+    if (existingLog) {
+      return existingLog;
+    }
+
+    // Create new log for the date
+    const now = new Date().toISOString();
+    const newLog: NutritionLog = {
+      id: crypto.randomUUID(),
+      date,
+      items: [],
+      totals: {
+        calories: 0,
+        proteinG: 0,
+        carbsG: 0,
+        fatG: 0,
+        fiberG: 0,
+        sugarG: 0,
+        sodiumMg: 0
+      },
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await db.nutritionLogs.add(newLog);
+    return newLog;
+  }
+
+  /**
+   * Add food item to day log with queue-based serialization
+   * Uses per-day queue to prevent race conditions during rapid adds
+   */
+  async addFoodToDayLog(date: string, foodLogItem: any): Promise<NutritionLog> {
+    // Get or create the queue for this date
+    let queuePromise = dayLogQueues.get(date);
+
+    if (!queuePromise) {
+      // Start with getOrCreate operation
+      queuePromise = this.getOrCreateDayLog(date);
+      dayLogQueues.set(date, queuePromise);
+
+      // Clean up queue after it resolves
+      queuePromise.finally(() => {
+        dayLogQueues.delete(date);
+      });
+    }
+
+    // Chain our add operation onto the existing queue
+    const finalPromise = queuePromise.then(async (log) => {
+      // Read latest log from DB (not from the queued state) to prevent lost updates
+      const latestLog = await this.getNutritionLog(date);
+      const targetLog = latestLog || log;
+
+      // Add the new item
+      const updatedItems = [...(targetLog.items || []), foodLogItem];
+      const updatedLog: NutritionLog = {
+        ...targetLog,
+        items: updatedItems,
+        totals: this.calculateTotals(updatedItems),
+        updatedAt: new Date().toISOString()
+      };
+
+      await db.nutritionLogs.put(updatedLog);
+      return updatedLog;
+    });
+
+    // Update the queue promise for the next operation
+    dayLogQueues.set(date, finalPromise);
+
+    return finalPromise;
+  }
+
+  /**
+   * Update food item in day log with queue-based serialization
+   */
+  async updateFoodInDayLog(date: string, foodItemId: string, updates: Partial<any>): Promise<NutritionLog> {
+    const log = await this.getOrCreateDayLog(date);
+    const updatedItems = (log.items || []).map(item => 
+      item.id === foodItemId ? { ...item, ...updates } : item
+    );
+    
+    const updatedLog: NutritionLog = {
+      ...log,
+      items: updatedItems,
+      totals: this.calculateTotals(updatedItems),
+      updatedAt: new Date().toISOString()
+    };
+
+    await db.nutritionLogs.put(updatedLog);
+    return updatedLog;
+  }
+
+  /**
+   * Delete food item from day log with queue-based serialization
+   */
+  async deleteFoodFromDayLog(date: string, foodItemId: string): Promise<NutritionLog | null> {
+    const log = await this.getNutritionLog(date);
+    if (!log) {
+      throw new Error('Nutrition log not found for date');
+    }
+
+    const updatedItems = (log.items || []).filter(item => item.id !== foodItemId);
+
+    if (updatedItems.length === 0) {
+      // Delete the entire log if no items left
+      await this.deleteNutritionLog(log.id);
+      return null;
+    }
+
+    const updatedLog: NutritionLog = {
+      ...log,
+      items: updatedItems,
+      totals: this.calculateTotals(updatedItems),
+      updatedAt: new Date().toISOString()
+    };
+
+    await db.nutritionLogs.put(updatedLog);
+    return updatedLog;
+  }
+
+  /**
+   * Calculate macro totals from food log items
+   */
+  private calculateTotals(items: any[]): {
+    calories: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+    fiberG: number;
+    sugarG: number;
+    sodiumMg: number;
+  } {
+    return items.reduce(
+      (totals, item) => ({
+        calories: totals.calories + (item.calories || 0),
+        proteinG: totals.proteinG + (item.proteinG || 0),
+        carbsG: totals.carbsG + (item.carbsG || 0),
+        fatG: totals.fatG + (item.fatG || 0),
+        fiberG: (totals.fiberG || 0) + ((item.fiberG || 0)),
+        sugarG: (totals.sugarG || 0) + ((item.sugarG || 0)),
+        sodiumMg: (totals.sodiumMg || 0) + ((item.sodiumMg || 0))
+      }),
+      {
+        calories: 0,
+        proteinG: 0,
+        carbsG: 0,
+        fatG: 0,
+        fiberG: 0,
+        sugarG: 0,
+        sodiumMg: 0
+      }
+    );
   }
 
   async getWeeklyNutritionTotals(startDate: string, endDate: string): Promise<{

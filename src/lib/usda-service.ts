@@ -399,20 +399,27 @@ class USDAService {
 
   /**
    * Create a FoodLogItem from USDA data with proper macro normalization
+   * Default behavior: always defaults to 1 serving (not grams)
    */
   static async createFoodLogItem(fdcId: number, customQuantity: number = 1, customUnit: string = 'serving'): Promise<FoodLogItem> {
     const foodDetail = await this.getFoodDetails(fdcId);
     const macroNutrients = this.extractMacros(foodDetail);
     const servingInfo = this.parseServingInfo(foodDetail);
     
+    // Normalize customUnit to 'serving' or 'grams'
+    const isGramsUnit = customUnit === 'grams' || customUnit === 'g';
+    
+    // Default to 'serving' if not specified
+    const targetUnit = isGramsUnit ? 'grams' : 'serving';
+    
     // Calculate the final macros based on the requested quantity/unit
     let scaleFactor = 1;
     let finalServingSize = servingInfo.displaySize;
     let finalQuantity = customQuantity;
     let finalServingGrams = servingInfo.gramsPerServing;
-    let finalBaseUnit = servingInfo.baseUnit;
+    let finalBaseUnit: 'serving' | 'grams' = targetUnit as 'serving' | 'grams';
     
-    if (customUnit === 'grams') {
+    if (isGramsUnit) {
       // User wants specific grams
       if (macroNutrients.basis === 'per_100g') {
         // Foundation/SR foods are per 100g
@@ -427,14 +434,19 @@ class USDAService {
       finalServingGrams = customQuantity;
       finalBaseUnit = 'grams';
     } else {
-      // User wants servings
+      // User wants servings (DEFAULT BEHAVIOR)
       scaleFactor = customQuantity;
       finalServingSize = `${customQuantity} serving${customQuantity !== 1 ? 's' : ''}`;
-      // If macro basis is per 100g and we're using servings, we need to account for that
-      if (macroNutrients.basis === 'per_100g' && customQuantity !== 1) {
-        // Macros are per 100g, but user wants X servings
-        // Assume 1 serving = the default serving size (100g for Foundation/SR)
-        scaleFactor = customQuantity;
+      
+      // Set baseUnit to 'serving' by default
+      finalBaseUnit = 'serving';
+      
+      // For Foundation/SR foods (per_100g), treat 1 serving = 100g
+      if (macroNutrients.basis === 'per_100g') {
+        finalServingGrams = 100; // 1 serving = 100g for Foundation foods
+      } else {
+        // For branded foods (per_serving), use the actual serving grams
+        finalServingGrams = servingInfo.gramsPerServing;
       }
     }
     
@@ -448,6 +460,11 @@ class USDAService {
       sugarG: macroNutrients.sugarG !== undefined ? Math.round((macroNutrients.sugarG * scaleFactor) * 10) / 10 : undefined,
       sodiumMg: macroNutrients.sodiumMg !== undefined ? Math.round((macroNutrients.sodiumMg * scaleFactor)) : undefined
     };
+    
+    // Validate that at least some macros are non-zero
+    if (finalMacros.calories === 0 && finalMacros.proteinG === 0 && finalMacros.carbsG === 0 && finalMacros.fatG === 0) {
+      throw new Error('Food has no macro information available');
+    }
     
     // Canonical model: totalGrams = quantity * gramsPerUnit
     const computedTotalGrams = finalQuantity * finalServingGrams;
