@@ -30,6 +30,7 @@ export default function Coach() {
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [hasWebGPU, setHasWebGPU] = useState<boolean | null>(null);
+  const [webGPUChecked, setWebGPUChecked] = useState(false);
   const [modelValidationWarning, setModelValidationWarning] = useState<string | null>(null);
   
   const [checkIn, setCheckIn] = useState({
@@ -45,29 +46,51 @@ export default function Coach() {
     loadWebLLMStatus();
     checkWebGPUSupport();
     
-    // Only load models if WebLLM is enabled
-    if (webllmEnabled) {
-      loadWebLLMModels();
-    }
+    // Load chat history from localStorage
+    loadChatHistory();
   }, []);
   
   useEffect(() => {
-    // Load models when WebLLM is enabled
-    if (webllmEnabled && availableModels.length === 0) {
+    // Only load models when WebLLM is enabled AND WebGPU is available
+    if (webllmEnabled && hasWebGPU && availableModels.length === 0) {
       loadWebLLMModels();
     }
-  }, [webllmEnabled]);
+    
+    // If WebLLM enabled but no WebGPU, show clear message
+    if (webllmEnabled && hasWebGPU === false) {
+      setWebLLMError('WebGPU is not available in your browser. AI Coach requires WebGPU support. Please use Chrome, Edge, or another WebGPU-enabled browser.');
+    }
+  }, [webllmEnabled, hasWebGPU]);
 
   const checkWebGPUSupport = async () => {
     try {
-      const supported = 'gpu' in navigator;
-      setHasWebGPU(supported);
-      if (!supported) {
-        console.log('WebGPU not supported in this browser');
+      // Check for WebGPU support first
+      const gpuAvailable = 'gpu' in navigator;
+      
+      if (!gpuAvailable) {
+        setHasWebGPU(false);
+        setWebGPUChecked(true);
+        console.warn('[Coach] WebGPU API not available in this browser');
+        return;
+      }
+      
+      // Try to get a GPU adapter to confirm it's actually usable
+      const adapter = await (navigator as any).gpu?.requestAdapter();
+      
+      if (adapter) {
+        setHasWebGPU(true);
+        console.log('[Coach] WebGPU is available:', adapter);
+        // Close the adapter after checking
+        await adapter.requestAdapterInfo().then(() => adapter.destroy?.());
+      } else {
+        setHasWebGPU(false);
+        console.warn('[Coach] WebGPU API exists but no adapter available');
       }
     } catch (error) {
-      console.error('Error checking WebGPU support:', error);
+      console.error('[Coach] Error checking WebGPU support:', error);
       setHasWebGPU(false);
+    } finally {
+      setWebGPUChecked(true);
     }
   };
 
@@ -281,6 +304,12 @@ export default function Coach() {
   };
   
   const initializeWebLLM = async () => {
+    // Check WebGPU availability first
+    if (hasWebGPU === false) {
+      setWebLLMError('WebGPU is not available in your browser. AI Coach requires WebGPU support.');
+      return;
+    }
+    
     setWebLLMModelLoading(true);
     setWebLLMError(null);
     setModelValidationWarning(null);
@@ -300,23 +329,58 @@ export default function Coach() {
       const selectedModel = availableModels.find(m => m.model_id === selectedModelId);
       
       if (!selectedModel || !availableModels.some(m => m.model_id === engineState.selectedModelId)) {
-        setModelValidationWarning(`Model auto-fallback occurred. Loading: ${engineState.selectedModelId}`);
+        setModelValidationWarning(`Model loaded: ${engineState.selectedModelId}`);
       }
     } catch (error) {
       console.error('Failed to initialize WebLLM:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to initialize AI model';
       setWebLLMError(errorMessage);
       
+      // Ensure model loading state is reset on error
+      setWebLLMModelReady(false);
+      
       // Try to detect specific issues for better user guidance
-      if (errorMessage.includes('WebGPU')) {
-        setWebLLMError('WebGPU is not available in your browser. Please use Chrome, Edge, or another WebGPU-enabled browser.');
+      if (errorMessage.includes('WebGPU') || errorMessage.includes('gpu')) {
+        setWebLLMError('WebGPU is not available in your browser. AI Coach requires WebGPU support. Please use Chrome, Edge, or another WebGPU-enabled browser.');
       } else if (errorMessage.includes('disabled')) {
         setWebLLMError('WebLLM Coach is disabled. Please enable it in Settings.');
+      } else if (errorMessage.includes('model') || errorMessage.includes('model_id')) {
+        setWebLLMError('The AI model could not be loaded. Please try selecting a different model or refresh the page.');
       }
     } finally {
       webllmService.clearInitProgressCallback();
       setWebLLMModelLoading(false);
     }
+  };
+  
+  const loadChatHistory = () => {
+    try {
+      const saved = localStorage.getItem('ai-coach-chat-history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setChatMessages(parsed.messages || []);
+        setShowAIChat(parsed.messages && parsed.messages.length > 0);
+      }
+    } catch (error) {
+      console.warn('Failed to load chat history:', error);
+    }
+  };
+  
+  const saveChatHistory = (messages: typeof chatMessages) => {
+    try {
+      localStorage.setItem('ai-coach-chat-history', JSON.stringify({
+        messages,
+        savedAt: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.warn('Failed to save chat history:', error);
+    }
+  };
+  
+  const clearChatHistory = () => {
+    setChatMessages([]);
+    setShowAIChat(false);
+    localStorage.removeItem('ai-coach-chat-history');
   };
   
   const sendMessage = async () => {
@@ -327,17 +391,24 @@ export default function Coach() {
     setChatLoading(true);
     
     // Add user message to chat
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMessage }];
+    setChatMessages(updatedMessages);
+    saveChatHistory(updatedMessages);
     
     try {
       const response = await webllmService.sendMessage(userMessage, profile!, currentPlan || undefined);
-      setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      const finalMessages = [...updatedMessages, { role: 'assistant' as const, content: response }];
+      setChatMessages(finalMessages);
+      saveChatHistory(finalMessages);
     } catch (error) {
       console.error('Failed to send message to AI:', error);
-      setChatMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: `I apologize, but I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }]);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessages = [...updatedMessages, { 
+        role: 'assistant' as const, 
+        content: `I apologize, but I encountered an error: ${errorMessage}. Please try again or check if WebGPU is available.`
+      }];
+      setChatMessages(errorMessages);
+      saveChatHistory(errorMessages);
     } finally {
       setChatLoading(false);
     }
@@ -394,6 +465,30 @@ export default function Coach() {
       </div>
 
       <div className="space-y-6">
+        {/* WebGPU Status Warning */}
+        {webllmEnabled && webGPUChecked && hasWebGPU === false && (
+          <div className="card bg-red-50 border-red-200">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-medium text-red-900">WebGPU Not Available</h3>
+                <p className="text-sm text-red-700 mt-1">
+                  The AI Coach requires WebGPU support, which is not available in your current browser. 
+                  Please use Chrome, Edge, or another WebGPU-enabled browser.
+                </p>
+                <a 
+                  href="https://caniuse.com/webgpu" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-red-600 hover:text-red-800 underline mt-2 inline-block"
+                >
+                  Check WebGPU browser support →
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* AI Coach Section */}
         {webllmEnabled && (
           <div className="card">
@@ -551,6 +646,19 @@ export default function Coach() {
             
             {webllmModelReady && (
               <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-medium text-gray-900">
+                    {showAIChat ? 'Chat with AI Coach' : 'AI Coach'}
+                  </h3>
+                  {chatMessages.length > 0 && (
+                    <button
+                      onClick={clearChatHistory}
+                      className="text-sm text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Clear Chat
+                    </button>
+                  )}
+                </div>
                 {!showAIChat ? (
                   <div className="text-center py-8">
                     <Brain className="w-12 h-12 mx-auto text-gray-400 mb-4" />
