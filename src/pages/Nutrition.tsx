@@ -1152,11 +1152,29 @@ export default function Nutrition() {
                           value={editingServingSize.unit}
                           onChange={(e) => {
                             const newUnit = e.target.value as 'serving' | 'grams' | 'g';
-                            // Just update the unit - the total grams invariant will be preserved on save
-                            setEditingServingSize({ 
-                              ...editingServingSize, 
-                              unit: newUnit as 'serving' | 'grams'
-                            });
+                            const isGrams = newUnit === 'grams' || newUnit === 'g';
+                            
+                            if (editingServingSize.originalItem) {
+                              const originalItem = editingServingSize.originalItem;
+                              const currentTotalGrams = originalItem.computedTotalGrams || 
+                                                         (originalItem.quantidade * originalItem.servingGrams);
+                              
+                              // When switching to grams, set quantity to the total grams
+                              // When switching to serving, calculate the serving equivalent
+                              const newQuantity = isGrams ? currentTotalGrams : 
+                                                   Math.round(currentTotalGrams / (originalItem.servingGrams || 100) * 100) / 100;
+                              
+                              setEditingServingSize({ 
+                                ...editingServingSize, 
+                                unit: newUnit as 'serving' | 'grams',
+                                quantity: newQuantity
+                              });
+                            } else {
+                              setEditingServingSize({ 
+                                ...editingServingSize, 
+                                unit: newUnit as 'serving' | 'grams'
+                              });
+                            }
                           }}
                           className="input text-sm"
                           aria-label="unit"
@@ -1180,10 +1198,33 @@ export default function Nutrition() {
                     
                     <div className="text-sm text-gray-600">
                       <span className="font-medium">Updated Macros:</span>
-                      <span className="ml-2">{(item.calories * editingServingSize.quantity / item.quantidade).toFixed(0)} cal</span>
-                      <span className="ml-2">{(item.proteinG * editingServingSize.quantity / item.quantidade).toFixed(1)}g protein</span>
-                      <span className="ml-2">{(item.carbsG * editingServingSize.quantity / item.quantidade).toFixed(1)}g carbs</span>
-                      <span className="ml-2">{(item.fatG * editingServingSize.quantity / item.quantidade).toFixed(1)}g fat</span>
+                      {editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? (
+                        // In grams mode, calculate macros from grams per USDA data
+                        <span className="ml-2">
+                          {(() => {
+                            const originalItem = editingServingSize.originalItem;
+                            if (!originalItem) {
+                              return '0 cal';
+                            }
+                            const originalTotalGrams = originalItem.computedTotalGrams || 
+                                                            (originalItem.quantidade * originalItem.servingGrams);
+                            const gramRatio = editingServingSize.quantity / originalTotalGrams;
+                            const newCalories = Math.round(originalItem.calories * gramRatio);
+                            const newProtein = Math.round((originalItem.proteinG * gramRatio) * 10) / 10;
+                            const newCarbs = Math.round((originalItem.carbsG * gramRatio) * 10) / 10;
+                            const newFat = Math.round((originalItem.fatG * gramRatio) * 10) / 10;
+                            return `${newCalories} cal ${newProtein}g protein ${newCarbs}g carbs ${newFat}g fat`;
+                          })()}
+                        </span>
+                      ) : (
+                        // In serving mode, scale by multiplier
+                        <>
+                          <span className="ml-2">{(item.calories * editingServingSize.quantity / item.quantidade).toFixed(0)} cal</span>
+                          <span className="ml-2">{(item.proteinG * editingServingSize.quantity / item.quantidade).toFixed(1)}g protein</span>
+                          <span className="ml-2">{(item.carbsG * editingServingSize.quantity / item.quantidade).toFixed(1)}g carbs</span>
+                          <span className="ml-2">{(item.fatG * editingServingSize.quantity / item.quantidade).toFixed(1)}g fat</span>
+                        </>
+                      )}
                     </div>
                     
                     <div className="flex space-x-2">
