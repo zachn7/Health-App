@@ -266,13 +266,26 @@ export default function WorkoutLogger() {
 
   const importFromProgram = async (plan: WorkoutPlan, weekIndex: number = 0, dayIndex: number = 0) => {
     try {
-      if (!plan.weeks || plan.weeks.length === 0) {
+      // Validate plan structure
+      if (!plan) {
+        throw new Error('Workout plan is null or undefined');
+      }
+      
+      if (!plan.weeks || !Array.isArray(plan.weeks) || plan.weeks.length === 0) {
         throw new Error('No weeks found in this workout plan');
       }
 
+      if (weekIndex < 0 || weekIndex >= plan.weeks.length) {
+        throw new Error(`Week index ${weekIndex} is out of range (0-${plan.weeks.length - 1})`);
+      }
+
       const currentWeek = plan.weeks[weekIndex];
-      if (!currentWeek || !currentWeek.workouts) {
+      if (!currentWeek || !currentWeek.workouts || !Array.isArray(currentWeek.workouts)) {
         throw new Error('No workouts found in this week of the program');
+      }
+
+      if (dayIndex < 0 || dayIndex >= currentWeek.workouts.length) {
+        throw new Error(`Day index ${dayIndex} is out of range (0-${currentWeek.workouts.length - 1})`);
       }
 
       const workout = currentWeek.workouts[dayIndex];
@@ -280,40 +293,78 @@ export default function WorkoutLogger() {
         throw new Error('No workout found for this day in the program');
       }
 
-      // Load exercises for names
-      const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
-      const exercisesData = await exercisesResponse.json();
+      if (!workout.exercises || !Array.isArray(workout.exercises)) {
+        throw new Error('No exercises found in this workout');
+      }
+
+      // Load exercises for names with error handling
+      let exercisesData: any[] = [];
+      try {
+        const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
+        if (!exercisesResponse.ok) {
+          throw new Error(`Failed to fetch exercises: ${exercisesResponse.statusText}`);
+        }
+        exercisesData = await exercisesResponse.json();
+        
+        if (!Array.isArray(exercisesData)) {
+          throw new Error('Exercise data is not an array');
+        }
+      } catch (err) {
+        console.error('Failed to load exercise data:', err);
+        throw new Error('Failed to load exercise database. Please refresh and try again.');
+      }
       
-      const entries: ExerciseLogEntry[] = workout.exercises.map((ex: any) => {
+      // Map exercises with validation
+      const entries: ExerciseLogEntry[] = workout.exercises.map((ex: any, idx: number) => {
+        if (!ex || typeof ex !== 'object') {
+          console.warn(`Invalid exercise at index ${idx}:`, ex);
+          return {
+            exerciseId: 'unknown-' + idx,
+            exerciseName: `Unknown Exercise ${idx + 1}`,
+            sets: []
+          };
+        }
+        
         const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
         return {
-          exerciseId: ex.exerciseId,
-          exerciseName: exercise?.name || `Exercise ${ex.exerciseId}`,
+          exerciseId: ex.exerciseId || 'unknown-' + idx,
+          exerciseName: exercise?.name || ex.name || `Exercise ${ex.exerciseId || idx}`,
           sets: []
         };
       });
       
+      // Validate entries
+      if (entries.length === 0) {
+        throw new Error('No valid exercises could be imported');
+      }
+      
+      // Set the state
       setExerciseEntries(entries);
       setCurrentWorkout({
         workoutPlanId: plan.id,
         exercises: workout.exercises,
-        notes: workout.notes
+        notes: workout.notes || ''
       });
       setShowImportFromProgram(false);
       setManualWorkoutMode(false);
-      setIsLogging(true); // Start logging mode
-      setStartTime(new Date()); // Start the timer
+      setIsLogging(true);
+      setStartTime(new Date());
       
       // Clear any existing workout log for this date first
-      const existingLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
-      if (existingLog) {
-        await repositories.workout.deleteWorkoutLog(existingLog.id);
+      try {
+        const existingLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
+        if (existingLog) {
+          await repositories.workout.deleteWorkoutLog(existingLog.id);
+        }
+      } catch (err) {
+        console.error('Warning: Failed to clear existing log:', err);
+        // Don't throw - continue with import
       }
       
       // Show success message
       const successDiv = document.createElement('div');
       successDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50';
-      successDiv.innerHTML = `✓ Imported workout: ${workout.day}`;
+      successDiv.innerHTML = `✓ Imported ${entries.length} exercise(s) from ${workout.day}`;
       document.body.appendChild(successDiv);
       setTimeout(() => document.body.removeChild(successDiv), 3000);
       

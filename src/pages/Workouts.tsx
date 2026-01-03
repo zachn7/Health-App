@@ -38,6 +38,8 @@ export default function Workouts() {
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<WorkoutPlan | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [showManualBuilder, setShowManualBuilder] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<{ plan: WorkoutPlan; mode: 'rename' | 'edit-days' } | null>(null);
+  const [editedPlanName, setEditedPlanName] = useState('');
   const [manualPlan, setManualPlan] = useState<Partial<WorkoutPlan>>({
     name: '',
     weeks: [{
@@ -294,6 +296,99 @@ export default function Workouts() {
     }
   };
 
+  const startEditingPlan = (plan: WorkoutPlan, mode: 'rename' | 'edit-days') => {
+    setEditingPlan({ plan, mode });
+    if (mode === 'rename') {
+      setEditedPlanName(plan.name);
+    }
+  };
+
+  const savePlanName = async () => {
+    if (!editingPlan || !editedPlanName.trim()) return;
+    
+    try {
+      const updatedPlan = await repositories.workout.updateWorkoutPlan(editingPlan.plan.id, {
+        name: editedPlanName.trim()
+      });
+      
+      setWorkoutPlans(prev => 
+        prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+      );
+      setSelectedPlan(updatedPlan);
+      setEditingPlan(null);
+      setEditedPlanName('');
+    } catch (error) {
+      console.error('Failed to update plan name:', error);
+      alert('Failed to update plan name.');
+    }
+  };
+
+  const addDayToPlan = async (plan: WorkoutPlan, weekIndex: number) => {
+    try {
+      const updatedPlan = { ...plan };
+      const workoutCount = updatedPlan.weeks[weekIndex].workouts.length;
+      
+      updatedPlan.weeks[weekIndex].workouts.push({
+        day: `Day ${workoutCount + 1}`,
+        exercises: []
+      });
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      
+      setWorkoutPlans(prev => 
+        prev.map(p => p.id === updatedPlan.id ? updatedPlan : p)
+      );
+      setSelectedPlan(updatedPlan);
+    } catch (error) {
+      console.error('Failed to add day:', error);
+      alert('Failed to add day to plan.');
+    }
+  };
+
+  const removeDayFromPlan = async (plan: WorkoutPlan, weekIndex: number, dayIndex: number) => {
+    if (!confirm('Are you sure you want to remove this day and all its exercises?')) return;
+    
+    try {
+      const updatedPlan = { ...plan };
+      updatedPlan.weeks[weekIndex].workouts = updatedPlan.weeks[weekIndex].workouts.filter((_, idx) => idx !== dayIndex);
+      
+      // Re-number the days
+      updatedPlan.weeks[weekIndex].workouts.forEach((workout, idx) => {
+        workout.day = `Day ${idx + 1}`;
+      });
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      
+      setWorkoutPlans(prev => 
+        prev.map(p => p.id === updatedPlan.id ? updatedPlan : p)
+      );
+      setSelectedPlan(updatedPlan);
+    } catch (error) {
+      console.error('Failed to remove day:', error);
+      alert('Failed to remove day from plan.');
+    }
+  };
+
+  const renameDayInPlan = async (plan: WorkoutPlan, weekIndex: number, dayIndex: number, newName: string) => {
+    try {
+      const updatedPlan = { ...plan };
+      updatedPlan.weeks[weekIndex].workouts[dayIndex].day = newName;
+      updatedPlan.updatedAt = new Date().toISOString();
+      
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      
+      setWorkoutPlans(prev => 
+        prev.map(p => p.id === updatedPlan.id ? updatedPlan : p)
+      );
+      setSelectedPlan(updatedPlan);
+    } catch (error) {
+      console.error('Failed to rename day:', error);
+      alert('Failed to rename day.');
+    }
+  };
+
   const startWorkout = (plan: WorkoutPlan, weekIndex: number, dayIndex: number) => {
     const workout = plan.weeks[weekIndex]?.workouts[dayIndex];
     if (!workout) return;
@@ -396,6 +491,12 @@ export default function Workouts() {
                     View
                   </button>
                   <button
+                    onClick={() => startEditingPlan(plan, 'rename')}
+                    className="btn btn-secondary text-sm"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                  <button
                     onClick={() => deleteWorkoutPlan(plan)}
                     className="btn btn-danger text-sm"
                   >
@@ -475,9 +576,20 @@ export default function Workouts() {
             </div>
             
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Week {selectedWeek + 1} Workouts
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Week {selectedWeek + 1} Workouts
+                </h3>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => addDayToPlan(selectedPlan, selectedWeek)}
+                    className="btn btn-secondary text-sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Day
+                  </button>
+                </div>
+              </div>
               
               <div className="space-y-4">
                 {selectedPlan.weeks[selectedWeek]?.workouts.map((workout, dayIndex) => {
@@ -487,8 +599,29 @@ export default function Workouts() {
                   return (
                     <div key={dayIndex} className="border rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{workout.day}</h4>
+                        <div className="flex-1">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              defaultValue={workout.day}
+                              onBlur={(e) => {
+                                const target = e.target as HTMLInputElement;
+                                const newName = target.value.trim();
+                                if (newName && newName !== workout.day) {
+                                  renameDayInPlan(selectedPlan, selectedWeek, dayIndex, newName);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              className="input text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <h4 className="font-medium text-gray-900">{workout.day}</h4>
+                          )}
                           {workout.notes && (
                             <p className="text-sm text-gray-600 mt-1">{workout.notes}</p>
                           )}
@@ -591,6 +724,13 @@ export default function Workouts() {
                                 className="btn btn-secondary text-sm"
                               >
                                 Start Workout
+                              </button>
+                              <button
+                                onClick={() => removeDayFromPlan(selectedPlan, selectedWeek, dayIndex)}
+                                className="btn btn-danger text-sm"
+                                title="Remove this day and all exercises"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </>
                           )}
@@ -964,6 +1104,7 @@ export default function Workouts() {
             setEditingWorkout(null);
           }}
           excludeIds={selectedPlan?.weeks[selectedWeek]?.workouts[editingWorkout.dayIndex]?.exercises.map(ex => ex.exerciseId) || []}
+          allowCustom={true}
         />
       )}
       
@@ -1000,6 +1141,62 @@ export default function Workouts() {
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 Delete Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Plan Name Modal */}
+      {editingPlan && editingPlan.mode === 'rename' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Edit3 className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Rename Workout Plan</h3>
+                <p className="text-sm text-gray-600">Update the plan name</p>
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Plan Name</label>
+              <input
+                type="text"
+                value={editedPlanName}
+                onChange={(e) => setEditedPlanName(e.target.value)}
+                className="input"
+                placeholder="Enter plan name"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && editedPlanName.trim()) {
+                    savePlanName();
+                  } else if (e.key === 'Escape') {
+                    setEditingPlan(null);
+                    setEditedPlanName('');
+                  }
+                }}
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setEditingPlan(null);
+                  setEditedPlanName('');
+                }}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={savePlanName}
+                disabled={!editedPlanName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Name
               </button>
             </div>
           </div>
