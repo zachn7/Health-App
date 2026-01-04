@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles } from 'lucide-react';
+import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
+import { extractMacrosFromSearchResult } from '../lib/usda-service';
 
 export default function Meals() {
   const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans'>('meals');
@@ -24,6 +25,19 @@ export default function Meals() {
   const [foodSearchLoading, setFoodSearchLoading] = useState(false);
   const [deleteConfirmMeal, setDeleteConfirmMeal] = useState<MealTemplate | null>(null);
   const [deleteConfirmItemIndex, setDeleteConfirmItemIndex] = useState<number | null>(null);
+  const [showManualFoodForm, setShowManualFoodForm] = useState(false);
+  const [manualFood, setManualFood] = useState({
+    name: '',
+    calories: '',
+    proteinG: '',
+    carbsG: '',
+    fatG: '',
+    fiberG: '',
+    sugarG: '',
+    sodiumMg: '',
+    servingSize: '',
+    grams: ''
+  });
 
   useEffect(() => {
     loadMeals();
@@ -160,17 +174,38 @@ export default function Meals() {
 
   const addFoodToMeal = (food: any) => {
     const macros = extractMacrosFromSearchResult(food);
+    
+    if (!macros || (macros.calories === 0 && macros.proteinG === 0 && macros.carbsG === 0 && macros.fatG === 0)) {
+      alert('This food does not have nutrition data available. Cannot add to meal.');
+      return;
+    }
+
+    // Determine serving size and grams based on macro basis
+    let servingSize = '100 g';
+    let servingGrams = 100;
+    let baseUnit: 'serving' | 'grams' = 'grams';
+
+    if (macros.basis === 'per_serving') {
+      // Branded food - use serving data
+      servingSize = '1 serving';
+      servingGrams = 100; // Will be updated if serving data available
+      baseUnit = 'serving';
+    }
+
     const newFoodItem: Omit<FoodLogItem, 'id'> = {
       name: food.description,
-      servingSize: '100 g',
+      servingSize,
       quantidade: 1,
       calories: macros.calories || 0,
       proteinG: macros.proteinG || 0,
       carbsG: macros.carbsG || 0,
       fatG: macros.fatG || 0,
-      baseUnit: 'grams',
-      servingGrams: 100,
-      computedTotalGrams: 100,
+      fiberG: macros.fiberG,
+      sugarG: macros.sugarG,
+      sodiumMg: macros.sodiumMg,
+      baseUnit,
+      servingGrams,
+      computedTotalGrams: servingGrams,
       fdcId: food.fdcId
     };
     setMealItems([...mealItems, newFoodItem]);
@@ -179,21 +214,57 @@ export default function Meals() {
     setFoodSearchResults([]);
   };
 
-  const extractMacrosFromSearchResult = (result: any) => {
-    const foodNutrients = result.foodNutrients || [];
-    const getNutrient = (nutrientName: string) => {
-      const nutrient = foodNutrients.find((n: any) => n.name === nutrientName);
-      return nutrient ? nutrient.amount || 0 : 0;
+  const addManualFoodToMeal = () => {
+    if (!manualFood.name.trim()) {
+      alert('Please enter a food name');
+      return;
+    }
+
+    const calories = parseFloat(manualFood.calories) || 0;
+    const proteinG = parseFloat(manualFood.proteinG) || 0;
+    const carbsG = parseFloat(manualFood.carbsG) || 0;
+    const fatG = parseFloat(manualFood.fatG) || 0;
+    const fiberG = manualFood.fiberG ? parseFloat(manualFood.fiberG) : undefined;
+    const sugarG = manualFood.sugarG ? parseFloat(manualFood.sugarG) : undefined;
+    const sodiumMg = manualFood.sodiumMg ? parseFloat(manualFood.sodiumMg) : undefined;
+    const servingSize = manualFood.servingSize.trim() || '1 serving';
+    const grams = parseFloat(manualFood.grams) || 0;
+
+    if (calories === 0 && proteinG === 0 && carbsG === 0 && fatG === 0) {
+      alert('Please enter at least one macro value (calories, protein, carbs, or fat)');
+      return;
+    }
+
+    const newFoodItem: Omit<FoodLogItem, 'id'> = {
+      name: manualFood.name.trim(),
+      servingSize,
+      quantidade: 1,
+      calories,
+      proteinG,
+      carbsG,
+      fatG,
+      fiberG,
+      sugarG,
+      sodiumMg,
+      baseUnit: grams > 0 ? 'grams' : 'serving',
+      servingGrams: grams || 100,
+      computedTotalGrams: grams || 100
     };
 
-    return {
-      energyKcal: getNutrient('Energy'),
-      proteinG: getNutrient('Protein'),
-      carbsG: getNutrient('Carbohydrate, by difference'),
-      fatG: getNutrient('Total lipid (fat)'),
-      fiberG: getNutrient('Fiber, total dietary'),
-      calories: getNutrient('Energy')
-    };
+    setMealItems([...mealItems, newFoodItem]);
+    setShowManualFoodForm(false);
+    setManualFood({
+      name: '',
+      calories: '',
+      proteinG: '',
+      carbsG: '',
+      fatG: '',
+      fiberG: '',
+      sugarG: '',
+      sodiumMg: '',
+      servingSize: '',
+      grams: ''
+    });
   };
 
   const removeMealItem = (index: number) => {
@@ -536,6 +607,34 @@ export default function Meals() {
 
             {/* Food Items */}
             <div className="flex-1 overflow-y-auto p-6">
+              {/* Meal Totals */}
+              {mealItems.length > 0 && (
+                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Calculator className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-semibold text-gray-900">Meal Totals</h3>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">{Math.round(calculateMealTotals(mealItems).calories)}</div>
+                      <div className="text-xs text-gray-600 mt-1">Calories</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">{Math.round(calculateMealTotals(mealItems).proteinG)}g</div>
+                      <div className="text-xs text-gray-600 mt-1">Protein</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-orange-600">{Math.round(calculateMealTotals(mealItems).carbsG)}g</div>
+                      <div className="text-xs text-gray-600 mt-1">Carbs</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-600">{Math.round(calculateMealTotals(mealItems).fatG)}g</div>
+                      <div className="text-xs text-gray-600 mt-1">Fat</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {mealItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
                   <Utensils className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -582,18 +681,41 @@ export default function Meals() {
                 </div>
               )}
 
-              {/* Add Food Button */}
-              <button
-                onClick={() => {
-                  setShowFoodPicker(true);
-                  setFoodSearchQuery('');
-                  setFoodSearchResults([]);
-                }}
-                className="w-full mt-4 btn btn-secondary"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                Add Food
-              </button>
+              {/* Add Food Buttons */}
+              <div className="mt-4 space-y-2">
+                <button
+                  onClick={() => {
+                    setShowFoodPicker(true);
+                    setFoodSearchQuery('');
+                    setFoodSearchResults([]);
+                  }}
+                  className="w-full btn btn-secondary"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Search USDA Foods
+                </button>
+                <button
+                  onClick={() => {
+                    setShowManualFoodForm(true);
+                    setManualFood({
+                      name: '',
+                      calories: '',
+                      proteinG: '',
+                      carbsG: '',
+                      fatG: '',
+                      fiberG: '',
+                      sugarG: '',
+                      sodiumMg: '',
+                      servingSize: '',
+                      grams: ''
+                    });
+                  }}
+                  className="w-full btn btn-outline"
+                >
+                  <Calculator className="w-5 h-5 mr-2" />
+                  Add Manual Food
+                </button>
+              </div>
             </div>
 
             {/* Footer */}
@@ -690,25 +812,262 @@ export default function Meals() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {foodSearchResults.slice(0, 10).map((result, index) => (
-                    <button
-                      key={index}
-                      onClick={() => addFoodToMeal(result)}
-                      className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{result.description}</p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Brand: {result.brandOwner || 'Generic'}
-                          </p>
+                  {foodSearchResults.slice(0, 10).map((result, index) => {
+                    const macros = extractMacrosFromSearchResult(result);
+                    const hasMacros = macros && (macros.calories > 0 || macros.proteinG > 0 || macros.carbsG > 0 || macros.fatG > 0);
+                    
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => addFoodToMeal(result)}
+                        className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">{result.description}</p>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {result.brandOwner ? `Brand: ${result.brandOwner}` : 'Generic'}
+                            </p>
+                            {hasMacros && (
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs font-medium">
+                                <span className={macros.calories > 0 ? 'text-gray-900' : 'text-gray-400'}>
+                                  {macros.calories} cal
+                                </span>
+                                <span className={macros.proteinG > 0 ? 'text-blue-600' : 'text-gray-400'}>
+                                  {macros.proteinG.toFixed(1)}g protein
+                                </span>
+                                <span className={macros.carbsG > 0 ? 'text-yellow-600' : 'text-gray-400'}>
+                                  {macros.carbsG.toFixed(1)}g carbs
+                                </span>
+                                <span className={macros.fatG > 0 ? 'text-red-600' : 'text-gray-400'}>
+                                  {macros.fatG.toFixed(1)}g fat
+                                </span>
+                                <span className="text-gray-500 font">
+                                  {macros.basis === 'per_100g' ? '1 serving (100g)' : '1 serving'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-gray-400 mt-4" />
                         </div>
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Food Form Modal */}
+      {showManualFoodForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-medium text-gray-900">Add Manual Food</h2>
+                <button
+                  onClick={() => {
+                    setShowManualFoodForm(false);
+                    setManualFood({
+                      name: '',
+                      calories: '',
+                      proteinG: '',
+                      carbsG: '',
+                      fatG: '',
+                      fiberG: '',
+                      sugarG: '',
+                      sodiumMg: '',
+                      servingSize: '',
+                      grams: ''
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Food Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={manualFood.name}
+                    onChange={(e) => setManualFood({ ...manualFood, name: e.target.value })}
+                    className="input"
+                    placeholder="e.g., Homemade Salad"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Calories *
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.calories}
+                      onChange={(e) => setManualFood({ ...manualFood, calories: e.target.value })}
+                      className="input"
+                      placeholder="200"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Protein (g) *
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.proteinG}
+                      onChange={(e) => setManualFood({ ...manualFood, proteinG: e.target.value })}
+                      className="input"
+                      placeholder="20"
+                      min="0"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Carbs (g) *
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.carbsG}
+                      onChange={(e) => setManualFood({ ...manualFood, carbsG: e.target.value })}
+                      className="input"
+                      placeholder="25"
+                      min="0"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Fat (g) *
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.fatG}
+                      onChange={(e) => setManualFood({ ...manualFood, fatG: e.target.value })}
+                      className="input"
+                      placeholder="8"
+                      min="0"
+                      step="0.1"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Fiber (g)
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.fiberG}
+                      onChange={(e) => setManualFood({ ...manualFood, fiberG: e.target.value })}
+                      className="input"
+                      placeholder="5"
+                      min="0"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sugar (g)
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.sugarG}
+                      onChange={(e) => setManualFood({ ...manualFood, sugarG: e.target.value })}
+                      className="input"
+                      placeholder="10"
+                      min="0"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sodium (mg)
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.sodiumMg}
+                      onChange={(e) => setManualFood({ ...manualFood, sodiumMg: e.target.value })}
+                      className="input"
+                      placeholder="300"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Serving Size
+                    </label>
+                    <input
+                      type="text"
+                      value={manualFood.servingSize}
+                      onChange={(e) => setManualFood({ ...manualFood, servingSize: e.target.value })}
+                      className="input"
+                      placeholder="1 bowl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Grams (optional)
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFood.grams}
+                      onChange={(e) => setManualFood({ ...manualFood, grams: e.target.value })}
+                      className="input"
+                      placeholder="150"
+                      min="0"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowManualFoodForm(false);
+                  setManualFood({
+                    name: '',
+                    calories: '',
+                    proteinG: '',
+                    carbsG: '',
+                    fatG: '',
+                    fiberG: '',
+                    sugarG: '',
+                    sodiumMg: '',
+                    servingSize: '',
+                    grams: ''
+                  });
+                }}
+                className="flex-1 btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addManualFoodToMeal}
+                className="flex-1 btn btn-primary"
+              >
+                Add to Meal
+              </button>
             </div>
           </div>
         </div>

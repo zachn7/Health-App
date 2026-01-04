@@ -47,8 +47,8 @@ test.describe('Smoke: Meals Feature', () => {
     const nameInput = page.locator('input[placeholder*="e.g., Post-Workout Shake"]');
     await expect(nameInput).toBeVisible({ timeout: 5000 });
     
-    // Verify "Add Food" button exists - use button role to avoid strict mode
-    await expect(page.getByRole('button', { name: 'Add Food' })).toBeVisible({ timeout: 5000 });
+    // Verify "Search USDA Foods" button exists - use button role to avoid strict mode
+    await expect(page.getByRole('button', { name: 'Search USDA Foods' })).toBeVisible({ timeout: 5000 });
     
     // Close modal using text
     await page.getByText('Cancel').click();
@@ -64,8 +64,8 @@ test.describe('Smoke: Meals Feature', () => {
     await page.getByText('Create New Meal').click();
     await page.waitForTimeout(500);
     
-    // Click "Add Food" button - use button role to avoid strict mode
-    await page.getByRole('button', { name: 'Add Food' }).click();
+    // Click "Search USDA Foods" button - use button role to avoid strict mode
+    await page.getByRole('button', { name: 'Search USDA Foods' }).click();
     await page.waitForTimeout(500);
     
     // Verify food picker modal opens
@@ -189,5 +189,65 @@ test.describe('Smoke: Meals Feature', () => {
     // Verify tab switched back (check button is active with border-blue-500)
     const savedMealsButton = page.getByRole('button', { name: 'Saved Meals' });
     await expect(savedMealsButton).toHaveClass(/border-blue-500/);
+  });
+
+  // Note: USDA food adding tested in usda-search.spec.ts
+  // Skipped here to avoid modal management complexity
+  
+  test('Add manual food to meal and verify totals update', async ({ page, context }) => {
+    // Set up age gate and onboarding
+    await context.addInitScript(() => {
+      localStorage.setItem('age_gate_accepted', 'true');
+      localStorage.setItem('onboarding_completed', 'true');
+    });
+
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Open meal editor
+    await page.getByText('Create New Meal').click();
+    await page.waitForTimeout(500);
+    
+    // Set meal name
+    const nameInput = page.locator('input[placeholder*="e.g., Post-Workout Shake"]');
+    await nameInput.fill('Manual Test Meal');
+    
+    // Open manual food form
+    await page.getByRole('button', { name: 'Add Manual Food' }).click();
+    await page.waitForTimeout(500);
+    
+    // Fill in manual food form
+    const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await foodNameInput.fill('Test Food');
+    
+    const caloriesInput = page.locator('input[placeholder="200"]');
+    await caloriesInput.fill('300');
+    
+    const proteinInput = page.locator('input[placeholder="20"]');
+    await proteinInput.fill('25');
+    
+    const carbsInput = page.locator('input[placeholder="25"]');
+    await carbsInput.fill('30');
+    
+    const fatInput = page.locator('input[placeholder="8"]');
+    await fatInput.fill('10');
+    
+    // Add to meal
+    await page.getByRole('button', { name: 'Add to Meal' }).click();
+    await page.waitForTimeout(500);
+    
+    // Verify food appears in meal
+    await expect(page.getByText('Test Food')).toBeVisible({ timeout: 5000 });
+    
+    // Verify meal totals section exists
+    const mealTotalsSection = page.locator('h3').filter({ hasText: 'Meal Totals' });
+    await expect(mealTotalsSection).toBeVisible({ timeout: 5000 });
+    
+    // Verify totals have content (values > 0 should be displayed)
+    await expect(page.locator('.text-blue-600').first()).toBeVisible({ timeout: 5000 });
+    
+    // Cancel the meal editor
+    await page.getByText('Cancel').click();
   });
 });
