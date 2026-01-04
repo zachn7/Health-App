@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor, GitBranch, Clock, Package, Activity } from 'lucide-react';
+import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor, GitBranch, Clock, Package, Activity, Cpu, Zap, RefreshCw } from 'lucide-react';
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
+import { webllmService } from '@/lib/webllm-service';
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -15,10 +16,13 @@ export default function Settings() {
   const [webgpuAvailable, setWebgpuAvailable] = useState(false);
   const [swControllerStatus, setSwControllerStatus] = useState<boolean | null>(null);
   const [buildInfo, setBuildInfo] = useState<typeof __BUILD_INFO__ | null>(null);
+  const [webGPUDiagnostics, setWebGPUDiagnostics] = useState<any>(null);
+  const [webLLMStatus, setWebLLMStatus] = useState<any>(null);
   
   useEffect(() => {
     loadSettings();
     checkWebGPU();
+    loadAIDiagnostics();
     loadBuildInfo();
     checkServiceWorkerController();
     
@@ -92,6 +96,67 @@ export default function Settings() {
       console.error('WebGPU detection failed:', error);
       setWebgpuAvailable(false);
     }
+  };
+
+  const loadAIDiagnostics = async () => {
+    // Comprehensive WebGPU diagnostics
+    const gpuInfo: any = {
+      navigatorGPU: typeof navigator !== 'undefined' && 'gpu' in navigator,
+      adapter: null,
+      adapterError: null,
+      device: null,
+      deviceError: null,
+      lastChecked: new Date().toISOString()
+    };
+
+    if (gpuInfo.navigatorGPU) {
+      try {
+        const adapter = await (navigator as any).gpu?.requestAdapter();
+        if (adapter) {
+          const adapterInfo = await adapter.requestAdapterInfo();
+          gpuInfo.adapter = {
+            vendor: adapterInfo.vendor || 'Unknown',
+            architecture: adapterInfo.architecture || 'Unknown',
+            device: adapterInfo.device || 'Unknown',
+            description: adapterInfo.description || ''
+          };
+          adapter.destroy?.();
+        } else {
+          gpuInfo.adapterError = 'No GPU adapter available';
+        }
+      } catch (error: any) {
+        gpuInfo.adapterError = error?.message || 'Failed to request GPU adapter';
+      }
+    } else {
+      gpuInfo.adapterError = 'navigator.gpu not available';
+    }
+
+    setWebGPUDiagnostics(gpuInfo);
+
+    // WebLLM status
+    try {
+      const enabled = await webllmService.isWebLLMEnabled();
+      const lastError = await webllmService.getLastError();
+      const selectedModel = await webllmService.getSelectedModelId();
+      
+      setWebLLMStatus({
+        enabled,
+        lastError: lastError?.message || null,
+        selectedModel,
+        checkedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      setWebLLMStatus({
+        enabled: false,
+        lastError: error?.message || 'Failed to check WebLLM status',
+        selectedModel: null,
+        checkedAt: new Date().toISOString()
+      });
+    }
+  };
+
+  const refreshAIDiagnostics = async () => {
+    await loadAIDiagnostics();
   };
 
   const saveSettings = async () => {
@@ -330,6 +395,167 @@ export default function Settings() {
                     </a>
                   </p>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* AI Diagnostics Panel */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Cpu className="h-5 w-5 text-primary-600" />
+              <h2 className="text-xl font-semibold text-gray-900">AI Diagnostics</h2>
+            </div>
+            <button
+              onClick={refreshAIDiagnostics}
+              className="btn btn-secondary btn-sm flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            {/* WebGPU Status */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  WebGPU Capability
+                </h3>
+                {webGPUDiagnostics?.navigatorGPU ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Available
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-50 text-red-700 text-xs rounded-full">
+                    <X className="h-3 w-3" />
+                    Not Available
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">navigator.gpu:</span>
+                  <span className={webGPUDiagnostics?.navigatorGPU ? 'text-green-600' : 'text-red-600'}>
+                    {webGPUDiagnostics?.navigatorGPU ? 'EXISTS' : 'MISSING'}
+                  </span>
+                </div>
+                
+                {webGPUDiagnostics?.adapter ? (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="font-medium text-gray-900 mb-2">GPU Adapter Info:</div>
+                    <div className="space-y-1 text-xs text-gray-600">
+                      <div className="flex justify-between">
+                        <span>Vendor:</span>
+                        <span className="font-mono">{webGPUDiagnostics.adapter.vendor}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Device:</span>
+                        <span className="font-mono">{webGPUDiagnostics.adapter.device}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Architecture:</span>
+                        <span className="font-mono">{webGPUDiagnostics.adapter.architecture}</span>
+                      </div>
+                      {webGPUDiagnostics.adapter.description && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <span className="text-gray-500">{webGPUDiagnostics.adapter.description}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  webGPUDiagnostics?.adapterError && (
+                    <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-start gap-2 text-red-700">
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium mb-1">WebGPU Error:</div>
+                          <div className="text-sm">{webGPUDiagnostics.adapterError}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+            
+            {/* WebLLM Status */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Brain className="h-4 w-4" />
+                  WebLLM Status
+                </h3>
+                {webLLMStatus?.enabled ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Enabled
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 text-gray-700 text-xs rounded-full">
+                    <X className="h-3 w-3" />
+                    Disabled
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">AI Coach:</span>
+                  <span className={webLLMStatus?.enabled ? 'text-blue-600' : 'text-gray-600'}>
+                    {webLLMStatus?.enabled ? 'ENABLED' : 'DISABLED'}
+                  </span>
+                </div>
+                
+                {webLLMStatus?.selectedModel && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Selected Model:</span>
+                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                      {webLLMStatus.selectedModel}
+                    </span>
+                  </div>
+                )}
+                
+                {webLLMStatus?.lastError && (
+                  <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="flex items-start gap-2 text-yellow-700">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium mb-1">Last Error:</div>
+                        <div className="text-sm">{webLLMStatus.lastError}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* WebGPU Troubleshooting */}
+            {!webGPUDiagnostics?.navigatorGPU && (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  How to Enable WebGPU
+                </h4>
+                <ul className="space-y-2 text-sm text-blue-800">
+                  <li>
+                    <strong>Chrome/Edge:</strong> Update to the latest version. WebGPU is enabled by default in Chrome 113+.
+                  </li>
+                  <li>
+                    <strong>Firefox:</strong> navigate to about:config and set dom.webgpu.enabled to true.
+                  </li>
+                  <li>
+                    <strong>Hardware Acceleration:</strong> Make sure graphics acceleration is enabled in your browser settings.
+                  </li>
+                  <li>
+                    <strong>Restart:</strong> After making changes, restart your browser completely.
+                  </li>
+                </ul>
               </div>
             )}
           </div>

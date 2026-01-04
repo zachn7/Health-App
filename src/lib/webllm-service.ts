@@ -50,6 +50,7 @@ export class WebLLMService {
   private static selectedModelId: string | null = null;
   private static initializationPromise: Promise<void> | null = null;
   private static initProgressCallback: ((progress: webllm.InitProgressReport) => void) | null = null;
+  private static lastError: Error | null = null;
   
   /**
    * Get the engine initialization progress callback
@@ -81,6 +82,10 @@ export class WebLLMService {
       console.error('Failed to check WebLLM status:', error);
       return false;
     }
+  }
+
+  static getLastError(): Error | null {
+    return this.lastError;
   }
   
   static async getSelectedModelId(): Promise<string> {
@@ -219,6 +224,7 @@ export class WebLLMService {
       await this.setSystemPrompt();
     } catch (error) {
       this.isLoading = false;
+      this.lastError = error instanceof Error ? error : new Error(String(error));
       console.error('Failed to initialize WebLLM:', error);
       throw error;
     } finally {
