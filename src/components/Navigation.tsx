@@ -7,6 +7,7 @@ import {
   Dumbbell, 
   BookOpen, 
   Apple, 
+  Utensils,
   TrendingUp, 
   Heart, 
   Shield,
@@ -57,6 +58,12 @@ const navItems: NavItem[] = [
     path: '/nutrition',
     icon: Apple,
     description: 'Track meals'
+  },
+  {
+    name: 'Meals',
+    path: '/meals',
+    icon: Utensils,
+    description: 'Saved meals'
   },
   {
     name: 'Progress',

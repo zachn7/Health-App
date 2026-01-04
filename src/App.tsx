@@ -8,6 +8,7 @@ import Coach from './pages/Coach';
 import Workouts from './pages/Workouts';
 import WorkoutLogger from './pages/WorkoutLogger';
 import Nutrition from './pages/Nutrition';
+import Meals from './pages/Meals';
 import Progress from './pages/Progress';
 import Injury from './pages/Injury';
 import Settings from './pages/Settings';
@@ -72,6 +73,7 @@ function AppContent() {
         <Route path="/workouts" element={<Workouts />} />
         <Route path="/log/workout" element={<WorkoutLogger />} />
         <Route path="/nutrition" element={<Nutrition />} />
+        <Route path="/meals" element={<Meals />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/injury" element={<Injury />} />
         <Route path="/settings" element={<Settings />} />
