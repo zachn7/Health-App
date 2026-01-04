@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult } from '../lib/usda-service';
+import { formatServingSize, computeServingsChange, calculateTotalGrams } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
 
@@ -359,76 +360,26 @@ export default function Nutrition() {
         throw new Error('Food item not found');
       }
       
-      const isUnitGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
-      const editedQuantity = editingServingSize.quantity;
-      const isSameUnit = (isUnitGrams && originalItem.baseUnit === 'grams') || 
-                         (!isUnitGrams && originalItem.baseUnit === 'serving');
-      
-      // Canonical model: totalGrams is the invariant
-      const oldTotalGrams = originalItem.computedTotalGrams || (originalItem.quantidade * originalItem.servingGrams);
-      const oldServingGrams = originalItem.servingGrams;
-      const isOldUnitGrams = originalItem.baseUnit === 'grams';
-      
-      let newServingGrams: number;
-      let newQuantity: number;
-      let displayServingSize: string;
-      let newBaseUnit: 'serving' | 'grams';
-      
-      if (isSameUnit) {
-        // User changed quantity within the same unit
-        // Preserve same baseUnit and gramsPerUnit, compute new totalGrams from new quantity
-        newBaseUnit = originalItem.baseUnit;
-        newServingGrams = originalItem.servingGrams;
-        newQuantity = editedQuantity;
-        displayServingSize = isUnitGrams 
-          ? `${newQuantity}g`
-          : `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`;
-      } else if (isOldUnitGrams && !isUnitGrams) {
-        // Switching from grams → serving
-        // Preserve totalGrams, compute new quantity
-        newBaseUnit = 'serving';
-        newServingGrams = oldServingGrams > 1 ? oldServingGrams : 100; // Use original serving weight, default to 100g
-        newQuantity = oldTotalGrams / newServingGrams;
-        displayServingSize = `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`;
-      } else if (!isOldUnitGrams && isUnitGrams) {
-        // Switching from serving → grams
-        // Preserve totalGrams, set quantity to totalGrams (since gramsPerUnit = 1)
-        newBaseUnit = 'grams';
-        newServingGrams = 1; // In grams mode, 1 "unit" = 1 gram
-        newQuantity = oldTotalGrams;
-        displayServingSize = `${newQuantity}g`;
-      } else {
-        // Fallback (shouldn't happen)
-        newBaseUnit = isUnitGrams ? 'grams' : 'serving';
-        newServingGrams = isUnitGrams ? 1 : oldServingGrams;
-        newQuantity = editedQuantity;
-        displayServingSize = isUnitGrams 
-          ? `${newQuantity}g`
-          : `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`;
-      }
-      
-      // Ensure quantity is reasonable precision
-      newQuantity = Math.round(newQuantity * 100) / 100;
-      
-      // Compute new totalGrams (canonical invariant)
-      const newTotalGrams = newQuantity * newServingGrams;
-      
-      // Recalculate macros based on the change in total grams
-      const gramRatio = newTotalGrams / oldTotalGrams;
+      // Use shared helper for serving calculations
+      const result = computeServingsChange({
+        originalItem,
+        editedQuantity: editingServingSize.quantity,
+        editedUnit: editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 'grams' : 'serving'
+      });
       
       const updates = {
-        servingSize: displayServingSize,
-        quantidade: newQuantity,
-        servingGrams: newServingGrams,
-        baseUnit: newBaseUnit,
-        calories: Math.round(originalItem.calories * gramRatio),
-        proteinG: Math.round((originalItem.proteinG * gramRatio) * 10) / 10,
-        carbsG: Math.round((originalItem.carbsG * gramRatio) * 10) / 10,
-        fatG: Math.round((originalItem.fatG * gramRatio) * 10) / 10,
-        fiberG: originalItem.fiberG ? Math.round((originalItem.fiberG * gramRatio) * 10) / 10 : undefined,
-        sugarG: originalItem.sugarG ? Math.round((originalItem.sugarG * gramRatio) * 10) / 10 : undefined,
-        sodiumMg: originalItem.sodiumMg ? Math.round(originalItem.sodiumMg * gramRatio) : undefined,
-        computedTotalGrams: newTotalGrams,
+        servingSize: result.newDisplayServingSize,
+        quantidade: result.newQuantity,
+        servingGrams: result.newServingGrams,
+        baseUnit: result.newBaseUnit,
+        calories: result.newCalories,
+        proteinG: result.newProteinG,
+        carbsG: result.newCarbsG,
+        fatG: result.newFatG,
+        fiberG: result.newFiberG,
+        sugarG: result.newSugarG,
+        sodiumMg: result.newSodiumMg,
+        computedTotalGrams: result.newTotalGrams,
         updatedAt: new Date().toISOString()
       };
       
@@ -447,12 +398,10 @@ export default function Nutrition() {
   };
 
   const startEditServingSize = (item: FoodLogItem) => {
-    // Default to the item's current unit and - ALWAYS default to 'serving'
-    // This ensures we don't incorrectly parse the display string
-    // IMPORTANT: We want to ALWAYS default to serving unit when editing,
-    // regardless of what the user previously selected. This simplifies the UX.
-    let quantity = item.quantidade || 1;
-    let unit: 'serving' | 'grams' | 'g' = 'serving'; // Always default to serving
+    // Preserve the item's current unit when editing
+    // This allows users to continue editing in their preferred unit (serving or grams)
+    const quantity = item.quantidade || 1;
+    const unit: 'serving' | 'grams' | 'g' = item.baseUnit || 'serving';
     
     setEditingServingSize({
       quantity,
@@ -1179,40 +1128,25 @@ export default function Nutrition() {
                       <span className="ml-2">
                         {editingServingSize.originalItem && (
                           <>
-                            {editingServingSize.originalItem.computedTotalGrams || (editingServingSize.originalItem.quantidade * editingServingSize.originalItem.servingGrams)} g
+                            {Math.round(calculateTotalGrams(editingServingSize.originalItem))} g
                           </>
                         )}
                       </span>
                     </div>
                     
                     <div className="text-sm text-gray-600">
-                      <span className="font-medium">Updated Macros:</span>
-                      {editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? (
-                        // In grams mode, calculate macros from grams per USDA data
+                      <span className="font-medium">Preview Macros:</span>
+                      {editingServingSize.originalItem && (
                         <span className="ml-2">
                           {(() => {
-                            const originalItem = editingServingSize.originalItem;
-                            if (!originalItem) {
-                              return '0 cal';
-                            }
-                            const originalTotalGrams = originalItem.computedTotalGrams || 
-                                                            (originalItem.quantidade * originalItem.servingGrams);
-                            const gramRatio = editingServingSize.quantity / originalTotalGrams;
-                            const newCalories = Math.round(originalItem.calories * gramRatio);
-                            const newProtein = Math.round((originalItem.proteinG * gramRatio) * 10) / 10;
-                            const newCarbs = Math.round((originalItem.carbsG * gramRatio) * 10) / 10;
-                            const newFat = Math.round((originalItem.fatG * gramRatio) * 10) / 10;
-                            return `${newCalories} cal ${newProtein}g protein ${newCarbs}g carbs ${newFat}g fat`;
+                            const result = computeServingsChange({
+                              originalItem: editingServingSize.originalItem,
+                              editedQuantity: editingServingSize.quantity,
+                              editedUnit: editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 'grams' : 'serving'
+                            });
+                            return `• ${result.newCalories.toFixed(0)} cal • ${result.newProteinG.toFixed(1)}g protein • ${result.newCarbsG.toFixed(1)}g carbs • ${result.newFatG.toFixed(1)}g fat`;
                           })()}
                         </span>
-                      ) : (
-                        // In serving mode, scale by multiplier
-                        <>
-                          <span className="ml-2">{(item.calories * editingServingSize.quantity / item.quantidade).toFixed(0)} cal</span>
-                          <span className="ml-2">{(item.proteinG * editingServingSize.quantity / item.quantidade).toFixed(1)}g protein</span>
-                          <span className="ml-2">{(item.carbsG * editingServingSize.quantity / item.quantidade).toFixed(1)}g carbs</span>
-                          <span className="ml-2">{(item.fatG * editingServingSize.quantity / item.quantidade).toFixed(1)}g fat</span>
-                        </>
                       )}
                     </div>
                     
@@ -1237,7 +1171,7 @@ export default function Nutrition() {
                     <div className="flex-1">
                       <div className="font-medium" data-testid="nutrition-log-item-name">{item.name}</div>
                       <div className="text-sm text-gray-600" data-testid="serving-size">
-                        {item.quantidade} × {item.servingSize}
+                        {formatServingSize(item)}
                       </div>
                       <div className="text-sm text-gray-600" data-testid="nutrition-log-item-macros">
                         <span data-testid="food-calories">{Math.round(item.calories)}</span> cal • 

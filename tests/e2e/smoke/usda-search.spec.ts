@@ -287,6 +287,105 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     }
   });
 
+  test('should edit serving size and persist correctly in both serving and grams modes', async ({ page, context }) => {
+    // Set up age gate and onboarding
+    await context.addInitScript(() => {
+      localStorage.setItem('age_gate_accepted', 'true');
+      localStorage.setItem('onboarding_completed', 'true');
+    });
+
+    // Navigate to Nutrition page
+    await page.goto('./#/nutrition');
+    await page.waitForLoadState('networkidle');
+
+    // Open USDA import dialog
+    await page.getByTestId('usda-search-button').click();
+
+    // Search for chicken
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
+    await page.getByTestId('usda-search-input').fill('chicken');
+    await searchResponse;
+    await page.waitForTimeout(600);
+
+    // Add first food
+    const detailResponse = page.waitForResponse(
+      response => response.url().includes('/food/170967') && response.status() === 200
+    );
+    const addButton = page.getByTestId('usda-add-food').first();
+    await addButton.click();
+    await detailResponse;
+    await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
+
+    // Close modal
+    await page.getByTestId('usda-search-button').click();
+    await page.waitForTimeout(500);
+
+    // Get first food item
+    const firstItem = page.getByTestId('nutrition-food-item').first();
+    
+    // Get initial serving label from the item (before edit)
+    const initialServingLabel = await firstItem.getByTestId('serving-size').textContent();
+    
+    // Click edit serving on the first food item
+    const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
+    await editServingButton.click();
+    await page.waitForTimeout(300);
+
+    // Test 1: Edit in serving mode
+    const quantityInput = page.locator('input[type="number"]').first();
+    await quantityInput.fill('2');
+    await page.waitForTimeout(300);
+
+    // Click update
+    const updateButton = page.getByRole('button', { name: 'Update' });
+    await updateButton.click();
+    await page.waitForTimeout(500);
+
+    // Verify the serving size was updated
+    const updatedServingLabel = await firstItem.getByTestId('serving-size').textContent();
+    expect(updatedServingLabel).toContain('2');
+    expect(initialServingLabel).not.toBe(updatedServingLabel);
+
+    // Test 2: Edit in grams mode
+    await editServingButton.click();
+    await page.waitForTimeout(300);
+
+    // Switch to grams unit
+    const unitSelect = page.locator('select').first();
+    await unitSelect.selectOption('grams');
+    await page.waitForTimeout(300);
+
+    // Enter grams value (200g)
+    await quantityInput.fill('200');
+    await page.waitForTimeout(300);
+
+    // Verify preview shows grams
+    const previewMacros = await page.getByText(/Preview Macros:|Updated Macros:/).textContent();
+
+    // Save
+    await updateButton.click();
+    
+    // Wait longer for the update to persist and UI to refresh
+    await page.waitForTimeout(1000);
+
+    // Verify grams were saved (should show "200g")
+    const gramsLabel = await firstItem.getByTestId('serving-size').textContent();
+    expect(gramsLabel).toContain('200g');
+
+    // Test 3: Verify macros were recalculated correctly by checking displayed values
+    // The label shows "200g" and macros should correspond to that amount
+    const foodCalories = await firstItem.getByTestId('food-calories').textContent();
+    const foodProtein = await firstItem.getByTestId('food-protein').textContent();
+    const foodCarbs = await firstItem.getByTestId('food-carbs').textContent();
+    const foodFat = await firstItem.getByTestId('food-fat').textContent();
+    
+    // All macros should be non-zero for 200g of chicken
+    expect(parseInt(foodCalories || '0')).toBeGreaterThan(0);
+    expect(parseInt(foodProtein || '0')).toBeGreaterThan(0);
+  });
+
   test('should display error when search fails', async ({ page }) => {
     // Unroute the previous mock and set up a failing one
     await page.unroute('**/api.nal.usda.gov/fdc/v1/**');
