@@ -357,6 +357,70 @@ export class NutritionRepository {
       plan.startDate >= startDate && plan.endDate <= endDate
     );
   }
+
+  /**
+   * Import a single meal from a meal plan into a day's nutrition log
+   */
+  async importMealPlanMeal(date: string, mealFoods: any[]): Promise<NutritionLog> {
+    // Convert meal plan foods to food log items
+    const foodLogItems = mealFoods.map(food => ({
+      id: crypto.randomUUID(),
+      name: food.name,
+      servingSize: food.servingSize || '1 serving',
+      quantidade: food.quantidade || 1,
+      calories: food.calories || 0,
+      proteinG: food.proteinG || 0,
+      carbsG: food.carbsG || 0,
+      fatG: food.fatG || 0,
+      fiberG: food.fiberG,
+      sugarG: food.sugarG,
+      sodiumMg: food.sodiumMg,
+      baseUnit: food.baseUnit || 'serving',
+      servingGrams: food.servingGrams || 100,
+      computedTotalGrams: food.computedTotalGrams || (food.quantidade || 1) * (food.servingGrams || 100),
+      fdcId: food.fdcId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+
+    // Queue all imports atomically
+    let finalPromise: Promise<NutritionLog> = Promise.resolve(
+      (await this.getOrCreateDayLog(date))
+    );
+
+    for (const foodLogItem of foodLogItems) {
+      finalPromise = finalPromise.then(async (log) => {
+        const latestLog = await this.getNutritionLog(date);
+        const targetLog = latestLog || log;
+
+        const updatedItems = [...(targetLog.items || []), foodLogItem];
+        const updatedLog: NutritionLog = {
+          ...targetLog,
+          items: updatedItems,
+          totals: this.calculateTotals(updatedItems),
+          updatedAt: new Date().toISOString()
+        };
+
+        await db.nutritionLogs.put(updatedLog);
+        return updatedLog;
+      });
+    }
+
+    return finalPromise;
+  }
+
+  /**
+   * Import all meals from a meal plan day into a day's nutrition log
+   */
+  async importMealPlanDay(date: string, mealPlanDay: any): Promise<NutritionLog> {
+    // Flatten all foods from all meals in the day
+    const allFoods: any[] = [];
+    for (const meal of mealPlanDay.meals) {
+      allFoods.push(...meal.foods);
+    }
+
+    return this.importMealPlanMeal(date, allFoods);
+  }
 }
 
 export const nutritionRepository = new NutritionRepository();
