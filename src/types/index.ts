@@ -248,6 +248,73 @@ export interface MealTemplate {
   updatedAt: string;
 }
 
+// Meal Plan Types
+export type MealPlanGenerationType = 'ai_webllm' | 'offline_basic';
+
+export interface MealPlanConstraints {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  mealsPerDay: number;
+  dietaryPreferences?: string[]; // e.g., ['vegetarian', 'gluten-free']
+  excludedFoods?: string[];
+  budget?: 'low' | 'medium' | 'high';
+  timeAvailable?: 'minimal' | 'moderate' | 'flexible';
+}
+
+export interface MealPlanFood {
+  id: string;
+  name: string;
+  servingSize: string;
+  quantidade: number;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  baseUnit: 'serving' | 'grams';
+  servingGrams: number;
+  computedTotalGrams: number;
+  fdcId?: number;
+}
+
+export interface MealPlanMeal {
+  id: string;
+  label: string; // e.g., 'Breakfast', 'Lunch', 'Dinner', 'Snack'
+  mealId?: string; // Reference to saved MealTemplate (if used)
+  inlineMealSnapshot?: MealPlanFood[]; // Snapshot of foods if created directly
+  foods: MealPlanFood[]; // Always populated for ease of use
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+export interface MealPlanDay {
+  id: string;
+  date: string; // YYYY-MM-DD
+  meals: MealPlanMeal[];
+  totals: {
+    calories: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+  };
+}
+
+export interface MealPlan {
+  id: string;
+  name: string;
+  startDate: string; // YYYY-MM-DD
+   endDate: string; // YYYY-MM-DD
+   days: MealPlanDay[];
+  generationType: MealPlanGenerationType;
+  constraintsSnapshot: MealPlanConstraints;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Coach Engine Types
 export interface WeeklyCheckIn {
   id: string;

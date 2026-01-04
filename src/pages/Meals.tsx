@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X } from 'lucide-react';
+import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
-import type { MealTemplate, FoodLogItem } from '../types';
+import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 
 export default function Meals() {
+  const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans'>('meals');
   const [meals, setMeals] = useState<MealTemplate[]>([]);
+  const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMealEditor, setShowMealEditor] = useState(false);
   const [editingMeal, setEditingMeal] = useState<MealTemplate | null>(null);
@@ -25,6 +27,7 @@ export default function Meals() {
 
   useEffect(() => {
     loadMeals();
+    loadMealPlans();
   }, []);
 
   useEffect(() => {
@@ -50,6 +53,15 @@ export default function Meals() {
       console.error('Failed to load meals:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMealPlans = async () => {
+    try {
+      const loadedPlans = await repositories.nutrition.getMealPlans();
+      setMealPlans(loadedPlans);
+    } catch (error) {
+      console.error('Failed to load meal plans:', error);
     }
   };
 
@@ -260,18 +272,48 @@ export default function Meals() {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-start mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Meals</h1>
             <p className="mt-2 text-gray-600">Save and reuse your favorite meals</p>
           </div>
-          <button
-            onClick={startNewMeal}
-            className="btn btn-primary"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Create New Meal
-          </button>
+          {activeTab === 'meals' && (
+            <button
+              onClick={startNewMeal}
+              className="btn btn-primary"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Create New Meal
+            </button>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('meals')}
+              className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'meals'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Utensils className="w-4 h-4 inline mr-1" />
+              Saved Meals
+            </button>
+            <button
+              onClick={() => setActiveTab('mealPlans')}
+              className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'mealPlans'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 inline mr-1" />
+              Meal Plans
+            </button>
+          </nav>
         </div>
       </div>
 
@@ -296,8 +338,11 @@ export default function Meals() {
         </div>
       )}
 
-      {/* Meal List */}
-      {meals.length === 0 ? (
+      {/* Meals Tab Content */}
+      {activeTab === 'meals' && (
+        <>
+          {/* Meal List */}
+          {meals.length === 0 ? (
         <div className="card text-center py-12">
           <Utensils className="w-16 h-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No Meals Saved Yet</h3>
@@ -406,6 +451,50 @@ export default function Meals() {
               </div>
             );
           })}
+        </div>
+          )}
+        </>
+      )}
+
+      {/* Meal Plans Tab Content */}
+      {activeTab === 'mealPlans' && (
+        <div className="space-y-6">
+          {/* Coming Soon / Placeholder */}
+          <div className="card text-center py-16">
+            <Sparkles className="w-20 h-20 mx-auto text-gray-300 mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Meal Plans</h2>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              Create and manage weekly meal plans with AI-powered generation or simple offline templates.
+            </p>
+          </div>
+
+          {/* Existing Meal Plans */}
+          {mealPlans.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Your Meal Plans</h3>
+              <div className="space-y-4">
+                {mealPlans.map((plan) => (
+                  <div key={plan.id} className="card">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900">{plan.name}</h4>
+                        <p className="text-sm text-gray-600">
+                          {plan.days.length} days • {formatLocalDate(plan.startDate, { month: 'long', day: 'numeric' })} - {formatLocalDate(plan.endDate, { month: 'long', day: 'numeric' })}
+                        </p>
+                        <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
+                          plan.generationType === 'ai_webllm'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {plan.generationType === 'ai_webllm' ? 'AI Generated' : 'Offline Plan'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

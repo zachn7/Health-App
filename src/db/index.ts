@@ -7,6 +7,7 @@ import type {
   WeightLog,
   FoodItem,
   MealTemplate,
+  MealPlan,
   WeeklyCheckIn,
   InjuryAssessment,
   Settings,
@@ -22,6 +23,7 @@ export class CodePuppyDB extends Dexie {
   weightLogs!: Table<WeightLog>;
   foodItems!: Table<FoodItem>;
   mealTemplates!: Table<MealTemplate>;
+  mealPlans!: Table<MealPlan>;
   weeklyCheckIns!: Table<WeeklyCheckIn>;
   injuryAssessments!: Table<InjuryAssessment>;
   settings!: Table<Settings>;
@@ -131,6 +133,35 @@ export class CodePuppyDB extends Dexie {
         // Set the ID to be the date string for primary key constraint
         log.id = log.date;
       });
+    }).upgrade(tx => {
+      // Migrate existing weight logs to use date as primary key
+      return tx.table('weightLogs').toCollection().modify(log => {
+        // Set the ID to be the date string for primary key constraint
+        log.id = log.date;
+      });
+    });
+
+    // Schema version 5 - Add Meal Plans
+    this.version(5).stores({
+      profiles: 'id, createdAt, updatedAt, age, activityLevel, experienceLevel, lastSync',
+      workoutPlans: '++id, name, generatedBy, createdAt, updatedAt, lastSync',
+      workoutLogs: '++id, date, workoutPlanId, createdAt, updatedAt, [date+workoutPlanId], lastSync',
+      nutritionLogs: '++id, date, createdAt, updatedAt, [date], lastSync',
+      foodItems: '++id, name, barcode, source, createdAt, updatedAt, [name+source], lastSync',
+      mealTemplates: '++id, name, createdAt, updatedAt, lastSync',
+      mealPlans: '++id, name, startDate, endDate, generationType, createdAt, updatedAt, [startDate+endDate]',
+      weightLogs: 'id, date, weightKg, createdAt, updatedAt, lastSync',
+      weeklyCheckIns: '++id, createdAt, [createdAt], lastSync',
+      injuryAssessments: '++id, createdAt, area, severity, [area+severity], lastSync',
+      
+      // Settings
+      settings: 'id, createdAt, updatedAt, lastSync',
+      
+      // Exercise Database
+      exercises: 'id, name, bodyPart, category, equipment, difficulty, [name+bodyPart], lastSync',
+      
+      // Custom Exercises
+      customExercises: '++id, name, createdAt, updatedAt, lastSync'
     });
   }
 }
@@ -165,6 +196,7 @@ export const tables = {
   weightLogs: db.weightLogs,
   foodItems: db.foodItems,
   mealTemplates: db.mealTemplates,
+  mealPlans: db.mealPlans,
   weeklyCheckIns: db.weeklyCheckIns,
   injuryAssessments: db.injuryAssessments,
   settings: db.settings,

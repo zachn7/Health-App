@@ -153,4 +153,41 @@ test.describe('Smoke: Meals Feature', () => {
     await page.getByText('Cancel').click();
     await page.waitForTimeout(300);
   });
+
+  test('Meal Plans tab exists and can be switched to', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Click Meal Plans tab button
+    await page.getByRole('button', { name: 'Meal Plans' }).click();
+    await page.waitForTimeout(300);
+    
+    // Verify Meal Plans tab is active (contains "Meal Plans" heading)
+    await expect(page.locator('h2').filter({ hasText: 'Meal Plans' })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Can switch between Saved Meals and Meal Plans tabs', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Verify initial tab is Saved Meals (use button role to avoid strict mode)
+    await expect(page.getByRole('button', { name: 'Saved Meals' })).toBeVisible({ timeout: 5000 });
+    
+    // Switch to Meal Plans
+    await page.getByRole('button', { name: 'Meal Plans' }).click();
+    await page.waitForTimeout(300);
+    
+    // Verify tab switched
+    await expect(page.locator('h2').filter({ hasText: 'Meal Plans' })).toBeVisible({ timeout: 5000 });
+    
+    // Switch back to Saved Meals
+    await page.getByRole('button', { name: 'Saved Meals' }).click();
+    await page.waitForTimeout(300);
+    
+    // Verify tab switched back (check button is active with border-blue-500)
+    const savedMealsButton = page.getByRole('button', { name: 'Saved Meals' });
+    await expect(savedMealsButton).toHaveClass(/border-blue-500/);
+  });
 });

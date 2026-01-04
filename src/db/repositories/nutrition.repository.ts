@@ -1,5 +1,5 @@
 import { db } from '../index';
-import type { NutritionLog, FoodItem, MealTemplate } from '@/types';
+import type { NutritionLog, FoodItem, MealTemplate, MealPlan } from '@/types';
 
 // Per-day async queue to serialize operations and prevent race conditions
 const dayLogQueues: Map<string, Promise<NutritionLog>> = new Map();
@@ -312,6 +312,49 @@ export class NutritionRepository {
         daysLogged: totals.daysLogged + 1
       }),
       { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0, daysLogged: 0 }
+    );
+  }
+
+  // Meal Plans
+  async createMealPlan(plan: Omit<MealPlan, 'id' | 'createdAt' | 'updatedAt'>): Promise<MealPlan> {
+    const now = new Date().toISOString();
+    const newPlan: MealPlan = {
+      ...plan,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await db.mealPlans.add(newPlan);
+    return newPlan;
+  }
+
+  async getMealPlans(): Promise<MealPlan[]> {
+    return await db.mealPlans.orderBy('createdAt').reverse().toArray();
+  }
+
+  async getMealPlan(id: string): Promise<MealPlan | undefined> {
+    return await db.mealPlans.get(id);
+  }
+
+  async updateMealPlan(id: string, updates: Partial<MealPlan>): Promise<MealPlan> {
+    const now = new Date().toISOString();
+    const updatedPlan = { ...updates, updatedAt: now };
+    
+    await db.mealPlans.update(id, updatedPlan);
+    const plan = await db.mealPlans.get(id);
+    if (!plan) throw new Error('Meal plan not found');
+    return plan;
+  }
+
+  async deleteMealPlan(id: string): Promise<void> {
+    await db.mealPlans.delete(id);
+  }
+
+  async getMealPlansByDateRange(startDate: string, endDate: string): Promise<MealPlan[]> {
+    const plans = await this.getMealPlans();
+    return plans.filter(plan => 
+      plan.startDate >= startDate && plan.endDate <= endDate
     );
   }
 }
