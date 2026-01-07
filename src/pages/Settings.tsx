@@ -3,6 +3,7 @@ import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor,
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
 import { webllmService } from '@/lib/webllm-service';
+import { getAdapterInfo } from '@/lib/webgpu-utils';
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -113,13 +114,24 @@ export default function Settings() {
       try {
         const adapter = await (navigator as any).gpu?.requestAdapter();
         if (adapter) {
-          const adapterInfo = await adapter.requestAdapterInfo();
+          // Safely get adapter info without crashing
+          const adapterInfo = await getAdapterInfo(adapter);
           gpuInfo.adapter = {
             vendor: adapterInfo.vendor || 'Unknown',
             architecture: adapterInfo.architecture || 'Unknown',
             device: adapterInfo.device || 'Unknown',
-            description: adapterInfo.description || ''
+            description: adapterInfo.description || '',
+            isFallback: adapterInfo.isFallback || false
           };
+          // Try to request a device to verify full capability
+          try {
+            const device = await adapter.requestDevice();
+            if (device) {
+              device.destroy();
+            }
+          } catch (deviceError: any) {
+            gpuInfo.deviceError = `Device request failed: ${deviceError?.message || 'Unknown error'}`;
+          }
           adapter.destroy?.();
         } else {
           gpuInfo.adapterError = 'No GPU adapter available';
@@ -445,41 +457,100 @@ export default function Settings() {
                   </span>
                 </div>
                 
-                {webGPUDiagnostics?.adapter ? (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Adapter acquired:</span>
+                  <span className={webGPUDiagnostics?.adapter ? 'text-green-600' : 'text-red-600'}>
+                    {webGPUDiagnostics?.adapter ? 'YES' : 'NO'}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Device acquired:</span>
+                  <span className={
+                    webGPUDiagnostics?.deviceError 
+                      ? 'text-orange-600' 
+                      : webGPUDiagnostics?.adapter 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }>
+                    {webGPUDiagnostics?.deviceError 
+                      ? 'FAILED' 
+                      : webGPUDiagnostics?.adapter 
+                      ? 'YES' 
+                      : 'N/A'}
+                  </span>
+                </div>
+                
+                {webGPUDiagnostics?.adapter && (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="font-medium text-gray-900 mb-2">GPU Adapter Info:</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium text-gray-900">GPU Adapter Info:</div>
+                      {webGPUDiagnostics.adapter.isFallback && (
+                        <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
+                          Info unavailable
+                        </span>
+                      )}
+                    </div>
                     <div className="space-y-1 text-xs text-gray-600">
                       <div className="flex justify-between">
                         <span>Vendor:</span>
-                        <span className="font-mono">{webGPUDiagnostics.adapter.vendor}</span>
+                        <span className={`font-mono ${
+                          webGPUDiagnostics.adapter.isFallback ? 'text-orange-600' : ''
+                        }`}>
+                          {webGPUDiagnostics.adapter.vendor}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Device:</span>
-                        <span className="font-mono">{webGPUDiagnostics.adapter.device}</span>
+                        <span className={`font-mono ${
+                          webGPUDiagnostics.adapter.isFallback ? 'text-orange-600' : ''
+                        }`}>
+                          {webGPUDiagnostics.adapter.device}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Architecture:</span>
-                        <span className="font-mono">{webGPUDiagnostics.adapter.architecture}</span>
+                        <span className={`font-mono ${
+                          webGPUDiagnostics.adapter.isFallback ? 'text-orange-600' : ''
+                        }`}>
+                          {webGPUDiagnostics.adapter.architecture}
+                        </span>
                       </div>
                       {webGPUDiagnostics.adapter.description && (
                         <div className="mt-2 pt-2 border-t border-gray-200">
-                          <span className="text-gray-500">{webGPUDiagnostics.adapter.description}</span>
+                          <span className={`text-gray-500 ${
+                            webGPUDiagnostics.adapter.isFallback ? 'text-orange-600' : ''
+                          }`}>
+                            {webGPUDiagnostics.adapter.description}
+                          </span>
                         </div>
                       )}
                     </div>
                   </div>
-                ) : (
-                  webGPUDiagnostics?.adapterError && (
-                    <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                      <div className="flex items-start gap-2 text-red-700">
-                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <div className="font-medium mb-1">WebGPU Error:</div>
-                          <div className="text-sm">{webGPUDiagnostics.adapterError}</div>
-                        </div>
+                )}
+                
+                {webGPUDiagnostics?.adapterError && !webGPUDiagnostics?.adapter && (
+                  <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                    <div className="flex items-start gap-2 text-red-700">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium mb-1">WebGPU Error:</div>
+                        <div className="text-sm">{webGPUDiagnostics.adapterError}</div>
                       </div>
                     </div>
-                  )
+                  </div>
+                )}
+                
+                {webGPUDiagnostics?.deviceError && (
+                  <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex items-start gap-2 text-orange-700">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium mb-1">Device Error:</div>
+                        <div className="text-sm">{webGPUDiagnostics.deviceError}</div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

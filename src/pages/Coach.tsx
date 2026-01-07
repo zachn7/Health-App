@@ -3,6 +3,7 @@ import { repositories } from '../db';
 import { calculateTDEE, calculateMacroTargets, generateWorkoutPlan } from '../lib/coach-engine';
 import { webllmService } from '../lib/webllm-service';
 import { formatWeight } from '../lib/unit-conversions';
+import { getAdapterInfo } from '../lib/webgpu-utils';
 import { Brain, Send, Loader2, AlertCircle } from 'lucide-react';
 import type { Profile, WorkoutPlan } from '../types';
 
@@ -80,8 +81,11 @@ export default function Coach() {
       if (adapter) {
         setHasWebGPU(true);
         console.log('[Coach] WebGPU is available:', adapter);
-        // Close the adapter after checking
-        await adapter.requestAdapterInfo().then(() => adapter.destroy?.());
+        // Safely get adapter info without crashing on deprecated API
+        const adapterInfo = await getAdapterInfo(adapter);
+        console.log('[Coach] Adapter info:', adapterInfo);
+        // Clean up the adapter after checking
+        adapter.destroy?.();
       } else {
         setHasWebGPU(false);
         console.warn('[Coach] WebGPU API exists but no adapter available');

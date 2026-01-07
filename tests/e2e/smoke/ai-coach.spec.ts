@@ -85,11 +85,18 @@ test.describe('Smoke: AI Coach Features', () => {
     const criticalErrors = errors.filter(e => 
       e.includes('Uncaught') || 
       e.includes('TypeError') ||
-      e.includes('ReferenceError')
+      e.includes('ReferenceError') ||
+      e.includes('requestAdapterInfo is not a function') ||
+      e.includes('requestAdapterInfo is not a method')
     );
     
-    // Some errors are okay (like WebGPU errors)
+    // Some errors are okay (like WebGPU errors), but requestAdapterInfo errors should NOT appear
     console.log('Console errors:', errors);
+    
+    // Specifically check that the deprecated requestAdapterInfo error is NOT present
+    const adapterInfoErrors = errors.filter(e => e.includes('requestAdapterInfo'));
+    expect(adapterInfoErrors.length).toBe(0);
+    
     // This test mainly ensures the app doesn't completely crash
     expect(page.url()).toBeTruthy();
   });

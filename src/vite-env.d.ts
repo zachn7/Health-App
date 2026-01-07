@@ -21,3 +21,31 @@ interface BuildInfo {
 }
 
 declare const __BUILD_INFO__: BuildInfo
+
+// WebGPU types (partial, for adapter info handling)
+declare interface GPUAdapter {
+  info?: {
+    vendor?: string;
+    architecture?: string;
+    device?: string;
+    description?: string;
+  };
+  requestAdapterInfo?(): Promise<{
+    vendor?: string;
+    architecture?: string;
+    device?: string;
+    description?: string;
+  }>;
+  requestDevice(): Promise<GPUDevice>;
+  destroy?(): void;
+}
+
+declare interface GPUDevice {
+  destroy(): void;
+}
+
+declare interface Navigator {
+  gpu?: {
+    requestAdapter(): Promise<GPUAdapter | null>;
+  };
+}
