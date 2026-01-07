@@ -16,15 +16,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - WebLLM model validation ensures selected models exist in the model list
   - Settings WebLLM toggle persists flag only without attempting full model init
 
+### Fixed (Coach Tab Crash-Proofing)
+- **Ultra-safe WebGPU diagnostics**: Created `src/ai/webgpu.ts` with `getWebGPUDiagnostics()` that NEVER throws
+  - Multiple layers of try/catch protection
+  - Feature detection for both modern adapter.info and legacy requestAdapterInfo()
+  - Returns structured diagnostic result instead of throwing
+  - Safe synchronous WebGPU check for render cycles
+- **Model validation and auto-repair**: Created `src/ai/webllmConfig.ts` with centralized model management
+  - Validates selected model IDs against available model list at startup
+  - Auto-repairs stale/invalid stored model IDs to safe defaults
+  - Shows non-blocking toast when model is auto-repaired
+  - Model list and defaults centralized in one location
+- **Enhanced error handling**: Coach page now manages all AI errors internally
+  - AI initialization errors are caught and displayed as inline banners
+  - Coach page always renders even when AI is unavailable
+  - No errors propagate to global application error boundary
+- **Debug panel**: Added AI diagnostics debug section in Settings
+  - Shows WebLLM package version
+  - Shows selected model ID and available model count
+  - Displays model validation status and auto-repair events
+  - Shows last initialization error
+  - Collapsible panel (DEV mode shows badge)
+
 ### Added
-- WebGPU utility functions: `getAdapterInfo()`, `isWebGPUAvailable()`, `checkWebGPUCapable()`
+- WebGPU utility functions: `getAdapterInfo()`, `isWebGPUAvailable()`, `checkWebGPUCapable()` (from lib/webgpu-utils.ts)
+- Ultra-safe diagnostics: `getWebGPUDiagnostics()`, `isWebGPUAvailableSync()` (from ai/webgpu.ts)
+- Model validation utilities: `validateAndRepairModelId()`, `getDefaultModelId()`, `isModelIdValid()` (from ai/webllmConfig.ts)
 - Enhanced smoke tests to verify no `requestAdapterInfo` errors occur
 - TypeScript type definitions for WebGPU APIs
+- Debug panel in Settings for AI diagnostics
 
 ### Tested
 - All 34 smoke tests pass, including AI Coach tests
 - WebGPU diagnostics page shows adapter info correctly
 - Coach page renders even when WebLLM init fails (shows banner instead of crashing)
+- No console errors related to deprecated requestAdapterInfo API
 
 ## [0.2.5] - Recent
 - Previous release features
