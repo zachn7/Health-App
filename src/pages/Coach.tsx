@@ -3,7 +3,8 @@ import { repositories } from '../db';
 import { calculateTDEE, calculateMacroTargets, generateWorkoutPlan } from '../lib/coach-engine';
 import { webllmService } from '../lib/webllm-service';
 import { formatWeight } from '../lib/unit-conversions';
-import { getAdapterInfo } from '../lib/webgpu-utils';
+import { getWebGPUDiagnostics } from '../ai/webgpu';
+import { validateAndRepairModelId, getAvailableModels } from '../ai/webllmConfig';
 import { Brain, Send, Loader2, AlertCircle } from 'lucide-react';
 import type { Profile, WorkoutPlan } from '../types';
 
@@ -65,30 +66,17 @@ export default function Coach() {
 
   const checkWebGPUSupport = async () => {
     try {
-      // Check for WebGPU support first
-      const gpuAvailable = 'gpu' in navigator;
+      // Use the ultra-safe diagnostics function that never throws
+      const diagnostics = await getWebGPUDiagnostics();
       
-      if (!gpuAvailable) {
-        setHasWebGPU(false);
-        setWebGPUChecked(true);
-        console.warn('[Coach] WebGPU API not available in this browser');
-        return;
-      }
+      setHasWebGPU(diagnostics.ok && diagnostics.adapterAcquired);
+      console.log('[Coach] WebGPU diagnostics:', diagnostics);
       
-      // Try to get a GPU adapter to confirm it's actually usable
-      const adapter = await (navigator as any).gpu?.requestAdapter();
-      
-      if (adapter) {
-        setHasWebGPU(true);
-        console.log('[Coach] WebGPU is available:', adapter);
-        // Safely get adapter info without crashing on deprecated API
-        const adapterInfo = await getAdapterInfo(adapter);
-        console.log('[Coach] Adapter info:', adapterInfo);
-        // Clean up the adapter after checking
-        adapter.destroy?.();
-      } else {
-        setHasWebGPU(false);
-        console.warn('[Coach] WebGPU API exists but no adapter available');
+      // Set error if adapter available but device not
+      if (diagnostics.adapterAcquired && !diagnostics.deviceAcquired) {
+        setWebLLMError(
+          `WebGPU adapter found but device request failed: ${diagnostics.errorDetails || diagnostics.error}`
+        );
       }
     } catch (error) {
       console.error('[Coach] Error checking WebGPU support:', error);
@@ -110,18 +98,19 @@ export default function Coach() {
 
   const loadWebLLMModels = async () => {
     try {
-      const models = await webllmService.getAvailableModels();
+      const models = getAvailableModels();
       setAvailableModels(models);
-      console.log('Available models:', models.length, 'models loaded');
+      console.log('[Coach] Available models:', models.length, 'models loaded');
       
+      // Get and validate the selected model ID (with auto-repair)
       const currentModel = await webllmService.getSelectedModelId();
       setSelectedModelId(currentModel);
       
-      // Validate selected model exists in available models
-      const modelExists = models.some(m => m.model_id === currentModel);
-      if (!modelExists && currentModel) {
-        console.warn(`Selected model "${currentModel}" not found in available models. Available:`, models.map(m => m.model_id));
-        setModelValidationWarning(`Previously selected model "${currentModel}" is not available. A default model will be automatically selected.`);
+      // Validate model and check if it was auto-repaired
+      const validation = validateAndRepairModelId(currentModel);
+      if (validation.wasRepaired) {
+        console.warn('[Coach] Model ID was auto-repaired:', validation.error);
+        setModelValidationWarning(`AI model selection was reset to a supported default (${validation.selectedModelId}).`);
       }
       
       // If no models available, show appropriate warning
@@ -129,7 +118,7 @@ export default function Coach() {
         setModelValidationWarning('No WebLLM models are available. Please check your browser compatibility.');
       }
     } catch (error) {
-      console.error('Failed to load WebLLM models:', error);
+      console.error('[Coach] Failed to load WebLLM models:', error);
       setModelValidationWarning('Failed to load WebLLM models. Please try refreshing the page or check your browser compatibility.');
     }
   };

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor, GitBranch, Clock, Package, Activity, Cpu, Zap, RefreshCw } from 'lucide-react';
+import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor, GitBranch, Clock, Package, Activity, Cpu, Zap, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
 import { webllmService } from '@/lib/webllm-service';
-import { getAdapterInfo } from '@/lib/webgpu-utils';
+import { getWebGPUDiagnostics } from '@/ai/webgpu';
+import { getWebLLMVersion, validateAndRepairModelId, getAvailableModels } from '@/ai/webllmConfig';
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -19,6 +20,8 @@ export default function Settings() {
   const [buildInfo, setBuildInfo] = useState<typeof __BUILD_INFO__ | null>(null);
   const [webGPUDiagnostics, setWebGPUDiagnostics] = useState<any>(null);
   const [webLLMStatus, setWebLLMStatus] = useState<any>(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [aiDebugInfo, setAiDebugInfo] = useState<any>(null);
   
   useEffect(() => {
     loadSettings();
@@ -100,61 +103,49 @@ export default function Settings() {
   };
 
   const loadAIDiagnostics = async () => {
-    // Comprehensive WebGPU diagnostics
+    // Use the ultra-safe diagnostics function that never throws
+    const diagnostics = await getWebGPUDiagnostics();
+    
+    // Format for UI
     const gpuInfo: any = {
-      navigatorGPU: typeof navigator !== 'undefined' && 'gpu' in navigator,
-      adapter: null,
-      adapterError: null,
-      device: null,
-      deviceError: null,
+      navigatorGPU: diagnostics.navigatorGpuExists,
+      adapter: diagnostics.adapterInfo ? {
+        vendor: diagnostics.adapterInfo.vendor,
+        architecture: diagnostics.adapterInfo.architecture,
+        device: diagnostics.adapterInfo.device,
+        description: diagnostics.adapterInfo.description,
+        isFallback: diagnostics.adapterInfo.isFallback,
+        method: diagnostics.adapterInfo.method
+      } : null,
+      adapterError: diagnostics.errorType === 'no-adapter' || diagnostics.errorType === 'no-gpu' ? diagnostics.error : null,
+      deviceError: diagnostics.errorType === 'no-device' ? diagnostics.error : null,
       lastChecked: new Date().toISOString()
     };
-
-    if (gpuInfo.navigatorGPU) {
-      try {
-        const adapter = await (navigator as any).gpu?.requestAdapter();
-        if (adapter) {
-          // Safely get adapter info without crashing
-          const adapterInfo = await getAdapterInfo(adapter);
-          gpuInfo.adapter = {
-            vendor: adapterInfo.vendor || 'Unknown',
-            architecture: adapterInfo.architecture || 'Unknown',
-            device: adapterInfo.device || 'Unknown',
-            description: adapterInfo.description || '',
-            isFallback: adapterInfo.isFallback || false
-          };
-          // Try to request a device to verify full capability
-          try {
-            const device = await adapter.requestDevice();
-            if (device) {
-              device.destroy();
-            }
-          } catch (deviceError: any) {
-            gpuInfo.deviceError = `Device request failed: ${deviceError?.message || 'Unknown error'}`;
-          }
-          adapter.destroy?.();
-        } else {
-          gpuInfo.adapterError = 'No GPU adapter available';
-        }
-      } catch (error: any) {
-        gpuInfo.adapterError = error?.message || 'Failed to request GPU adapter';
-      }
-    } else {
-      gpuInfo.adapterError = 'navigator.gpu not available';
-    }
 
     setWebGPUDiagnostics(gpuInfo);
 
     // WebLLM status
     try {
       const enabled = await webllmService.isWebLLMEnabled();
-      const lastError = await webllmService.getLastError();
+      const lastError = webllmService.getLastError();
       const selectedModel = await webllmService.getSelectedModelId();
+      const availableModels = getAvailableModels();
       
       setWebLLMStatus({
         enabled,
         lastError: lastError?.message || null,
         selectedModel,
+        checkedAt: new Date().toISOString()
+      });
+
+      // Collect debug info
+      setAiDebugInfo({
+        webllmVersion: getWebLLMVersion(),
+        selectedModelId: selectedModel,
+        availableModelsCount: availableModels.length,
+        availableModelIds: availableModels.slice(0, 5).map(m => m.model_id), // Show first 5
+        modelValidation: validateAndRepairModelId(selectedModel),
+        lastError: lastError?.message || null,
         checkedAt: new Date().toISOString()
       });
     } catch (error: any) {
@@ -604,6 +595,71 @@ export default function Settings() {
                   </div>
                 )}
               </div>
+            </div>
+            
+            {/* Debug Panel */}
+            <div className="mt-4">
+              <button
+                onClick={() => setShowDebugPanel(!showDebugPanel)}
+                className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+              >
+                {showDebugPanel ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+                <span>{showDebugPanel ? 'Hide' : 'Show'} Debug Details</span>
+                
+                {process.env.NODE_ENV === 'development' && (
+                  <span className="ml-2 text-xs font-mono bg-purple-100 text-purple-700 px-2 py-0.5 rounded">DEV</span>
+                )}
+              </button>
+              
+              {showDebugPanel && aiDebugInfo && (
+                <div className="mt-3 p-4 bg-gray-900 text-gray-100 rounded-lg font-mono text-xs">
+                  <h4 className="text-sm font-bold mb-3 text-green-400 flex items-center gap-2">
+                    <Cpu className="h-4 w-4" />
+                    AI Debug Information
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">WebLLM Version:</span>
+                      <span className="text-blue-300">{aiDebugInfo.webllmVersion}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Selected Model:</span>
+                      <span className="text-green-300">{aiDebugInfo.selectedModelId || 'None'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Available Models:</span>
+                      <span className="text-yellow-300">{aiDebugInfo.availableModelsCount}</span>
+                    </div>
+                    {aiDebugInfo.modelValidation?.wasRepaired && (
+                      <div className="p-2 bg-orange-900 border border-orange-700 rounded mt-2">
+                        <span className="text-orange-300 font-bold">Model Auto-Repaired:</span>
+                        <p className="text-orange-200 mt-1">{aiDebugInfo.modelValidation.error}</p>
+                      </div>
+                    )}
+                    {aiDebugInfo.lastError && (
+                      <div className="p-2 bg-red-900 border border-red-700 rounded mt-2">
+                        <span className="text-red-300 font-bold">Last Error:</span>
+                        <p className="text-red-200 mt-1">{aiDebugInfo.lastError}</p>
+                      </div>
+                    )}
+                    <div className="mt-3 pt-3 border-t border-gray-700">
+                      <span className="text-gray-400">Available Model IDs:</span>
+                      <ul className="mt-1 space-y-1 text-gray-300"> 
+                        {aiDebugInfo.availableModelIds.map((id: string, i: number) => (
+                          <li key={i} className="truncate">• {id}</li>
+                        ))}
+                        {aiDebugInfo.availableModelsCount > 5 && (
+                          <li className="text-gray-500">... and {aiDebugInfo.availableModelsCount - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* WebGPU Troubleshooting */}

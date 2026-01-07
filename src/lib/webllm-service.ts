@@ -3,16 +3,13 @@ import { settingsRepository } from '@/db/repositories/settings.repository';
 import { z } from 'zod';
 import { safeJSONParse } from './schemas';
 import type { WorkoutPlan, Profile } from '@/types';
-
-export interface WebLLMModelRecord {
-  model_id: string;
-  model_lib: string;
-  model_url: string;
-  estimated_vram_bytes: number;
-  low_resource_required: boolean;
-  required_features: string[];
-  [key: string]: any;
-}
+import {
+  getAvailableModels,
+  validateAndRepairModelId,
+  isModelIdValid,
+  type WebLLMModelRecord
+} from '@/ai/webllmConfig';
+import { isWebGPUAvailableSync } from '@/ai/webgpu';
 
 // Validation schemas for AI responses
 const workoutPlanPatchSchema = z.object({
@@ -65,10 +62,7 @@ export class WebLLMService {
   
   static async getAvailableModels(): Promise<WebLLMModelRecord[]> {
     try {
-      // Access the prebuiltAppConfig.model_list from webllm
-      const models = (webllm as any).prebuiltAppConfig?.model_list || [];
-      console.log('WebLLM models from prebuiltAppConfig:', models.map((m: any) => m.model_id));
-      return models;
+      return getAvailableModels();
     } catch (error) {
       console.error('Failed to get available models:', error);
       return [];
@@ -96,40 +90,24 @@ export class WebLLMService {
     try {
       // Try to get saved model from settings
       const savedModelId = await settingsRepository.getWebLLMModelId();
-      const availableModels = await this.getAvailableModels();
       
-      if (savedModelId) {
-        // Validate that the saved model is still available
-        const modelExists = availableModels.some(model => model.model_id === savedModelId);
-        
-        if (modelExists) {
-          this.selectedModelId = savedModelId;
-          return savedModelId;
-        } else {
-          console.warn(`Saved model ${savedModelId} not found in available models, falling back to default`);
-          console.warn('Available models:', availableModels.map(m => m.model_id));
-          // Clear the invalid model and fallback
-          await settingsRepository.setWebLLMModelId(null);
+      // Validate and repair the model ID if needed
+      const validation = validateAndRepairModelId(savedModelId);
+      
+      if (validation.wasRepaired) {
+        console.warn('[WebLLMService] Model ID auto-repaired:', validation.error);
+        // Save the repaired model ID
+        if (validation.selectedModelId) {
+          await settingsRepository.setWebLLMModelId(validation.selectedModelId);
         }
       }
       
-      // Fallback to first available safe model that ends with -MLC (standard naming)
-      let defaultModel = availableModels.find(model => model.model_id.endsWith('-MLC'));
-      
-      // If no -MLC model, try safe models
-      if (!defaultModel) {
-        const safeModels = availableModels.filter(model => !model.low_resource_required && model.required_features.length === 0);
-        defaultModel = safeModels.length > 0 ? safeModels[0] : availableModels[0];
+      if (!validation.selectedModelId) {
+        throw new Error(validation.error || 'No WebLLM models available');
       }
       
-      if (defaultModel) {
-        this.selectedModelId = defaultModel.model_id;
-        await settingsRepository.setWebLLMModelId(this.selectedModelId);
-        console.log('Defaulted to model:', this.selectedModelId);
-        return this.selectedModelId;
-      }
-      
-      throw new Error('No WebLLM models available');
+      this.selectedModelId = validation.selectedModelId;
+      return this.selectedModelId;
     } catch (error) {
       console.error('Failed to get selected model:', error);
       throw error;
@@ -138,11 +116,9 @@ export class WebLLMService {
   
   static async setSelectedModelId(modelId: string): Promise<void> {
     try {
-      const availableModels = await this.getAvailableModels();
-      const modelExists = availableModels.some(model => model.model_id === modelId);
-      
-      if (!modelExists) {
-        throw new Error(`Model ${modelId} not found in available models`);
+      // Validate the model ID using the centralized config
+      if (!isModelIdValid(modelId)) {
+        throw new Error(`Model "${modelId}" not found in available models`);
       }
       
       this.selectedModelId = modelId;
@@ -190,8 +166,8 @@ export class WebLLMService {
   
   private static async _doInitialize(): Promise<void> {
     try {
-      // Check if GPU capabilities are available
-      if (!('gpu' in navigator)) {
+      // Check if GPU capabilities are available (use safe sync check)
+      if (!isWebGPUAvailableSync()) {
         throw new Error('WebGPU is not available in this browser. Try Chrome, Edge, or another WebGPU-enabled browser.');
       }
       
