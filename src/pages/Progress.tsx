@@ -295,9 +295,10 @@ export default function Progress() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="label">Weight ({getWeightUnit()})</label>
+                <label className="label" data-testid="weight-unit-label">Weight ({getWeightUnit()})</label>
                 <input
                   type="number"
+                  data-testid="weight-input"
                   value={getWeightInputValue()}
                   onChange={(e) => setWeightInputValue(parseFloat(e.target.value) || 0)}
                   className="input"
@@ -343,6 +344,7 @@ export default function Progress() {
                 Cancel
               </button>
               <button
+                data-testid="save-weight-button"
                 onClick={saveWeightLog}
                 disabled={newWeight.weightKg <= 0}
                 className="btn btn-primary"
