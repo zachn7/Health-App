@@ -97,7 +97,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('save-weight-button').click();
     
     // Should show the logged weight in the list/graph
-    await expect(page.getByText(/170.5/)).toBeVisible();
+    await expect(page.getByTestId('current-weight-display')).toContainText('170.5');
   });
 
   test('should persist weight entries across page refreshes', async ({ page }) => {
@@ -124,7 +124,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     await page.getByTestId('weight-input').fill('175.0');
     await page.getByTestId('save-weight-button').click();
-    await expect(page.getByText(/175.0/)).toBeVisible();
+    await expect(page.getByTestId('current-weight-display')).toContainText('175.0');
     
     // Navigate to previous day and log second weight
     await page.getByRole('button').filter({ hasText: '←' }).or(page.getByTestId('prev-day-button')).click();
@@ -132,6 +132,9 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     await page.getByTestId('weight-input').fill('174.5');
     await page.getByTestId('save-weight-button').click();
+    
+    // Brief wait for save to complete
+    await page.waitForTimeout(500);
     
     // Go back to today
     await page.getByRole('button').filter({ hasText: '→' }).or(page.getByTestId('next-day-button')).click();
@@ -141,7 +144,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     
     // Both weight entries should still be there and in pounds
-    await expect(page.getByText(/175.0/)).toBeVisible();
+    await expect(page.getByTestId('current-weight-display')).toContainText('175.0');
   });
 
   test('should not convert imperial weight entries to kg', async ({ page }) => {
@@ -172,7 +175,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('save-weight-button').click();
     
     // Should show the exact value in lbs, not converted to kg
-    await expect(page.getByText(/160.8/)).toBeVisible();
+    await expect(page.getByTestId('current-weight-display')).toContainText('160.8');
   });
 
   test('should log weight twice on same day and overwrite existing entry', async ({ page }) => {
@@ -200,7 +203,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     await page.getByTestId('weight-input').fill('160.8');
     await page.getByTestId('save-weight-button').click();
-    await expect(page.getByText(/160.8/)).toBeVisible();
+    await expect(page.getByTestId('current-weight-display')).toContainText('160.8');
     
     // Log second weight on the same day - need to reopen form
     await page.getByRole('button', { name: 'Log Weight' }).click();
@@ -209,7 +212,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('save-weight-button').click();
     
     // Should show the second weight (overwritten)
-    await expect(page.getByText(/161.2/)).toBeVisible();
+    await expect(page.getByTestId('current-weight-display')).toContainText('161.2');
   });
 
   test('should maintain imperial units preference in weight section', async ({ page }) => {

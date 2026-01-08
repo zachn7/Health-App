@@ -193,7 +193,7 @@ export default function Progress() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="card">
           <h3 className="text-lg font-medium text-gray-900 mb-2">Scale Weight</h3>
-          <div className="text-2xl font-bold text-blue-600">
+          <div className="text-2xl font-bold text-blue-600" data-testid="current-weight-display">
             {weightStats ? formatWeight(weightStats.currentWeight, profile?.preferredUnits || 'metric') : '—'}
           </div>
           {weightStats && weightStats.weightChange !== 0 && (
