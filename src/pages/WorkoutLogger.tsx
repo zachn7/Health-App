@@ -5,6 +5,7 @@ import { repositories } from '../db';
 import ExercisePicker from '../components/ExercisePicker';
 import { safeJSONParse, CurrentWorkoutSchema } from '../lib/schemas';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
+import { ExerciseDBService } from '../lib/exercise-db';
 
 import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan } from '../types';
 
@@ -91,20 +92,29 @@ export default function WorkoutLogger() {
       
 
       
-      // Load exercises for names
-      const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
-      const exercisesData = await exercisesResponse.json();
-      
       // Initialize exercise entries if starting new workout
       if (currentWorkout && !dateLog) {
-        const entries: ExerciseLogEntry[] = currentWorkout.exercises.map((ex) => {
-          const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
-          return {
+        // Use ExerciseDBService to load exercise names (base-path safe)
+        const entries: ExerciseLogEntry[] = [];
+        
+        for (const ex of currentWorkout.exercises) {
+          let exerciseName = `Exercise ${ex.exerciseId}`;
+          try {
+            const exercise = await ExerciseDBService.getExerciseById(ex.exerciseId);
+            if (exercise) {
+              exerciseName = exercise.name;
+            }
+          } catch (error) {
+            console.warn(`Failed to load exercise ${ex.exerciseId}:`, error);
+          }
+          
+          entries.push({
             exerciseId: ex.exerciseId,
-            exerciseName: exercise?.name || `Exercise ${ex.exerciseId}`,
+            exerciseName,
             sets: []
-          };
-        });
+          });
+        }
+        
         setExerciseEntries(entries);
       } else if (dateLog) {
         console.log('Loading existing workout log:', dateLog);
@@ -297,41 +307,33 @@ export default function WorkoutLogger() {
         throw new Error('No exercises found in this workout');
       }
 
-      // Load exercises for names with error handling
-      let exercisesData: any[] = [];
-      try {
-        const exercisesResponse = await fetch('/src/assets/data/exercises.seed.json');
-        if (!exercisesResponse.ok) {
-          throw new Error(`Failed to fetch exercises: ${exercisesResponse.statusText}`);
-        }
-        exercisesData = await exercisesResponse.json();
-        
-        if (!Array.isArray(exercisesData)) {
-          throw new Error('Exercise data is not an array');
-        }
-      } catch (err) {
-        console.error('Failed to load exercise data:', err);
-        throw new Error('Failed to load exercise database. Please refresh and try again.');
-      }
+      // Load exercises using ExerciseDBService (base-path safe, offline-first)
+      const entries: ExerciseLogEntry[] = [];
       
-      // Map exercises with validation
-      const entries: ExerciseLogEntry[] = workout.exercises.map((ex: any, idx: number) => {
+      for (const ex of workout.exercises) {
         if (!ex || typeof ex !== 'object') {
-          console.warn(`Invalid exercise at index ${idx}:`, ex);
-          return {
-            exerciseId: 'unknown-' + idx,
-            exerciseName: `Unknown Exercise ${idx + 1}`,
-            sets: []
-          };
+          console.warn('Invalid exercise:', ex);
+          continue;
         }
         
-        const exercise = exercisesData.find((e: any) => e.id === ex.exerciseId);
-        return {
-          exerciseId: ex.exerciseId || 'unknown-' + idx,
-          exerciseName: exercise?.name || ex.name || `Exercise ${ex.exerciseId || idx}`,
+        const exerciseId = ex.exerciseId;
+        let exerciseName = `Exercise ${exerciseId}`;
+        
+        try {
+          const exercise = await ExerciseDBService.getExerciseById(exerciseId);
+          if (exercise) {
+            exerciseName = exercise.name;
+          }
+        } catch (error) {
+          console.warn(`Failed to load exercise ${exerciseId}:`, error);
+        }
+        
+        entries.push({
+          exerciseId: exerciseId || 'unknown',
+          exerciseName,
           sets: []
-        };
-      });
+        });
+      }
       
       // Validate entries
       if (entries.length === 0) {
