@@ -695,6 +695,7 @@ export default function Profile() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-medium text-gray-900">Nutrition Macro Split</h2>
             <button
+              data-testid="macro-editor-toggle"
               onClick={() => setShowMacroEditor(!showMacroEditor)}
               className="btn btn-secondary"
             >
@@ -709,15 +710,15 @@ export default function Profile() {
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Current Split</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">{macroSplit.protein}%</div>
+                    <div className="text-2xl font-bold text-blue-600" data-testid="macro-percent-protein">{macroSplit.protein}%</div>
                     <div className="text-sm text-gray-600">Protein</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-yellow-600">{macroSplit.carbs}%</div>
+                    <div className="text-2xl font-bold text-yellow-600" data-testid="macro-percent-carbs">{macroSplit.carbs}%</div>
                     <div className="text-sm text-gray-600">Carbs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-red-600">{macroSplit.fat}%</div>
+                    <div className="text-2xl font-bold text-red-600" data-testid="macro-percent-fat">{macroSplit.fat}%</div>
                     <div className="text-sm text-gray-600">Fat</div>
                   </div>
                 </div>
@@ -727,19 +728,19 @@ export default function Profile() {
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Daily Targets</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-xl font-bold text-gray-900">{calculateMacroTargets().calories}</div>
+                    <div className="text-xl font-bold text-gray-900" data-testid="macro-target-calories">{calculateMacroTargets().calories}</div>
                     <div className="text-sm text-gray-600">Calories</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold text-blue-600">{calculateMacroTargets().proteinG}g</div>
+                    <div className="text-xl font-bold text-blue-600" data-testid="macro-target-protein">{calculateMacroTargets().proteinG}g</div>
                     <div className="text-sm text-gray-600">Protein</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold text-yellow-600">{calculateMacroTargets().carbsG}g</div>
+                    <div className="text-xl font-bold text-yellow-600" data-testid="macro-target-carbs">{calculateMacroTargets().carbsG}g</div>
                     <div className="text-sm text-gray-600">Carbs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold text-red-600">{calculateMacroTargets().fatG}g</div>
+                    <div className="text-xl font-bold text-red-600" data-testid="macro-target-fat">{calculateMacroTargets().fatG}g</div>
                     <div className="text-sm text-gray-600">Fat</div>
                   </div>
                 </div>
@@ -797,7 +798,7 @@ export default function Profile() {
                   <div>
                     <div className="flex justify-between mb-1">
                       <label className="text-sm font-medium text-gray-700">Protein</label>
-                      <span className="text-sm font-bold text-blue-600">{macroSplit.protein}%</span>
+                      <span className="text-sm font-bold text-blue-600" data-testid="macro-edit-percent-protein">{macroSplit.protein}%</span>
                     </div>
                     <input
                       type="range"
@@ -813,10 +814,11 @@ export default function Profile() {
                   <div>
                     <div className="flex justify-between mb-1">
                       <label className="text-sm font-medium text-gray-700">Carbs</label>
-                      <span className="text-sm font-bold text-yellow-600">{macroSplit.carbs}%</span>
+                      <span className="text-sm font-bold text-yellow-600" data-testid="macro-edit-percent-carbs">{macroSplit.carbs}%</span>
                     </div>
                     <input
                       type="range"
+                      data-testid="macro-slider-carbs"
                       min="5"
                       max="80"
                       value={macroSplit.carbs}
@@ -828,10 +830,11 @@ export default function Profile() {
                   <div>
                     <div className="flex justify-between mb-1">
                       <label className="text-sm font-medium text-gray-700">Fat</label>
-                      <span className="text-sm font-bold text-red-600">{macroSplit.fat}%</span>
+                      <span className="text-sm font-bold text-red-600" data-testid="macro-edit-percent-fat">{macroSplit.fat}%</span>
                     </div>
                     <input
                       type="range"
+                      data-testid="macro-slider-fat"
                       min="5"
                       max="80"
                       value={macroSplit.fat}
@@ -841,10 +844,10 @@ export default function Profile() {
                   </div>
                 </div>
                 
-                <div className="mt-4 p-3 bg-gray-100 rounded-lg">
+                <div className="mt-4 p-3 bg-gray-100 rounded-lg" data-testid="macro-total-container">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Total:</span>
-                    <span className={`text-sm font-bold ${macroSplit.protein + macroSplit.carbs + macroSplit.fat === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className={`text-sm font-bold ${macroSplit.protein + macroSplit.carbs + macroSplit.fat === 100 ? 'text-green-600' : 'text-red-600'}`} data-testid="macro-total-percent">
                       {macroSplit.protein + macroSplit.carbs + macroSplit.fat}%
                     </span>
                   </div>
@@ -859,19 +862,19 @@ export default function Profile() {
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Updated Daily Targets</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-xl font-bold text-gray-900">{calculateMacroTargets().calories}</div>
+                    <div className="text-xl font-bold text-gray-900" data-testid="macro-target-calories">{calculateMacroTargets().calories}</div>
                     <div className="text-sm text-gray-600">Calories</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold text-blue-600">{calculateMacroTargets().proteinG}g</div>
+                    <div className="text-xl font-bold text-blue-600" data-testid="macro-target-protein">{calculateMacroTargets().proteinG}g</div>
                     <div className="text-sm text-gray-600">Protein</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold text-yellow-600">{calculateMacroTargets().carbsG}g</div>
+                    <div className="text-xl font-bold text-yellow-600" data-testid="macro-target-carbs">{calculateMacroTargets().carbsG}g</div>
                     <div className="text-sm text-gray-600">Carbs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold text-red-600">{calculateMacroTargets().fatG}g</div>
+                    <div className="text-xl font-bold text-red-600" data-testid="macro-target-fat">{calculateMacroTargets().fatG}g</div>
                     <div className="text-sm text-gray-600">Fat</div>
                   </div>
                 </div>
