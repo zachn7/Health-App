@@ -522,6 +522,7 @@ export default function Profile() {
             <div>
               <label className="label">Age</label>
               <input
+                data-testid="profile-age-input"
                 type="number"
                 value={profile.age !== undefined ? profile.age.toString() : ''}
                 onChange={(e) => updateField('age', e.target.value === '' ? undefined : parseFloat(e.target.value))}
@@ -538,6 +539,7 @@ export default function Profile() {
             <div>
               <label className="label">Sex</label>
               <select
+                data-testid="profile-sex-select"
                 value={profile.sex || ''}
                 onChange={(e) => updateField('sex', e.target.value as Sex)}
                 className="input"
@@ -552,6 +554,7 @@ export default function Profile() {
             <div>
               <label className="label">Units</label>
               <select
+                data-testid="profile-units-select"
                 value={profile.preferredUnits || 'metric'}
                 onChange={(e) => updateField('preferredUnits', e.target.value as UnitSystem)}
                 className="input"
@@ -599,6 +602,7 @@ export default function Profile() {
               <div className="flex gap-2 items-center">
                 <input
                   type="number"
+                  placeholder="100-250"
                   value={profile.heightCm}
                   onChange={(e) => updateHeight(parseInt(e.target.value))}
                   className="input flex-1"
@@ -620,6 +624,7 @@ export default function Profile() {
               <div className="flex gap-2 items-center">
                 <input
                   type="number"
+                  placeholder="66-661"
                   value={imperialWeight}
                   onChange={(e) => updateImperialWeight(e.target.value)}
                   className="input flex-1"
@@ -636,6 +641,7 @@ export default function Profile() {
               <div className="flex gap-2 items-center">
                 <input
                   type="number"
+                  placeholder="30-300"
                   value={profile.weightKg}
                   onChange={(e) => updateWeight(parseFloat(e.target.value))}
                   className="input flex-1"

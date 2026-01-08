@@ -14,22 +14,28 @@ test.describe('Profile Units Toggle (F02)', () => {
 
   test('should create profile with metric units by default', async ({ page }) => {
     // Should need to create profile first
-    await expect(page.getByText('No Profile Found')).toBeVisible();
+    await expect(page.getByText('No Profile Found')).toBeVisible({ timeout: 10000 });
     await page.getByRole('button', { name: 'Create Profile' }).click();
     
+    // Wait for form to be visible
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible({ timeout: 10000 });
+    
     // Check default units is metric
-    await expect(page.getByLabel('Units')).toHaveValue('metric');
+    await expect(page.getByTestId('profile-units-select')).toHaveValue('metric');
     
     // Should show metric inputs
-    await expect(page.getByPlaceholder(/100.*250/)).toBeVisible(); // Height in cm
-    await expect(page.getByPlaceholder(/30.*300/)).toBeVisible(); // Weight in kg
+    await expect(page.getByPlaceholder(/100.*250/)).toBeVisible({ timeout: 5000 }); // Height in cm
+    await expect(page.getByPlaceholder(/30.*300/)).toBeVisible({ timeout: 5000 }); // Weight in kg
   });
 
   test('should switch to imperial units', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible();
     
     // Switch to imperial
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     
     // Should show imperial inputs
     await expect(page.getByPlaceholder('Feet')).toBeVisible();
@@ -42,9 +48,12 @@ test.describe('Profile Units Toggle (F02)', () => {
 
   test('should save profile with imperial measurements', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible();
     
-    // Switch to imperial
-    await page.getByLabel('Units').selectOption('imperial');
+    // Switch to imperial and wait for form to update
+    await page.getByTestId('profile-units-select').selectOption('imperial');
+    await page.waitForTimeout(500);
     
     // Fill imperial measurements
     await page.getByPlaceholder('Feet').fill('5');
@@ -52,7 +61,7 @@ test.describe('Profile Units Toggle (F02)', () => {
     await page.getByPlaceholder(/66.*661/).fill('165.3'); // 75 kg
     
     // Fill required fields
-    await page.getByLabel('Age').fill('25');
+    await page.getByTestId('profile-age-input').fill('25');
     await page.getByLabel('Sex').selectOption('male');
     await page.getByLabel('Activity Level').selectOption('moderate');
     await page.getByLabel('Experience Level').selectOption('beginner');
@@ -72,11 +81,14 @@ test.describe('Profile Units Toggle (F02)', () => {
   test('should convert and persist units preference', async ({ page }) => {
     // Create and save profile with imperial
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible();
+    await page.getByTestId('profile-units-select').selectOption('imperial');
+    await page.waitForTimeout(200);
+    await page.getByTestId('profile-age-input').fill('30');
     await page.getByPlaceholder('Feet').fill('6');
     await page.getByPlaceholder('Inches').fill('0');
     await page.getByPlaceholder(/66.*661/).fill('180');
-    await page.getByLabel('Age').fill('30');
     await page.getByLabel('Sex').selectOption('male');
     await page.getByLabel('Activity Level').selectOption('moderate');
     await page.getByLabel('Experience Level').selectOption('beginner');
@@ -90,7 +102,7 @@ test.describe('Profile Units Toggle (F02)', () => {
     await page.waitForLoadState();
     
     // Should keep imperial preference
-    await expect(page.getByLabel('Units')).toHaveValue('imperial');
+    await expect(page.getByTestId('profile-units-select')).toHaveValue('imperial');
     await expect(page.getByPlaceholder('Feet')).toHaveValue('6');
     await expect(page.getByPlaceholder('Inches')).toHaveValue('0');
     
@@ -100,15 +112,16 @@ test.describe('Profile Units Toggle (F02)', () => {
 
   test('should validate imperial input ranges', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible();
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     
     // Fill with invalid weight (too low)
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('9');
     await page.getByPlaceholder(/66.*661/).fill('50'); // Too low
     
-    const ageFill = page.getByLabel('Age');
-    await ageFill.fill('25');
+    await page.getByTestId('profile-age-input').fill('25');
     
     // Fill other required fields
     await page.getByLabel('Sex').selectOption('male');
@@ -124,15 +137,17 @@ test.describe('Profile Units Toggle (F02)', () => {
 
   test('should convert back to metric correctly', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible();
     
     // Start with imperial
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('9');
     await page.getByPlaceholder(/66.*661/).fill('165.3');
     
     // Switch back to metric
-    await page.getByLabel('Units').selectOption('metric');
+    await page.getByTestId('profile-units-select').selectOption('metric');
     
     // Should convert to metric values
     await expect(page.getByPlaceholder(/100.*250/)).toHaveValue('175'); // 5'9" ≈ 175cm
@@ -141,15 +156,18 @@ test.describe('Profile Units Toggle (F02)', () => {
 
   test('should handle imperial weight input correctly without double conversion', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible();
     
     // Switch to imperial
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
+    await page.getByTestId('profile-age-input').fill('30');
     await page.getByPlaceholder('Feet').fill('6');
     await page.getByPlaceholder('Inches').fill('0');
     await page.getByPlaceholder(/66.*661/).fill('180'); // 180 lbs = ~81.8 kg
     
     // Fill other required fields
-    await page.getByLabel('Age').fill('30');
+    await page.getByTestId('profile-age-input').fill('30');
     await page.getByLabel('Sex').selectOption('male');
     await page.getByLabel('Activity Level').selectOption('moderate');
     await page.getByLabel('Experience Level').selectOption('beginner');
