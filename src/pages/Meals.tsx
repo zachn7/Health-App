@@ -350,6 +350,7 @@ export default function Meals() {
           </div>
           {activeTab === 'meals' && (
             <button
+              data-testid="create-new-meal-btn"
               onClick={startNewMeal}
               className="btn btn-primary"
             >
@@ -430,7 +431,7 @@ export default function Meals() {
           {meals.map((meal) => {
             const totals = calculateMealTotals(meal.items);
             return (
-              <div key={meal.id} className="card">
+              <div key={meal.id} className="card" data-testid={`meal-card-${meal.id}`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-medium text-gray-900">{meal.name}</h3>
@@ -601,6 +602,7 @@ export default function Meals() {
                   onChange={(e) => setMealName(e.target.value)}
                   className="input"
                   placeholder="e.g., Post-Workout Shake"
+                  data-testid="meal-editor-name-input"
                 />
               </div>
             </div>
@@ -684,6 +686,7 @@ export default function Meals() {
               {/* Add Food Buttons */}
               <div className="mt-4 space-y-2">
                 <button
+                  data-testid="meal-editor-search-usda-btn"
                   onClick={() => {
                     setShowFoodPicker(true);
                     setFoodSearchQuery('');
@@ -695,6 +698,7 @@ export default function Meals() {
                   Search USDA Foods
                 </button>
                 <button
+                  data-testid="meal-editor-add-manual-food-btn"
                   onClick={() => {
                     setShowManualFoodForm(true);
                     setManualFood({
@@ -726,12 +730,14 @@ export default function Meals() {
                 </div>
                 <div className="flex space-x-3">
                   <button
+                    data-testid="meal-editor-cancel-btn"
                     onClick={() => setShowMealEditor(false)}
                     className="btn btn-secondary"
                   >
                     Cancel
                   </button>
                   <button
+                    data-testid="meal-editor-save-btn"
                     onClick={saveMeal}
                     disabled={saving || !mealName.trim()}
                     className="btn btn-primary"
