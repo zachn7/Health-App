@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('No Coming Soon Text (F05)', () => {
-  test.beforeEach(async ({ page }) => {
-    // Set up complete profile to access all pages
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
+  test.beforeEach(async ({ page, context }) => {
+    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    await context.addInitScript(() => {
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });
+    
+    // Navigate to app
+    await page.goto('./');
   });
 
   test('should not show Coming Soon on main pages', async ({ page }) => {

@@ -1,16 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Profile Units Toggle (F02)', () => {
-  test.beforeEach(async ({ page }) => {
-    // Start fresh and navigate to profile
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      // Set age gate to pass
+  test.beforeEach(async ({ page, context }) => {
+    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    await context.addInitScript(() => {
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });
+    
+    // Navigate to profile
     await page.goto('./#/profile');
   });
 

@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Macro Split Editor (F03)', () => {
-  test.beforeEach(async ({ page }) => {
-    // Start fresh and set up test environment
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      // Set age gate to pass
+  test.beforeEach(async ({ page, context }) => {
+    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    await context.addInitScript(() => {
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });

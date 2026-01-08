@@ -1,18 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
-  test.beforeEach(async ({ page }) => {
-    // Start fresh and set up test environment
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      // Set age gate to pass
+  test.beforeEach(async ({ page, context }) => {
+    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    await context.addInitScript(() => {
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });
     
-    // Set up a mock USDA API key for testing
+    // Set up mock USDA API responses
     await page.route('**/fdc.nal.usda.gov/**', async (route) => {
       // Mock USDA API responses for test foods
       const url = route.request().url();

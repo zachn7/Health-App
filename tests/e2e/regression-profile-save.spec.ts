@@ -2,13 +2,9 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
   
-  test('should update dashboard immediately when profile is saved', async ({ page }) => {
-    // Start fresh and set up test environment
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      // Set age gate to pass
+  test('should update dashboard immediately when profile is saved', async ({ page, context }) => {
+    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    await context.addInitScript(() => {
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });
@@ -41,16 +37,14 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     await expect(page.getByText('Activity Level:')).toBeVisible();
     await expect(page.getByText('moderate')).toBeVisible();
   });
-  test.beforeEach(async ({ page }) => {
-    // Start fresh and navigate to profile
-    await page.goto('about:blank');
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      // Set age gate to pass
+  test.beforeEach(async ({ page, context }) => {
+    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    await context.addInitScript(() => {
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });
+    
+    // Navigate to profile
     await page.goto('./#/profile');
   });
 
