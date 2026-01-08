@@ -109,13 +109,13 @@ export default function Dashboard() {
       </div>
 
       {/* Status Card */}
-      <div className={`mb-8 p-6 rounded-lg ${getStatusColor(todayStatus)}`}>
+      <div className={`mb-8 p-6 rounded-lg ${getStatusColor(todayStatus)}`} data-testid="dashboard-status-card">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold">Today's Status</h2>
-            <p className="mt-1">{getStatusText(todayStatus)}</p>
+            <h2 className="text-xl font-semibold" data-testid="dashboard-status-title">Today's Status</h2>
+            <p className="mt-1" data-testid="dashboard-status-text">{getStatusText(todayStatus)}</p>
           </div>
-          <div className="text-3xl">
+          <div className="text-3xl" data-testid="dashboard-status-icon">
             {todayStatus === 'complete' && '✨'}
             {todayStatus === 'partial' && '💪'}
             {todayStatus === 'pending' && '⏰'}
@@ -262,8 +262,8 @@ export default function Dashboard() {
         </div>
 
         {/* Profile Overview */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Profile Overview</h3>
+        <div className="card" data-testid="dashboard-profile-card">
+          <h3 className="text-lg font-medium text-gray-900 mb-2" data-testid="dashboard-profile-title">Profile Overview</h3>
           {profile ? (
             <div className="space-y-2 text-sm">
               <div>
