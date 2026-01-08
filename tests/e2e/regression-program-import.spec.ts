@@ -403,7 +403,7 @@ test.describe('Regression: Program Import - No Unexpected Token (R04)', () => {
       }
     } else {
       // Create a simple test by checking the workouts page loads
-      await expect(page.getByText(/Workouts|Programs/i)).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Workouts' })).toBeVisible();
       await expect(page.getByText(/Unexpected token/i)).not.toBeVisible();
     }
     
