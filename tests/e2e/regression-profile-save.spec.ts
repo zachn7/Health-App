@@ -15,12 +15,12 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
     
     // Fill out profile
-    await page.getByLabel('Age').fill('25');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('profile-age-input').fill('25');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Should save profile and navigate to dashboard
@@ -54,18 +54,18 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
     
     // Fill out profile form
-    await page.getByLabel('Age').fill('25');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
+    await page.getByTestId('profile-age-input').fill('25');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
     
     // Fill health metrics
     await page.getByPlaceholder(/100.*250/).fill('175'); // Height in cm
     await page.getByPlaceholder(/30.*300/).fill('75'); // Weight in kg
     
     // Select equipment and workout day
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     
     // Save profile
     await page.getByRole('button', { name: 'Save Profile' }).click();
@@ -90,14 +90,14 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
   test('should persist profile changes across page refreshes', async ({ page }) => {
     // Create and save profile
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Age').fill('30');
-    await page.getByLabel('Sex').selectOption('female');
-    await page.getByLabel('Activity Level').selectOption('active');
-    await page.getByLabel('Experience Level').selectOption('intermediate');
+    await page.getByTestId('profile-age-input').fill('30');
+    await page.getByTestId('profile-sex-select').selectOption('female');
+    await page.getByTestId('profile-activity-level-select').selectOption('active');
+    await page.getByTestId('profile-experience-level-select').selectOption('intermediate');
     await page.getByPlaceholder(/100.*250/).fill('165');
     await page.getByPlaceholder(/30.*300/).fill('60');
-    await page.getByLabel('yoga').check();
-    await page.getByLabel('wednesday').check();
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-wednesday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
@@ -119,14 +119,14 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
   test('should update dashboard without requiring manual refresh', async ({ page }) => {
     // Create initial profile
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Age').fill('25');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
+    await page.getByTestId('profile-age-input').fill('25');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
     await page.getByPlaceholder(/100.*250/).fill('175');
     await page.getByPlaceholder(/30.*300/).fill('75');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Go to dashboard to confirm initial save
@@ -139,7 +139,7 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     await page.waitForLoadState();
     
     // Update the age
-    await page.getByLabel('Age').fill('26');
+    await page.getByTestId('profile-age-input').fill('26');
     await page.getByRole('button', { name: 'Save Profile' }).click();
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     

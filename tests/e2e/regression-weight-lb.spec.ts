@@ -20,18 +20,18 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByRole('button', { name: 'Create Profile' }).click();
     
     // Switch to imperial units
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     
     // Fill out profile in imperial
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('9');
     await page.getByPlaceholder(/66.*661/).fill('165.3'); // 75 kg equivalent
-    await page.getByLabel('Age').fill('25');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('profile-age-input').fill('25');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     
     await page.getByRole('button', { name: 'Save Profile' }).click();
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
@@ -45,16 +45,16 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Create imperial profile first
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('9');
     await page.getByPlaceholder(/66.*661/).fill('165.3');
-    await page.getByLabel('Age').fill('25');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('profile-age-input').fill('25');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress
@@ -70,16 +70,16 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Set up imperial profile
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('9');
     await page.getByPlaceholder(/66.*661/).fill('165.3');
-    await page.getByLabel('Age').fill('25');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('profile-age-input').fill('25');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress page
@@ -104,16 +104,16 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Set up imperial profile and log weight
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('6');
     await page.getByPlaceholder('Inches').fill('0');
     await page.getByPlaceholder(/66.*661/).fill('180');
-    await page.getByLabel('Age').fill('30');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('beginner');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
+    await page.getByTestId('profile-age-input').fill('30');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     await page.goto('./#/progress');
@@ -145,16 +145,16 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Set up imperial profile
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('10');
     await page.getByPlaceholder(/66.*661/).fill('150');
-    await page.getByLabel('Age').fill('28');
-    await page.getByLabel('Sex').selectOption('female');
-    await page.getByLabel('Activity Level').selectOption('active');
-    await page.getByLabel('Experience Level').selectOption('intermediate');
-    await page.getByLabel('yoga').check();
-    await page.getByLabel('wednesday').check();
+    await page.getByTestId('profile-age-input').fill('28');
+    await page.getByTestId('profile-sex-select').selectOption('female');
+    await page.getByTestId('profile-activity-level-select').selectOption('active');
+    await page.getByTestId('profile-experience-level-select').selectOption('intermediate');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-wednesday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress and log weight
@@ -177,16 +177,16 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Set up imperial profile
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('10');
     await page.getByPlaceholder(/66.*661/).fill('150');
-    await page.getByLabel('Age').fill('28');
-    await page.getByLabel('Sex').selectOption('female');
-    await page.getByLabel('Activity Level').selectOption('active');
-    await page.getByLabel('Experience Level').selectOption('intermediate');
-    await page.getByLabel('yoga').check();
-    await page.getByLabel('wednesday').check();
+    await page.getByTestId('profile-age-input').fill('28');
+    await page.getByTestId('profile-sex-select').selectOption('female');
+    await page.getByTestId('profile-activity-level-select').selectOption('active');
+    await page.getByTestId('profile-experience-level-select').selectOption('intermediate');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-wednesday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress page
@@ -215,16 +215,16 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Create profile with imperial units
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByLabel('Units').selectOption('imperial');
+    await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
     await page.getByPlaceholder('Inches').fill('7');
     await page.getByPlaceholder(/66.*661/).fill('155');
-    await page.getByLabel('Age').fill('35');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('advanced');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('friday').check();
+    await page.getByTestId('profile-age-input').fill('35');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('advanced');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-friday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate between pages and return to progress
