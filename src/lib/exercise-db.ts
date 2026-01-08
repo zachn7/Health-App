@@ -99,39 +99,97 @@ export class ExerciseDBService {
   static async searchExercises(query: string): Promise<ExerciseDBItem[]> {
     await this.initialize();
     
-    if (!query || query.trim().length === 0) {
-      return [];
+    const trimmedQuery = query?.trim() || '';
+    
+    // Empty search - return a sample of all exercises
+    if (!trimmedQuery) {
+      console.log('Empty search, returning sample exercises');
+      const allExercises = await db.table('exercises').limit(50).toArray();
+      console.log(`Returning ${allExercises.length} sample exercises`);
+      return allExercises;
     }
     
     try {
-      const searchLower = query.toLowerCase().trim();
+      const searchLower = trimmedQuery.toLowerCase();
       console.log(`Searching exercises for: "${searchLower}"`);
       
-      // First try exact matches and starts-with
-      let results = await db.table('exercises')
-        .where('name')
-        .startsWithIgnoreCase(searchLower)
-        .or('bodyPart')
-        .equalsIgnoreCase(searchLower)
-        .or('equipment')
-        .anyOf([searchLower])
-        .limit(50)
-        .toArray();
+      // Tokenize query for multi-word matching (e.g., "incline bench" -> ["incline", "bench"])
+      const searchTokens = searchLower.split(/\s+/).filter(token => token.length > 0);
+      console.log(`Search tokens:`, searchTokens);
       
-      // If no results, try contains search
-      if (results.length === 0) {
-        console.log('No starts-with matches, trying contains search...');
-        const allExercises = await db.table('exercises').limit(200).toArray();
-        results = allExercises.filter(exercise => 
-          exercise.name.toLowerCase().includes(searchLower) ||
-          exercise.bodyPart.toLowerCase().includes(searchLower) ||
-          exercise.equipment.some((e: string) => e.toLowerCase().includes(searchLower)) ||
-          exercise.targetMuscles.some((m: string) => m.toLowerCase().includes(searchLower))
-        ).slice(0, 50);
+      // If single word, use indexed search for performance
+      if (searchTokens.length === 1) {
+        // Try starts-with matches first
+        let results = await db.table('exercises')
+          .filter(exercise => 
+            exercise.name.toLowerCase().startsWith(searchLower) ||
+            exercise.bodyPart.toLowerCase().startsWith(searchLower)
+          )
+          .limit(50)
+          .toArray();
+        
+        // Pad with more substring results if needed
+        if (results.length < 25) {
+          const allExercises = await db.table('exercises').limit(200).toArray();
+          const substringResults = allExercises.filter(exercise => 
+            exercise.name.toLowerCase().includes(searchLower) ||
+            exercise.bodyPart.toLowerCase().includes(searchLower) ||
+            exercise.equipment.some((e: string) => e.toLowerCase().includes(searchLower)) ||
+            exercise.targetMuscles.some((m: string) => m.toLowerCase().includes(searchLower))
+          ).filter(ex => !results.find(r => r.id === ex.id)).slice(0, 50 - results.length);
+          results = [...results, ...substringResults];
+        }
+        
+        console.log(`Found ${results.length} exercises for single word query`);
+        return results.slice(0, 50);
       }
       
-      console.log(`Found ${results.length} exercises for "${searchLower}"`);
+      // Multi-word query: token-based matching
+      // Match if ALL tokens are found somewhere in name/bodyPart/equipment
+      const allExercises = await db.table('exercises').limit(200).toArray();
+      
+      const matchedExercises = allExercises.filter(exercise => {
+        // Create searchable string combining all exercise properties
+        const searchableText = [
+          exercise.name,
+          exercise.bodyPart,
+          ...exercise.equipment,
+          ...exercise.targetMuscles,
+          ...exercise.synergistMuscles
+        ].join(' ').toLowerCase();
+        
+        // Check if ALL search tokens are found somewhere in the searchable text
+        return searchTokens.every(token => searchableText.includes(token));
+      });
+      
+      // Sort by how many tokens were matched (more matches = better relevance)
+      const scoredExercises = matchedExercises.map(exercise => {
+        const searchableText = [
+          exercise.name,
+          exercise.bodyPart,
+          ...exercise.equipment
+        ].join(' ').toLowerCase();
+        
+        const matchCount = searchTokens.reduce((count, token) => {
+          return count + (searchableText.includes(token) ? 1 : 0);
+        }, 0);
+        
+        return { exercise, matchCount };
+      });
+      
+      // Sort by match count (descending), then by name alphabetically
+      scoredExercises.sort((a, b) => {
+        if (b.matchCount !== a.matchCount) {
+          return b.matchCount - a.matchCount;
+        }
+        return a.exercise.name.localeCompare(b.exercise.name);
+      });
+      
+      const results = scoredExercises.map(se => se.exercise).slice(0, 50);
+      
+      console.log(`Found ${results.length} exercises for multi-word query "${searchLower}"`);
       return results;
+      
     } catch (error) {
       console.error('Failed to search exercises:', error);
       return [];

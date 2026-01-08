@@ -34,12 +34,10 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   
   useEffect(() => {
     loadFilters();
-    // Auto-search on typing with debounce
+    // Auto-search on typing with debounce, or show initial results
     const timer = setTimeout(() => {
-      if (searchQuery || selectedBodyPart || selectedEquipment || selectedDifficulty) {
-        searchExercises();
-      }
-    }, searchQuery ? 300 : 0); // Debounce text search, immediate filter search
+      searchExercises();
+    }, 300);
     
     return () => clearTimeout(timer);
   }, [searchQuery, selectedBodyPart, selectedEquipment, selectedDifficulty]);
@@ -58,11 +56,6 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   };
   
   const searchExercises = async () => {
-    if (!searchQuery && !selectedBodyPart && !selectedEquipment && !selectedDifficulty) {
-      setResults([]);
-      return;
-    }
-    
     setLoading(true);
     try {
       let searchResults: ExerciseDBItem[] = [];
@@ -74,13 +67,8 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
       } else if (selectedEquipment) {
         searchResults = await ExerciseDBService.getExercisesByEquipment(selectedEquipment);
       } else {
-        // Load some sample results
-        await ExerciseDBService.initialize();
-        const allParts = await ExerciseDBService.getAllBodyParts();
-        for (const part of allParts.slice(0, 5)) {
-          const exercises = await ExerciseDBService.getExercisesByBodyPart(part);
-          searchResults.push(...exercises.slice(0, 3));
-        }
+        // Show sample exercises when no search or filters
+        searchResults = await ExerciseDBService.searchExercises('');
       }
       
       // Apply filters
@@ -209,6 +197,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search exercises..."
               className="input flex-1"
+              data-testid="exercise-search-input"
             />
             <button
               onClick={searchExercises}
@@ -516,7 +505,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
               <p className="mt-2 text-gray-600">Searching exercises...</p>
             </div>
           ) : results.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500" data-testid="exercise-search-empty-state">
               <p>No exercises found. Try adjusting your search or filters.</p>
             </div>
           ) : (
@@ -526,6 +515,8 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
                   key={exercise.id}
                   onClick={() => handleSelect(exercise)}
                   className="w-full text-left p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  data-testid={`exercise-result-${exercise.id}`}
+                  data-exercise-name={exercise.name}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
