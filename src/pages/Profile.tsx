@@ -661,6 +661,7 @@ export default function Profile() {
             <div>
               <label className="label">Activity Level</label>
               <select
+                data-testid="profile-activity-level-select"
                 value={profile.activityLevel}
                 onChange={(e) => updateField('activityLevel', e.target.value as ActivityLevel)}
                 className="input"
@@ -676,6 +677,7 @@ export default function Profile() {
             <div>
               <label className="label">Experience Level</label>
               <select
+                data-testid="profile-experience-level-select"
                 value={profile.experienceLevel}
                 onChange={(e) => updateField('experienceLevel', e.target.value as ExperienceLevel)}
                 className="input"
@@ -747,34 +749,39 @@ export default function Profile() {
             // Edit mode
             <div>
               {/* Presets */}
-              <div className="mb-6">
+              <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Quick Presets</h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                   <button
+                    data-testid="macro-preset-balanced"
                     onClick={() => applyMacroPreset('balanced')}
                     className={`btn btn-sm ${macroSplit.protein === 30 && macroSplit.carbs === 40 && macroSplit.fat === 30 ? 'btn-primary' : 'btn-secondary'}`}
                   >
                     Balanced
                   </button>
                   <button
+                    data-testid="macro-preset-high-protein"
                     onClick={() => applyMacroPreset('high_protein')}
                     className={`btn btn-sm ${macroSplit.protein === 40 && macroSplit.carbs === 30 && macroSplit.fat === 30 ? 'btn-primary' : 'btn-secondary'}`}
                   >
                     High Protein
                   </button>
                   <button
+                    data-testid="macro-preset-low-carb"
                     onClick={() => applyMacroPreset('low_carb')}
                     className={`btn btn-sm ${macroSplit.protein === 35 && macroSplit.carbs === 25 && macroSplit.fat === 40 ? 'btn-primary' : 'btn-secondary'}`}
                   >
                     Low Carb
                   </button>
                   <button
+                    data-testid="macro-preset-high-carb"
                     onClick={() => applyMacroPreset('high_carb')}
                     className={`btn btn-sm ${macroSplit.protein === 20 && macroSplit.carbs === 55 && macroSplit.fat === 25 ? 'btn-primary' : 'btn-secondary'}`}
                   >
                     High Carb
                   </button>
                   <button
+                    data-testid="macro-preset-keto"
                     onClick={() => applyMacroPreset('keto')}
                     className={`btn btn-sm ${macroSplit.protein === 25 && macroSplit.carbs === 5 && macroSplit.fat === 70 ? 'btn-primary' : 'btn-secondary'}`}
                   >
@@ -794,6 +801,7 @@ export default function Profile() {
                     </div>
                     <input
                       type="range"
+                      data-testid="macro-slider-protein"
                       min="5"
                       max="80"
                       value={macroSplit.protein}
@@ -881,6 +889,7 @@ export default function Profile() {
               <label key={day} className="flex items-center space-x-2">
                 <input
                   type="checkbox"
+                  data-testid={`schedule-${day}`}
                   checked={enabled}
                   onChange={(e) => updateField('schedule', {
                     ...profile.schedule,
@@ -906,6 +915,7 @@ export default function Profile() {
               <label key={equipment} className="flex items-center space-x-2">
                 <input
                   type="checkbox"
+                  data-testid={`equipment-${equipment.replace(' ', '-')}`}
                   checked={profile.equipment.includes(equipment)}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -1068,6 +1078,7 @@ export default function Profile() {
         {/* Save Button */}
         <div className="flex justify-end">
           <button
+            data-testid="profile-save-button"
             onClick={saveProfile}
             disabled={saving}
             className="btn btn-primary min-w-32"

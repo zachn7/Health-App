@@ -11,24 +11,28 @@ test.describe('Macro Split Editor (F03)', () => {
     // Create a profile first
     await page.goto('./#/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('profile-units-select')).toBeVisible({ timeout: 10000 });
     
     // Fill out minimal profile
-    await page.getByLabel('Age').fill('30');
-    await page.getByLabel('Sex').selectOption('male');
-    await page.getByLabel('Activity Level').selectOption('moderate');
-    await page.getByLabel('Experience Level').selectOption('intermediate');
-    await page.getByLabel('bodyweight').check();
-    await page.getByLabel('monday').check();
-    await page.getByLabel('wednesday').check();
-    await page.getByLabel('friday').check();
+    await page.getByTestId('profile-age-input').fill('30');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('intermediate');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('schedule-monday').check();
+    await page.getByTestId('schedule-wednesday').check();
+    await page.getByTestId('schedule-friday').check();
     
     // Save profile
     await page.getByRole('button', { name: 'Save Profile' }).click();
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
-    // Go back to profile page
+    // Go back to profile page and switch to edit mode
     await page.goto('./#/profile');
     await page.waitForLoadState();
+    await page.getByRole('button', { name: 'Edit Profile' }).click();
+    await page.waitForLoadState('networkidle');
   });
 
   test('should show default macro split on profile page', async ({ page }) => {
