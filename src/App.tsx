@@ -63,6 +63,7 @@ function AppContent() {
             hasCompletedOnboarding ? <Dashboard /> : <Navigate to="/onboarding" replace />
           }
         />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/coach" element={

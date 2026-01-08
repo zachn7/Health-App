@@ -36,19 +36,15 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     
     // Navigate to dashboard
     await page.goto('./#/dashboard');
-    await page.waitForLoadState();
-    
-    // Wait for profile data to load (Dashboard uses liveQuery to fetch profile)
-    await page.waitForTimeout(1000);
     
     // Dashboard should show profile information, not onboarding state
     await expect(page.getByText('Complete your profile first')).not.toBeVisible();
     
-    // Check we're on dashboard
-    await expect(page.getByText('Dashboard')).toBeVisible();
+    // Check we're on dashboard (using role to be specific)
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     
     // Dashboard is loaded - profile data will be shown once loaded
-    await expect(page.getByText("Today's Status")).toBeVisible();
+    await expect(page.getByTestId('dashboard-status-title')).toBeVisible();
   });
   
   test('should update dashboard immediately after saving profile', async ({ page }) => {
@@ -82,16 +78,12 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     
     // Navigate to dashboard
     await page.goto('./#/dashboard');
-    await page.waitForLoadState();
     
-    // Wait for profile data to load
-    await page.waitForTimeout(1000);
-    
-    // Check we're on dashboard
-    await expect(page.getByText('Dashboard')).toBeVisible();
+    // Check we're on dashboard (using role to be specific)
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     
     // Dashboard is loaded - profile information will show
-    await expect(page.getByText("Today's Status")).toBeVisible();
+    await expect(page.getByTestId('dashboard-status-title')).toBeVisible();
   });
 
   test('should persist profile changes across page refreshes', async ({ page }) => {
@@ -118,16 +110,12 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     
     // Navigate to dashboard
     await page.goto('./#/dashboard');
-    await page.waitForLoadState();
     
-    // Wait for profile data to load
-    await page.waitForTimeout(1000);
-    
-    // Check we're on dashboard
-    await expect(page.getByText('Dashboard')).toBeVisible();
+    // Check we're on dashboard (using role to be specific)
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     
     // Dashboard is loaded - profile persists across refresh
-    await expect(page.getByText("Today's Status")).toBeVisible();
+    await expect(page.getByTestId('dashboard-status-title')).toBeVisible();
   });
 
   test('should update dashboard without requiring manual refresh', async ({ page }) => {
@@ -149,17 +137,17 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     
     // Go to dashboard to confirm initial save
     await page.goto('./#/dashboard');
-    await page.waitForLoadState();
     
-    // Wait for profile data to load
-    await page.waitForTimeout(1000);
+    // Check we're on dashboard (using role to be specific)
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     
-    // Check we're on dashboard
-    await expect(page.getByText('Dashboard')).toBeVisible();
+    // Dashboard is loaded with initial profile
     
     // Go back to profile and update
     await page.goto('./#/profile');
-    await page.waitForLoadState();
+    
+    // Click Edit Profile button to enter edit mode
+    await page.getByTestId('edit-profile-button').click();
     
     // Update the age
     await page.getByTestId('profile-age-input').fill('26');
@@ -168,15 +156,11 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     
     // Go back to dashboard - should immediately show updated age
     await page.goto('./#/dashboard');
-    await page.waitForLoadState();
     
-    // Wait for profile data to load
-    await page.waitForTimeout(1000);
-    
-    // Check we're on dashboard
-    await expect(page.getByText('Dashboard')).toBeVisible();
+    // Check we're on dashboard (using role to be specific)
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     
     // Dashboard should be updated with latest profile info
-    await expect(page.getByText("Today's Status")).toBeVisible();
+    await expect(page.getByTestId('dashboard-status-title')).toBeVisible();
   });
 });

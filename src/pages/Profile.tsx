@@ -395,6 +395,7 @@ export default function Profile() {
           <button
             onClick={() => setEditMode(true)}
             className="btn btn-secondary"
+            data-testid="edit-profile-button"
           >
             Edit Profile
           </button>
