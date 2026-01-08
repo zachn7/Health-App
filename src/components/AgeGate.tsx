@@ -84,6 +84,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
               <input
                 type="number"
                 id="age"
+                data-testid="age-input"
                 value={age}
                 onChange={(e) => {
                   setAge(e.target.value);

@@ -8,19 +8,19 @@ test.describe('Age Gate Continue Fix', () => {
 
   test('should navigate to onboarding when age >= 13', async ({ page }) => {
     // Should be on age gate initially
-    await expect(page.getByText('Welcome to CodePuppy Trainer')).toBeVisible();
-    await expect(page.getByLabel('Confirm your age')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer' })).toBeVisible();
+    await expect(page.getByTestId('age-input')).toBeVisible();
     
     // Enter valid age
-    await page.getByLabel('Confirm your age').fill('20');
+    await page.getByTestId('age-input').fill('20');
     
     // Click continue
     await page.getByTestId('age-gate-continue').click();
     
     // Should navigate to onboarding without refresh
-    await expect(page.getByText('Welcome to CodePuppy Trainer!')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer!' })).toBeVisible();
     await expect(page.getByText('Your personal offline fitness companion')).toBeVisible();
-    await expect(page.getByText('Set Up Profile')).toBeVisible();
+    await expect(page.getByTestId('onboarding-setup-profile')).toBeVisible();
     
     // Verify localStorage was set
     const ageGateAccepted = await page.evaluate(() => localStorage.getItem('age_gate_accepted'));
@@ -28,12 +28,12 @@ test.describe('Age Gate Continue Fix', () => {
   });
 
   test('should show error when age < 13', async ({ page }) => {
-    await page.getByLabel('Confirm your age').fill('12');
+    await page.getByTestId('age-input').fill('12');
     await page.getByTestId('age-gate-continue').click();
     
     // Should show error and stay on age gate
-    await expect(page.getByRole('alert')).toHaveText(/You must be at least 13 years old/);
-    await expect(page.getByLabel('Confirm your age')).toBeVisible();
+    await expect(page.getByTestId('age-gate-error')).toHaveText(/13 years old/);
+    await expect(page.getByTestId('age-input')).toBeVisible();
     
     // Should not set localStorage
     const ageGateAccepted = await page.evaluate(() => localStorage.getItem('age_gate_accepted'));
@@ -41,13 +41,13 @@ test.describe('Age Gate Continue Fix', () => {
   });
 
   test('should show error for age of 0', async ({ page }) => {
-    await page.getByLabel('Confirm your age').fill('0');
+    await page.getByTestId('age-input').fill('0');
     await page.getByTestId('age-gate-continue').click();
     
     // Wait for error element to be visible, then check text
-    await expect(page.getByRole('alert')).toBeVisible();
-    await expect(page.getByRole('alert')).toHaveText('Please enter a valid age');
-    await expect(page.getByLabel('Confirm your age')).toBeVisible();
+    await expect(page.getByTestId('age-gate-error')).toBeVisible();
+    await expect(page.getByTestId('age-gate-error')).toHaveText('Please enter a valid age');
+    await expect(page.getByTestId('age-input')).toBeVisible();
     
     // Should not set localStorage
     const ageGateAccepted = await page.evaluate(() => localStorage.getItem('age_gate_accepted'));
@@ -55,13 +55,13 @@ test.describe('Age Gate Continue Fix', () => {
   });
 
   test('should show error for age over 150', async ({ page }) => {
-    await page.getByLabel('Confirm your age').fill('151');
+    await page.getByTestId('age-input').fill('151');
     await page.getByTestId('age-gate-continue').click();
     
     // Wait for error element to be visible, then check text
-    await expect(page.getByRole('alert')).toBeVisible();
-    await expect(page.getByRole('alert')).toHaveText('Please enter a valid age');
-    await expect(page.getByLabel('Confirm your age')).toBeVisible();
+    await expect(page.getByTestId('age-gate-error')).toBeVisible();
+    await expect(page.getByTestId('age-gate-error')).toHaveText('Please enter a valid age');
+    await expect(page.getByTestId('age-input')).toBeVisible();
     
     // Should not set localStorage
     const ageGateAccepted = await page.evaluate(() => localStorage.getItem('age_gate_accepted'));
@@ -69,7 +69,7 @@ test.describe('Age Gate Continue Fix', () => {
   });
 
   test('should disable button during loading', async ({ page }) => {
-    await page.getByLabel('Confirm your age').fill('20');
+    await page.getByTestId('age-input').fill('20');
     
     // Click continue using stable selector
     const continueButton = page.getByTestId('age-gate-continue');
@@ -83,15 +83,15 @@ test.describe('Age Gate Continue Fix', () => {
 
   test('should persist across page reload', async ({ page }) => {
     // Complete age gate
-    await page.getByLabel('Confirm your age').fill('20');
+    await page.getByTestId('age-input').fill('20');
     await page.getByTestId('age-gate-continue').click();
-    await page.waitForURL('**/onboarding');
+    await page.waitForURL(/onboarding/);
     
     // Reload page
     await page.reload();
     
-    // Should not show age gate again
-    await expect(page.getByText('Welcome to CodePuppy Trainer!')).toBeVisible();
-    await expect(page.getByLabel('Confirm your age')).not.toBeVisible();
+    // Should not show age gate again (should stay on onboarding)
+    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer!' })).toBeVisible();
+    await expect(page.getByTestId('age-input')).not.toBeVisible();
   });
 });

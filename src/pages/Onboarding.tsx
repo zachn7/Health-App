@@ -76,6 +76,7 @@ export default function Onboarding() {
           
           <div className="flex gap-4">
             <button 
+              data-testid="onboarding-setup-profile"
               onClick={handleGetStarted}
               className="btn btn-primary flex-1"
             >
@@ -83,6 +84,7 @@ export default function Onboarding() {
             </button>
             
             <button 
+              data-testid="onboarding-skip"
               onClick={handleSkipSetup}
               className="btn btn-secondary"
             >
