@@ -1,17 +1,16 @@
-import type { Profile, WorkoutPlan, MacroTargets } from '../types';
+import type { Profile, WorkoutPlan, MacroTargets, ExerciseSet, ExerciseDBItem } from '../types';
 import { ActivityLevel, GoalType, ExperienceLevel } from '../types';
-import exercisesData from '../assets/data/exercises.seed.json';
+import { ExerciseDBService } from './exercise-db';
+import { db } from '@/db';
 
-interface Exercise {
-  id: string;
-  name: string;
-  bodyPart: string;
-  equipment: string[];
-  category: string;
-  difficulty: string;
-  instructions: string[];
-  cues: string[];
-}
+type ExerciseSubstitution = {
+  originalExerciseId: string;
+  newExerciseId: string;
+  timestamp: number;
+};
+
+// Track substitutions to avoid cycling back to the same exercises
+const exerciseSubstitutionHistory: Record<string, ExerciseSubstitution[]> = {};
 // Calculate TDEE using Mifflin-St Jeor equation
 export function calculateTDEE(profile: Profile): { bmr: number; tdee: number } {
   const { weightKg, heightCm, age, sex, activityLevel } = profile;
@@ -89,40 +88,56 @@ export function calculateMacroTargets(profile: Profile, tdee: number): MacroTarg
 }
 
 // Generate workout plan based on profile and goals
-export function generateWorkoutPlan(profile: Profile, goalId?: string): WorkoutPlan {
+export async function generateWorkoutPlan(profile: Profile, goalId?: string): Promise<WorkoutPlan> {
   const { experienceLevel, goals, equipment, schedule } = profile;
   const selectedGoal = goals.find(g => g.id === goalId) || goals.find(g => g.isPrimary) || goals[0];
   const primaryGoal = selectedGoal?.type || GoalType.GENERAL_FITNESS;
   
+  // Initialize exercise DB to ensure data is loaded
+  await ExerciseDBService.initialize();
+  
+  // Get all available exercises from the database
+  const allExercises = await db.table('exercises').toArray();
+  
+  // Filter exercises by available equipment
+  const availableExercises = allExercises.filter((exercise: ExerciseDBItem) => 
+    exercise.equipment.some((eq: string) => equipment.includes(eq))
+  );
+  
+  console.log(`Found ${allExercises.length} total exercises, ${availableExercises.length} match equipment`);
+  
   // Determine training frequency based on schedule
   const trainingDays = Object.values(schedule).filter(Boolean).length;
-  
-  // Select exercises based on available equipment and goals
-  const availableExercises = exercisesData.filter(exercise => 
-    exercise.equipment.some(eq => equipment.includes(eq))
-  );
   
   // Generate weekly plan
   const weeks: any[] = [];
   
   // Week 1
-  const week1: any = {
+  const week1 = {
     week: 1,
-    workouts: []
+    workouts: [] as any[]
   };
   
   const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   
-  dayNames.forEach((day, index) => {
+  let workoutIndex = 0;
+  for (const day of dayNames) {
     if (schedule[day as keyof typeof schedule]) {
-      const workout = generateDayWorkout(index, trainingDays, availableExercises, experienceLevel, primaryGoal);
+      const workout = await generateDayWorkout(
+        workoutIndex, 
+        trainingDays, 
+        availableExercises, 
+        experienceLevel, 
+        primaryGoal
+      );
       week1.workouts.push({
         day: day.charAt(0).toUpperCase() + day.slice(1),
         exercises: workout,
-        notes: getDayNotes(primaryGoal, experienceLevel, index)
+        notes: getDayNotes(primaryGoal, experienceLevel, workoutIndex)
       });
+      workoutIndex++;
     }
-  });
+  }
   
   weeks.push(week1);
   
@@ -134,9 +149,14 @@ export function generateWorkoutPlan(profile: Profile, goalId?: string): WorkoutP
     // Apply progression
     weekPlan.workouts.forEach((workout: any) => {
       workout.exercises.forEach((exercise: any) => {
-        // Increase reps or add small weight progression
-        if (week % 2 === 0 && exercise.sets.reps) {
-          exercise.sets.reps += Math.floor(exercise.sets.reps * 0.05);
+        // Increase reps or add progression
+        if (week % 2 === 0 && exercise.sets) {
+          if (exercise.sets.reps) {
+            exercise.sets.reps += Math.floor(exercise.sets.reps * 0.05);
+          } else if (exercise.sets.repsRange) {
+            exercise.sets.repsRange.min += Math.floor(exercise.sets.repsRange.min * 0.05);
+            exercise.sets.repsRange.max += Math.floor(exercise.sets.repsRange.max * 0.05);
+          }
         }
       });
     });
@@ -155,44 +175,55 @@ export function generateWorkoutPlan(profile: Profile, goalId?: string): WorkoutP
   };
 }
 
-function generateDayWorkout(
+// Shuffle array for randomness
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+async function generateDayWorkout(
   dayIndex: number,
   totalDays: number,
-  exercises: Exercise[],
+  exercises: ExerciseDBItem[],
   experienceLevel: ExperienceLevel,
   primaryGoal: GoalType
-): any[] {
+): Promise<any[]> {
   const workout: any[] = [];
   
   // Determine body part focus based on day
   const bodyPartDay = dayIndex % getWorkoutSplit(totalDays);
   const targetBodyParts = getTargetBodyParts(bodyPartDay);
   
+  console.log(`Day ${dayIndex}: Body part day ${bodyPartDay}, targets: ${targetBodyParts.join(', ')}`);
+  
   // Filter exercises by target body parts
   let targetExercises = exercises.filter(ex => 
-    targetBodyParts.includes(ex.bodyPart)
+    targetBodyParts.includes(ex.bodyPart) ||
+    ex.targetMuscles.some(m => targetBodyParts.includes(m))
   );
   
-  // If not enough exercises for target body parts, add general exercises
-  if (targetExercises.length < 4) {
-    const generalExercises = exercises.filter(ex => 
-      !targetExercises.includes(ex) && ex.category === 'compound'
-    );
-    targetExercises = [...targetExercises, ...generalExercises.slice(0, 4 - targetExercises.length)];
-  }
+  console.log(`Found ${targetExercises.length} exercises matching target body parts`);
   
-  // If still not enough, add some isolation exercises
-  if (targetExercises.length < 4) {
-    const isolationExercises = exercises.filter(ex => 
-      !targetExercises.includes(ex) && ex.category === 'isolation'
-    );
-    targetExercises = [...targetExercises, ...isolationExercises.slice(0, 4 - targetExercises.length)];
-  }
+  // Prioritize compound exercises
+  const compoundExercises = shuffleArray(
+    targetExercises.filter(ex => ex.mechanicsType === 'compound' || ex.category === 'strength')
+  ).slice(0, 3);
   
-  // Select 4-6 exercises per workout
-  const exerciseCount = Math.min(6, Math.max(4, targetExercises.length));
-  const selectedExercises = targetExercises.slice(0, exerciseCount);
+  // Add isolation exercises
+  const isolationExercises = shuffleArray(
+    targetExercises.filter(ex => ex.mechanicsType === 'isolation')
+  ).slice(0, 2);
   
+  // Combine them
+  const selectedExercises = [...compoundExercises, ...isolationExercises];
+  
+  console.log(`Selected ${selectedExercises.length} exercises for day ${dayIndex}`);
+  
+  // Create workout entries
   selectedExercises.forEach(exercise => {
     workout.push({
       exerciseId: exercise.id,
@@ -220,19 +251,27 @@ function getTargetBodyParts(bodyPartDay: number): string[] {
 }
 
 function getExerciseSets(
-  exercise: Exercise,
+  exercise: ExerciseDBItem,
   experienceLevel: ExperienceLevel,
   goal: GoalType
-): any {
+): ExerciseSet {
   const baseSets = experienceLevel === 'beginner' ? 3 : 4;
-  const baseReps = getBaseReps(goal, exercise.category);
+  const baseReps = getBaseReps(goal, exercise.mechanicsType || 'compound');
   
-  return {
+  const exerciseSet: ExerciseSet = {
     sets: baseSets,
-    reps: baseReps,
-    restTime: exercise.category === 'compound' ? 90 : 60,
-    notes: `Focus on proper form. ${exercise.cues[0]}`
+    restTime: exercise.mechanicsType === 'compound' ? 90 : 60,
+    notes: `Focus on proper form. ${exercise.instructions[0] || ''}`
   };
+  
+  // Set either reps (for single value) or repsRange (for range)
+  if (typeof baseReps === 'number') {
+    exerciseSet.reps = baseReps;
+  } else {
+    exerciseSet.repsRange = baseReps;
+  }
+  
+  return exerciseSet;
 }
 
 function getBaseReps(primaryGoal: GoalType, category: string): number | { min: number; max: number } {
@@ -304,4 +343,102 @@ function getDayNotes(_primaryGoal: GoalType, experienceLevel: ExperienceLevel, d
   }
   
   return notes.join('. ');
+}
+
+// Substitute an exercise with a different one from the same body part/equipment
+export async function substituteExercise(
+  currentExerciseId: string,
+  planId: string,
+  equipment?: string[]
+): Promise<ExerciseDBItem | null> {
+  await ExerciseDBService.initialize();
+  
+  // Get the current exercise
+  const currentExercise = await ExerciseDBService.getExerciseById(currentExerciseId);
+  if (!currentExercise) {
+    console.error('Current exercise not found:', currentExerciseId);
+    return null;
+  }
+  
+  // Get substitution history for this plan
+  const history = exerciseSubstitutionHistory[planId] || [];
+  
+  // Get all exercises from the DB
+  const allExercises = await db.table('exercises').toArray();
+  
+  // Filter for compatible exercises:
+  // 1. Same body part or targets the same muscles
+  // 2. Matches equipment (if specified)
+  // 3. Not the current exercise
+  // 4. Not recently substituted (to avoid cycling)
+  const compatibleExercises = allExercises.filter((exercise: ExerciseDBItem) => {
+    // Skip the same exercise
+    if (exercise.id === currentExerciseId) return false;
+    
+    // Check if recently substituted (avoid cycling back within 10 minutes)
+    const recentSubstitution = history.find((sub: ExerciseSubstitution) => sub.newExerciseId === exercise.id);
+    if (recentSubstitution && Date.now() - recentSubstitution.timestamp < 600000) {
+      return false;
+    }
+    
+    // Check body part match (exact or via target muscles)
+    const shareTargetMuscles = currentExercise.targetMuscles.some((m: string) => 
+      exercise.targetMuscles.includes(m)
+    );
+    const shareBodyPart = exercise.bodyPart === currentExercise.bodyPart;
+    
+    if (!shareBodyPart && !shareTargetMuscles) {
+      return false;
+    }
+    
+    // Check equipment match (if specified)
+    if (equipment && equipment.length > 0) {
+      const hasRequiredEquipment = exercise.equipment.some((eq: string) => equipment.includes(eq));
+      if (!hasRequiredEquipment) return false;
+    }
+    
+    // Prefer similar mechanics type
+    if (exercise.mechanicsType !== currentExercise.mechanicsType) {
+      // Allow different mechanics type but prioritize same type later
+      return true;
+    }
+    
+    return true;
+  });
+  
+  if (compatibleExercises.length === 0) {
+    console.warn(' no compatible exercises found for substitution');
+    return null;
+  }
+  
+  // Shuffle and pick one
+  const shuffled = shuffleArray(compatibleExercises as ExerciseDBItem[]);
+  const newExercise = shuffled[0] as ExerciseDBItem;
+  
+  if (!newExercise) {
+    console.warn('No exercises found after shuffling');
+    return null;
+  }
+  
+  // Record substitution
+  const substitution: ExerciseSubstitution = {
+    originalExerciseId: currentExerciseId,
+    newExerciseId: newExercise.id,
+    timestamp: Date.now()
+  };
+  
+  if (!exerciseSubstitutionHistory[planId]) {
+    exerciseSubstitutionHistory[planId] = [];
+  }
+  
+  // Clean up old substitutions (older than 1 hour)
+  exerciseSubstitutionHistory[planId] = exerciseSubstitutionHistory[planId].filter(
+    sub => Date.now() - sub.timestamp < 3600000
+  );
+  
+  exerciseSubstitutionHistory[planId].push(substitution);
+  
+  console.log(`Substituted ${currentExercise.name} with ${newExercise.name}`);
+  
+  return newExercise;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { calculateTDEE, calculateMacroTargets, generateWorkoutPlan } from '../lib/coach-engine';
+import { calculateTDEE, calculateMacroTargets } from '../lib/coach-engine';
 import { webllmService } from '../lib/webllm-service';
 import { formatWeight } from '../lib/unit-conversions';
 import { getWebGPUDiagnostics } from '../ai/webgpu';
@@ -202,7 +202,8 @@ export default function Coach() {
     setGenerationError(null);
     try {
       console.log('Generating workout plan for profile:', profile.id, 'goal:', selectedGoalId);
-      const newPlan = generateWorkoutPlan(profile, selectedGoalId);
+      const { generateWorkoutPlan } = await import('../lib/coach-engine');
+      const newPlan = await generateWorkoutPlan(profile, selectedGoalId);
       console.log('Workout plan generated successfully:', newPlan.name);
       setGeneratedPlan(newPlan);
     } catch (error) {

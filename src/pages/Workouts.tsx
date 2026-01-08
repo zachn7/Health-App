@@ -3,7 +3,7 @@ import { repositories } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
 import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
-import { Edit3, Plus, Trash2, X } from 'lucide-react';
+import { Edit3, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile } from '../types';
 
@@ -147,6 +147,31 @@ export default function Workouts() {
     }
   };
   
+  const substituteExercise = async (weekIndex: number, dayIndex: number, exerciseId: string) => {
+    if (!selectedPlan) return;
+    
+    try {
+      const { substituteExercise: coachEngineSubstitute } = await import('../lib/coach-engine');
+      const profile = await repositories.profile.get();
+      
+      const newExercise = await coachEngineSubstitute(
+        exerciseId,
+        selectedPlan.id,
+        profile?.equipment
+      );
+      
+      if (!newExercise) {
+        alert('Could not find a suitable substitute exercise');
+        return;
+      }
+      
+      await replaceExercise(weekIndex, dayIndex, exerciseId, newExercise.id);
+    } catch (error) {
+      console.error('Failed to substitute exercise:', error);
+      alert('Failed to substitute exercise. Please try again.');
+    }
+  };
+
   const addExercise = async (weekIndex: number, dayIndex: number, exerciseId: string) => {
     if (!selectedPlan) return;
     
@@ -262,9 +287,11 @@ export default function Workouts() {
         alert('Please create a profile first!');
         return;
       }
+      
+      setLoading(true);
 
-      const { generateWorkoutPlan } = await import('../lib/coach-engine');
-      const plan = generateWorkoutPlan(profile);
+      const { generateWorkoutPlan: coachEngineGenerate } = await import('../lib/coach-engine');
+      const plan = await coachEngineGenerate(profile);
       
       await repositories.workout.createWorkoutPlan(plan);
       setWorkoutPlans([plan, ...workoutPlans]);
@@ -273,6 +300,8 @@ export default function Workouts() {
     } catch (error) {
       console.error('Failed to generate workout plan:', error);
       alert('Failed to generate workout plan. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -456,6 +485,7 @@ export default function Workouts() {
         <button
           onClick={generateWorkoutPlan}
           className="btn btn-primary"
+          data-testid="generate-workout-plan-btn"
         >
           Generate New Workout Plan
         </button>
@@ -472,7 +502,7 @@ export default function Workouts() {
       <div className="space-y-4 mb-8">
         {workoutPlans.length > 0 ? (
           workoutPlans.map((plan) => (
-            <div key={plan.id} className="card">
+            <div key={plan.id} className="card" data-testid={`workout-plan-${plan.id}`}>
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900">{plan.name}</h3>
@@ -743,7 +773,11 @@ export default function Workouts() {
                           const instructions = getExerciseInstructions(exercise.exerciseId);
                           
                           return (
-                            <div key={exIndex} className={`border-l-4 pl-4 ${selectedExercises.has(exercise.exerciseId) ? 'border-indigo-500 bg-indigo-50' : 'border-blue-500'}`}>
+                            <div 
+                              key={exIndex}
+                              data-testid={`plan-exercise-${exercise.exerciseId}`}
+                              className={`border-l-4 pl-4 ${selectedExercises.has(exercise.exerciseId) ? 'border-indigo-500 bg-indigo-50' : 'border-blue-500'}`}
+                            >
                               <div className="flex items-start space-x-3">
                                 {importMode?.weekIndex === selectedWeek && importMode?.dayIndex === dayIndex && (
                                   <input
@@ -800,13 +834,22 @@ export default function Workouts() {
                                       onClick={() => editExercisePrescription(selectedWeek, dayIndex, exIndex)}
                                       className="text-green-600 hover:text-green-800"
                                       title="Edit sets/reps/weight"
+                                      data-testid="substitute-exercise-btn"
                                     >
                                       <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => substituteExercise(selectedWeek, dayIndex, exercise.exerciseId)}
+                                      className="text-purple-600 hover:text-purple-800"
+                                      title="Substitute with similar exercise"
+                                    >
+                                      <RefreshCw className="w-4 h-4" />
                                     </button>
                                     <button
                                       onClick={() => removeExercise(selectedWeek, dayIndex, exercise.exerciseId)}
                                       className="text-red-600 hover:text-red-800"
                                       title="Remove exercise"
+                                      data-testid="remove-exercise-btn"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
