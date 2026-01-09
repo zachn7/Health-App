@@ -11,6 +11,48 @@ type ExerciseSubstitution = {
 
 // Track substitutions to avoid cycling back to the same exercises
 const exerciseSubstitutionHistory: Record<string, ExerciseSubstitution[]> = {};
+
+// Body part mapping: general focus -> specific muscles in the exercise DB
+const BODY_PART_MAPPINGS = {
+  'chest': ['pectorals', 'chest'],
+  'shoulders': ['shoulders', 'deltoids'],
+  'triceps': ['triceps'],
+  'biceps': ['biceps'],
+  'forearms': ['forearms'],
+  'back': ['lats', 'latissimus dorsi', 'traps', 'trapezius', 'lower back', 'spine'],
+  'legs': ['quadriceps', 'quads', 'hamstrings', 'glutes', 'calves', 'adductors', 'abductors'],
+  'core': ['abdominals', 'abs', 'obliques'],
+  'cardio': [], // Special case, no specific muscles
+  'full body': [] // Special case, all exercises
+} as const;
+
+type BodyPartFocus = keyof typeof BODY_PART_MAPPINGS;
+
+// Workout splits based on days per week
+function getWorkoutSplitType(totalDays: number): 'full-body' | 'upper-lower' | 'push-pull-legs' {
+  if (totalDays <= 3) return 'full-body';
+  if (totalDays <= 4) return 'upper-lower';
+  return 'push-pull-legs';
+}
+
+// Get body part focus for a given day index
+function getDayBodyPartFocus(dayIndex: number, totalDays: number): BodyPartFocus[] {
+  const splitType = getWorkoutSplitType(totalDays);
+  
+  if (splitType === 'full-body') {
+    return ['full body'];
+  }
+  
+  if (splitType === 'upper-lower') {
+    return dayIndex % 2 === 0 ? ['chest', 'shoulders', 'triceps', 'back', 'biceps'] : ['legs', 'core'];
+  }
+  
+  // Push/Pull/Legs
+  const dayInCycle = dayIndex % 3;
+  if (dayInCycle === 0) return ['chest', 'shoulders', 'triceps']; // Push
+  if (dayInCycle === 1) return ['back', 'biceps', 'forearms']; // Pull
+  return ['legs', 'core']; // Legs
+}
 // Calculate TDEE using Mifflin-St Jeor equation
 export function calculateTDEE(profile: Profile): { bmr: number; tdee: number } {
   const { weightKg, heightCm, age, sex, activityLevel } = profile;
@@ -112,7 +154,7 @@ export async function generateWorkoutPlan(profile: Profile, goalId?: string): Pr
   // Generate weekly plan
   const weeks: any[] = [];
   
-  // Week 1
+  // Week 1 - track used exercises to avoid duplicates across the week
   const week1 = {
     week: 1,
     workouts: [] as any[]
@@ -121,20 +163,26 @@ export async function generateWorkoutPlan(profile: Profile, goalId?: string): Pr
   const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   
   let workoutIndex = 0;
+  const usedExerciseIds = new Set<string>();
+  
   for (const day of dayNames) {
     if (schedule[day as keyof typeof schedule]) {
-      const workout = await generateDayWorkout(
+      const { exercises: workout, newlyUsedIds } = await generateDayWorkout(
         workoutIndex, 
         trainingDays, 
         availableExercises, 
         experienceLevel, 
-        primaryGoal
+        primaryGoal,
+        usedExerciseIds
       );
       week1.workouts.push({
         day: day.charAt(0).toUpperCase() + day.slice(1),
         exercises: workout,
-        notes: getDayNotes(primaryGoal, experienceLevel, workoutIndex)
+        notes: getDayNotes(primaryGoal, experienceLevel, workoutIndex, trainingDays)
       });
+      
+      // Track used exercises
+      newlyUsedIds.forEach(id => usedExerciseIds.add(id));
       workoutIndex++;
     }
   }
@@ -175,14 +223,77 @@ export async function generateWorkoutPlan(profile: Profile, goalId?: string): Pr
   };
 }
 
-// Shuffle array for randomness
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+// Deterministically sort exercises for consistent selection
+function sortExercisesDeterministically(exercises: ExerciseDBItem[]): ExerciseDBItem[] {
+  return [...exercises].sort((a, b) => {
+    // Primary sort: compound exercises first
+    const aCompound = (a.mechanicsType === 'compound' ? 1 : 0);
+    const bCompound = (b.mechanicsType === 'compound' ? 1 : 0);
+    if (aCompound !== bCompound) return bCompound - aCompound;
+    
+    // Secondary sort: by name for consistency
+    return a.name.localeCompare(b.name);
+  });
+}
+
+// Get exercises matching body part focus with cascading fallbacks
+function getExercisesForBodyPart(
+  bodyParts: BodyPartFocus[],
+  availableExercises: ExerciseDBItem[],
+  usedExerciseIds: Set<string> = new Set()
+): ExerciseDBItem[] {
+  // Try exact muscle matching first
+  let candidateMuscles: string[] = [];
+  for (const bodyPart of bodyParts) {
+    candidateMuscles.push(...BODY_PART_MAPPINGS[bodyPart]);
   }
-  return shuffled;
+  
+  // Filter exercises that match target muscles
+  let exercises = availableExercises.filter(ex =>
+    !usedExerciseIds.has(ex.id) &&
+    candidateMuscles.some(muscle =>
+      ex.targetMuscles.some(tm => 
+        tm.toLowerCase().includes(muscle.toLowerCase()) ||
+        muscle.toLowerCase().includes(tm.toLowerCase())
+      )
+    )
+  );
+  
+  console.log(`Step 1 - Exact muscle match: ${exercises.length} exercises`);
+  
+  if (exercises.length === 0) {
+    // Fallback 1: Match by bodyPart field
+    exercises = availableExercises.filter(ex =>
+      !usedExerciseIds.has(ex.id) &&
+      candidateMuscles.some(muscle =>
+        ex.bodyPart.toLowerCase().includes(muscle.toLowerCase()) ||
+        muscle.toLowerCase().includes(ex.bodyPart.toLowerCase())
+      )
+    );
+    console.log(`Step 2 - BodyPart field match: ${exercises.length} exercises`);
+  }
+  
+  if (exercises.length === 0) {
+    // Fallback 2: Match by synergist muscles
+    exercises = availableExercises.filter(ex =>
+      !usedExerciseIds.has(ex.id) &&
+      ex.synergistMuscles.some(sm =>
+        candidateMuscles.some(muscle =>
+          sm.toLowerCase().includes(muscle.toLowerCase()) ||
+          muscle.toLowerCase().includes(sm.toLowerCase())
+        )
+      )
+    );
+    console.log(`Step 3 - Synergist muscle match: ${exercises.length} exercises`);
+  }
+  
+  if (exercises.length === 0 && !bodyParts.includes('full body')) {
+    // Fallback 3: Use any exercises (full body fallback)
+    console.log('Step 4 - Fallback to all available exercises');
+    exercises = availableExercises.filter(ex => !usedExerciseIds.has(ex.id));
+  }
+  
+  return sortExercisesDeterministically(exercises);
 }
 
 async function generateDayWorkout(
@@ -190,36 +301,52 @@ async function generateDayWorkout(
   totalDays: number,
   exercises: ExerciseDBItem[],
   experienceLevel: ExperienceLevel,
-  primaryGoal: GoalType
-): Promise<any[]> {
+  primaryGoal: GoalType,
+  usedExerciseIds: Set<string> = new Set()
+): Promise<{ exercises: any[]; newlyUsedIds: Set<string> }> {
   const workout: any[] = [];
+  const newlyUsedIds: Set<string> = new Set();
   
-  // Determine body part focus based on day
-  const bodyPartDay = dayIndex % getWorkoutSplit(totalDays);
-  const targetBodyParts = getTargetBodyParts(bodyPartDay);
+  // Determine body part focus for this day
+  const bodyPartFocus = getDayBodyPartFocus(dayIndex, totalDays);
+  console.log(`Day ${dayIndex}: Focus on ${bodyPartFocus.join(', ')}`);
   
-  console.log(`Day ${dayIndex}: Body part day ${bodyPartDay}, targets: ${targetBodyParts.join(', ')}`);
+  // Determine target exercise count based on experience level
+  const targetExerciseCount = experienceLevel === 'beginner' ? 4 : 6;
   
-  // Filter exercises by target body parts
-  let targetExercises = exercises.filter(ex => 
-    targetBodyParts.includes(ex.bodyPart) ||
-    ex.targetMuscles.some(m => targetBodyParts.includes(m))
+  // Get candidate exercises with cascading fallbacks
+  const candidateExercises = getExercisesForBodyPart(bodyPartFocus, exercises, usedExerciseIds);
+  
+  console.log(`Found ${candidateExercises.length} candidate exercises for day ${dayIndex}`);
+  
+  if (candidateExercises.length === 0) {
+    throw new Error(
+      `No exercises available for day ${dayIndex} (focus: ${bodyPartFocus.join(', ')}) after checking all options. `
+      + 'Please check equipment settings or add exercises to the database.'
+    );
+  }
+  
+  // Select exercises: prefer compound first, then isolation
+  const selectedExercises: ExerciseDBItem[] = [];
+  
+  // Prioritize compound exercises (get up to half of target count)
+  const compoundExercises = candidateExercises.filter(ex => ex.mechanicsType === 'compound');
+  const compoundTarget = Math.ceil(targetExerciseCount / 2);
+  const selectedCompound = compoundExercises.slice(0, compoundTarget);
+  
+  // Add isolation exercises for the rest
+  const isolationExercises = candidateExercises.filter(ex => ex.mechanicsType === 'isolation');
+  const remainingNeeded = targetExerciseCount - selectedCompound.length;
+  const selectedIsolation = isolationExercises.slice(0, remainingNeeded);
+  
+  // If we don't have enough, fill from any remaining candidates
+  const allRemaining = candidateExercises.filter(
+    ex => !selectedCompound.includes(ex) && !selectedIsolation.includes(ex)
   );
+  const stillNeeded = targetExerciseCount - selectedCompound.length - selectedIsolation.length;
+  const selectedFillers = allRemaining.slice(0, stillNeeded);
   
-  console.log(`Found ${targetExercises.length} exercises matching target body parts`);
-  
-  // Prioritize compound exercises
-  const compoundExercises = shuffleArray(
-    targetExercises.filter(ex => ex.mechanicsType === 'compound' || ex.category === 'strength')
-  ).slice(0, 3);
-  
-  // Add isolation exercises
-  const isolationExercises = shuffleArray(
-    targetExercises.filter(ex => ex.mechanicsType === 'isolation')
-  ).slice(0, 2);
-  
-  // Combine them
-  const selectedExercises = [...compoundExercises, ...isolationExercises];
+  selectedExercises.push(...selectedCompound, ...selectedIsolation, ...selectedFillers);
   
   console.log(`Selected ${selectedExercises.length} exercises for day ${dayIndex}`);
   
@@ -229,25 +356,15 @@ async function generateDayWorkout(
       exerciseId: exercise.id,
       sets: getExerciseSets(exercise, experienceLevel, primaryGoal)
     });
+    newlyUsedIds.add(exercise.id);
   });
   
-  return workout;
-}
-
-function getWorkoutSplit(totalDays: number): number {
-  if (totalDays <= 3) return 1; // Full body
-  if (totalDays <= 4) return 2; // Upper/Lower
-  return 3; // Push/Pull/Legs
-}
-
-function getTargetBodyParts(bodyPartDay: number): string[] {
-  if (bodyPartDay === 0) {
-    return ['chest', 'shoulders', 'arms']; // Push day
-  } else if (bodyPartDay === 1) {
-    return ['back', 'arms']; // Pull day
-  } else {
-    return ['legs']; // Leg day
+  // Ensure we have at least one exercise (safety check)
+  if (workout.length === 0) {
+    throw new Error(`Failed to generate any exercises for day ${dayIndex}. This should not happen.`);
   }
+  
+  return { exercises: workout, newlyUsedIds };
 }
 
 function getExerciseSets(
@@ -326,19 +443,24 @@ function generatePlanNotes(primaryGoal: GoalType, experienceLevel: ExperienceLev
   return tips.join('. ');
 }
 
-function getDayNotes(_primaryGoal: GoalType, experienceLevel: ExperienceLevel, dayIndex: number): string {
-  const bodyPartDay = dayIndex % 3;
+function getDayNotes(_primaryGoal: GoalType, experienceLevel: ExperienceLevel, dayIndex: number, totalDays: number): string {
   const notes = [];
+  const bodyPartFocus = getDayBodyPartFocus(dayIndex, totalDays);
   
-  if (bodyPartDay === 0) {
+  // Add focus description
+  if (bodyPartFocus.includes('full body')) {
+    notes.push('Full body workout - exercises for major muscle groups');
+  } else if (bodyPartFocus.includes('chest') && bodyPartFocus.includes('shoulders')) {
     notes.push('Push day - chest, shoulders, triceps');
-  } else if (bodyPartDay === 1) {
+  } else if (bodyPartFocus.includes('back')) {
     notes.push('Pull day - back, biceps, rear delts');
-  } else {
+  } else if (bodyPartFocus.includes('legs')) {
     notes.push('Leg day - quads, hamstrings, glutes, calves');
+  } else {
+    notes.push(`Focus on: ${bodyPartFocus.join(', ')}`);
   }
   
-  if (experienceLevel === ExperienceLevel.BEGINNER && bodyPartDay === 2) {
+  if (experienceLevel === ExperienceLevel.BEGINNER && bodyPartFocus.includes('legs')) {
     notes.push('Start light with leg exercises');
   }
   
@@ -411,9 +533,9 @@ export async function substituteExercise(
     return null;
   }
   
-  // Shuffle and pick one
-  const shuffled = shuffleArray(compatibleExercises as ExerciseDBItem[]);
-  const newExercise = shuffled[0] as ExerciseDBItem;
+  // Sort deterministically and pick the first
+  const sorted = sortExercisesDeterministically(compatibleExercises as ExerciseDBItem[]);
+  const newExercise = sorted[0] as ExerciseDBItem;
   
   if (!newExercise) {
     console.warn('No exercises found after shuffling');
