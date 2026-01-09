@@ -3,13 +3,14 @@ import type { WorkoutPlan, WorkoutLog } from '@/types';
 
 export class WorkoutRepository {
   // Workout Plans
-  async createWorkoutPlan(plan: Omit<WorkoutPlan, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkoutPlan> {
+  async createWorkoutPlan(plan: WorkoutPlan): Promise<WorkoutPlan> {
+    // If plan doesn't have required timestamps, add them
     const now = new Date().toISOString();
     const newPlan: WorkoutPlan = {
       ...plan,
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now,
+      id: plan.id || crypto.randomUUID(),
+      createdAt: plan.createdAt || now,
+      updatedAt: plan.updatedAt || now,
     };
     
     await db.workoutPlans.add(newPlan);

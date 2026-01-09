@@ -124,6 +124,17 @@ export default function Workouts() {
   const replaceExercise = async (weekIndex: number, dayIndex: number, oldExerciseId: string, newExerciseId: string) => {
     if (!selectedPlan) return;
     
+    // Check if plan exists in database before updating
+    try {
+      const existingPlan = await repositories.workout.getWorkoutPlan(selectedPlan.id);
+      if (!existingPlan) {
+        throw new Error(`Workout plan not found: ${selectedPlan.id}`);
+      }
+    } catch (error) {
+      console.error('Error checking plan existence before update:', error);
+      throw error;
+    }
+    
     const updatedPlan = { ...selectedPlan };
     const workout = updatedPlan.weeks[weekIndex]?.workouts[dayIndex];
     
@@ -137,18 +148,20 @@ export default function Workouts() {
       };
       
       updatedPlan.updatedAt = new Date().toISOString();
+      
       await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      
       setWorkoutPlans(prev => 
         prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
       );
       setSelectedPlan(updatedPlan);
-      
       // Load new exercise data (failure here shouldn't affect the replacement)
       try {
         await loadExerciseData([newExerciseId]);
       } catch (error) {
         // Log but don't fail the operation - replacement succeeded
         console.warn('Failed to load exercise data after replacement:', error);
+        // Don't set error state - replacement was successful
       }
     }
   };
@@ -156,9 +169,12 @@ export default function Workouts() {
   const substituteExercise = async (weekIndex: number, dayIndex: number, exerciseIndex: number, exerciseId: string) => {
     if (!selectedPlan) return;
     
-    // Clear previous messages
+    // Clear any previous error/success state BEFORE starting substitution
     setSubstituteError(null);
     setSubstituteSuccess(null);
+    
+    // Force state flush to ensure error is cleared before async operations
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
       const { substituteExercise: coachEngineSubstitute } = await import('../lib/coach-engine');
@@ -187,6 +203,10 @@ export default function Workouts() {
       }
       
       await replaceExercise(weekIndex, dayIndex, exerciseId, newExercise.id);
+      
+      // Ensure error is cleared after successful replacement
+      setSubstituteError(null);
+      
       setSubstituteSuccess('Exercise substituted successfully');
       // Clear success message after 3 seconds
       setTimeout(() => setSubstituteSuccess(null), 3000);
@@ -344,10 +364,19 @@ export default function Workouts() {
         throw new Error('Generated plan has no exercises. Please try again or check your profile settings.');
       }
       
+      // Save the plan to the database
       await repositories.workout.createWorkoutPlan(plan);
-      setWorkoutPlans([plan, ...workoutPlans]);
       
-      console.log('Workout plan generated successfully:', plan.id);
+      // Reload the plan from the database to ensure we have the persisted data
+      const persistedPlan = await repositories.workout.getWorkoutPlan(plan.id);
+      if (persistedPlan) {
+        setWorkoutPlans([persistedPlan, ...workoutPlans]);
+        console.log('Workout plan generated successfully');
+      } else {
+        console.error('Failed to reload plan from database after creation for ID:', plan.id);
+        // Fallback: use the generated plan if reload fails
+        setWorkoutPlans([plan, ...workoutPlans]);
+      }
       alert('Workout plan generated successfully!');
     } catch (error) {
       console.error('Failed to generate workout plan:', error);

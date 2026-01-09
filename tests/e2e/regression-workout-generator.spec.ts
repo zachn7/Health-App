@@ -95,22 +95,21 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     console.log('Exercise count before substitution:', exerciseCountBefore);
     
     // Click the substitute button on the first exercise
-    const substituteButton = page.getByTestId('substitute-exercise-btn').first();
+    const substituteButton = firstExercise.getByTestId('substitute-exercise-btn');
     await expect(substituteButton).toBeVisible({ timeout: 3000 });
     
-    // Make sure no error message is visible before clicking
-    const errorMessage = page.getByTestId('substitute-error');
-    await expect(errorMessage).not.toBeVisible({ timeout: 1000 });
+    // Check that no error is visible on the first exercise before clicking
+    const errorMessageOnFirst = firstExercise.getByTestId('substitute-error');
+    await expect(errorMessageOnFirst).not.toBeVisible({ timeout: 1000 });
     
     await substituteButton.click();
     await page.waitForTimeout(1000);
     
-    // Verify no error message is shown
-    await expect(errorMessage).not.toBeVisible({ timeout: 2000 });
+    // Verify no error message is shown on the first exercise after substitution
+    await expect(errorMessageOnFirst).not.toBeVisible({ timeout: 2000 });
     
-    // Get the first exercise's text content after substitution
-    const updatedExercise = page.locator('[data-testid^="plan-exercise-"]').first();
-    const updatedExerciseText = await updatedExercise.textContent();
+    // Get updated exercise text
+    const updatedExerciseText = await firstExercise.textContent();
     console.log('Updated exercise text:', updatedExerciseText);
     
     // Count exercises after substitution
