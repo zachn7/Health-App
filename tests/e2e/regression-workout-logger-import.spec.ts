@@ -101,23 +101,10 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
   });
 
   test('should handle import from workout program page', async ({ page }) => {
-    // Setup test profile using the helper
-    await page.goto('./#/profile');
-    await page.getByRole('button', { name: 'Create Profile' }).click();
-    await page.getByTestId('profile-units-select').selectOption('metric');
-    await page.getByPlaceholder('100-250').fill('180');
-    await page.getByPlaceholder('30-300').fill('80');
-    await page.getByTestId('profile-age-input').fill('30');
-    await page.getByTestId('profile-sex-select').selectOption('male');
-    await page.getByTestId('profile-experience-select').selectOption('intermediate');
-    await page.getByTestId('profile-gender-select').selectOption('muscle');
-    await page.getByTestId('profile-fitness-goal-select').selectOption('muscle_gain');
-    await page.getByTestId('profile-workout-days').selectOption('4');
-    await page.getByTestId('profile-equipment').selectOption('full_gym');
-    await page.getByRole('button', { name: 'Save Profile' }).click();
-    await page.waitForTimeout(500);
+    // Setup test profile using the shared helper
+    await setupTestProfile(page);
     
-    // Navigate to workouts page with a generated plan
+    // Navigate to workouts page
     await page.goto('./#/workouts');
     await page.waitForLoadState('networkidle');
     
@@ -125,37 +112,44 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     page.on('dialog', dialog => dialog.accept());
     await page.getByTestId(testIds.workouts.generatePlanButton).click();
     
-    // Wait for plan generation
-    await page.waitForTimeout(5000);
+    // Wait for the plan to appear - use auto-waiting assertion
+    const workoutPlans = page.locator('[data-testid^="workout-plan-"]');
+    await expect(workoutPlans.first()).toBeVisible({ timeout: 10000 });
     
-    // View the workout plan that was created
-    const viewButton = page.locator('[data-testid^="workout-plan-"]').first().getByRole('button', { name: 'View' });
+    // Click "View" button on the first workout plan to open the detailed view
+    const viewButton = workoutPlans.first().getByRole('button', { name: 'View' }).first();
     await viewButton.click();
-    await page.waitForTimeout(500);
+    
+    // Wait for workout day tabs to be visible in the detailed view
+    const dayTabs = page.locator('[data-testid^="workout-day-"]');
+    await expect(dayTabs.first()).toBeVisible({ timeout: 3000 });
     
     // Click on the first workout day
-    const firstDayTab = page.locator('[data-testid^="workout-day-"]').first();
-    await firstDayTab.click();
-    await page.waitForTimeout(500);
+    await dayTabs.first().click();
     
-    // Wait for exercises to be visible
-    await page.waitForTimeout(300);
+    // Click "Import to Log" button to enter import mode
+    const importToLogButton = page.getByTestId(testIds.workouts.importToLogBtn).first();
+    await expect(importToLogButton).toBeVisible({ timeout: 5000 });
+    await importToLogButton.click();
     
-    // Click "Import Selected" button
-    const importSelectedButton = page.getByRole('button', { name: /Import \(.*\)/i }).or(page.getByRole('button', { name: /Import Selected/i }));
-    await expect(importSelectedButton.first()).toBeVisible({ timeout: 5000 });
-    await importSelectedButton.first().click();
+    // Click "Select All" to select all exercises in the day
+    const selectAllButton = page.getByRole('button', { name: 'Select All' });
+    await expect(selectAllButton).toBeVisible({ timeout: 3000 });
+    await selectAllButton.click();
     
-    // Should navigate to workout logger page
+    // Click "Import Selected" to actually import and navigate to logger
+    const importSelectedButton = page.getByTestId(testIds.workouts.importSelectedBtn);
+    await expect(importSelectedButton).toBeVisible({ timeout: 3000 });
+    await importSelectedButton.click();
+    
+    // Should navigate to workout logger page - use auto-waiting URL assertion
     await expect(page).toHaveURL(/.*\/log\/workout/, { timeout: 5000 });
     
-    // Verify logger page loaded with content
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    // Verify logger page loaded - wait for heading to be visible
+    await expect(page.getByTestId(testIds.workoutLogger.pageHeading)).toBeVisible({ timeout: 3000 });
     
-    // Check that the logger has some workout content visible
+    // Verify we have content (not just loading spinner)
     const bodyContent = await page.textContent('body');
-    expect(bodyContent).toBeTruthy();
     expect(bodyContent?.length).toBeGreaterThan(100);
     console.log('Successfully imported exercises to workout logger');
   });
