@@ -124,30 +124,32 @@ export default function Workouts() {
   const replaceExercise = async (weekIndex: number, dayIndex: number, oldExerciseId: string, newExerciseId: string) => {
     if (!selectedPlan) return;
     
-    try {
-      const updatedPlan = { ...selectedPlan };
-      const workout = updatedPlan.weeks[weekIndex].workouts[dayIndex];
+    const updatedPlan = { ...selectedPlan };
+    const workout = updatedPlan.weeks[weekIndex]?.workouts[dayIndex];
+    
+    if (!workout) return;
+    
+    const exerciseIndex = workout.exercises.findIndex(ex => ex.exerciseId === oldExerciseId);
+    if (exerciseIndex !== -1) {
+      workout.exercises[exerciseIndex] = {
+        ...workout.exercises[exerciseIndex],
+        exerciseId: newExerciseId
+      };
       
-      const exerciseIndex = workout.exercises.findIndex(ex => ex.exerciseId === oldExerciseId);
-      if (exerciseIndex !== -1) {
-        workout.exercises[exerciseIndex] = {
-          ...workout.exercises[exerciseIndex],
-          exerciseId: newExerciseId
-        };
-        
-        updatedPlan.updatedAt = new Date().toISOString();
-        await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
-        setWorkoutPlans(prev => 
-          prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
-        );
-        setSelectedPlan(updatedPlan);
-        
-        // Load new exercise data
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      setWorkoutPlans(prev => 
+        prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+      );
+      setSelectedPlan(updatedPlan);
+      
+      // Load new exercise data (failure here shouldn't affect the replacement)
+      try {
         await loadExerciseData([newExerciseId]);
+      } catch (error) {
+        // Log but don't fail the operation - replacement succeeded
+        console.warn('Failed to load exercise data after replacement:', error);
       }
-    } catch (error) {
-      console.error('Failed to replace exercise:', error);
-      alert('Failed to replace exercise');
     }
   };
   
