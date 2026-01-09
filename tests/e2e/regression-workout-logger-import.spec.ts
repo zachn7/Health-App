@@ -98,131 +98,145 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     await page.waitForTimeout(3000);
   });
 
-  test.skip('should handle import from workout program page', 'Skip: Requires workout plan generation which is flaky. Import functionality is tested in first test.'), async ({ page }) => {
-    // First, set up mock profile in localStorage
-    await page.goto('./#/workouts');
-    await page.evaluate(() => {
-      const profile = {
-        id: 'test-profile-import',
-        name: 'Test Import User',
-        sex: 'male',
-        age: 30,
-        weightKg: 80,
-        heightCm: 180,
-        activityLevel: 'moderate',
-        experienceLevel: 'intermediate',
-        goals: [{
-          id: 'goal-import',
-          type: 'strength',
-          isPrimary: true
-        }],
-        equipment: ['barbell', 'dumbbell', 'body only'],
-        schedule: {
-          monday: true,
-          tuesday: false,
-          wednesday: true,
-          thursday: false,
-          friday: true,
-          saturday: false,
-          sunday: false
-        },
-        preferredUnits: 'metric'
-      };
-      localStorage.setItem('profiles', JSON.stringify([profile]));
-      localStorage.setItem('current_profile_id', profile.id);
-    });
+  test('should handle import from workout program page', async ({ page }) => {
+    // First, create a profile through the app flow
+    await page.goto('./#/profile');
+    await page.getByRole('button', { name: 'Create Profile' }).click();
+    await page.getByTestId('profile-units-select').selectOption('metric');
+    await page.getByPlaceholder('100-250').fill('180');
+    await page.getByPlaceholder('30-300').fill('80');
+    await page.getByTestId('profile-age-input').fill('30');
+    await page.getByTestId('profile-sex-select').selectOption('male');
+    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
+    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
+    await page.getByTestId('equipment-bodyweight').check();
+    await page.getByTestId('equipment-barbell').check();
+    await page.getByTestId('equipment-dumbbells').check();
+    await page.waitForTimeout(300);
+    await page.getByTestId('schedule-monday').check();
+    await page.getByTestId('schedule-wednesday').check();
+    await page.getByTestId('schedule-friday').check();
+    await page.getByRole('button', { name: 'Save Profile' }).click();
     
-    await page.reload();
+    // Verify profile was saved
+    await expect(page.getByText(/Profile saved/i)).toBeVisible({ timeout: 5000 });
+    
+    // Navigate to workouts page
+    await page.goto('./#/workouts');
     await page.waitForLoadState('networkidle');
     
-    // Create a simple mock workout plan for testing instead of generating one
-    await page.evaluate(() => {
+    // Add console logging for debugging
+    const consoleMessages: string[] = [];
+    page.on('console', msg => {
+      const text = msg.text();
+      consoleMessages.push(text);
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        console.log('Browser console:', text);
+      }
+    });
+    
+    // Create a valid workout plan using window.repositories if available
+    // This isolates the test from the flaky generator and focuses on import functionality
+    const planId = await page.evaluate(() => {
+      const now = new Date().toISOString();
       const mockPlan = {
-        id: 'test-plan-for-import',
-        name: 'Test Plan for Import',
-        createdAt: Date.now(),
+        id: 'test-plan-' + Date.now(),
+        name: 'Test Import Plan',
         weeks: [
           {
             workouts: [
               {
                 day: 'Monday',
                 exercises: [
-                  { exerciseId: 'barbell-bench-press', sets: 3, reps: 10, weight: 135 },
-                  { exerciseId: 'dumbbell-curl', sets: 3, reps: 12, weight: 25 }
+                  { name: 'Test Exercise 1', sets: [{ set: 1, reps: 10 }] },
+                  { name: 'Test Exercise 2', sets: [{ set: 1, reps: 12 }] }
+                ]
+              },
+              {
+                day: 'Wednesday',
+                exercises: [
+                  { name: 'Test Exercise 3', sets: [{ set: 1, reps: 8 }] }
+                ]
+              },
+              {
+                day: 'Friday',
+                exercises: [
+                  { name: 'Test Exercise 4', sets: [{ set: 1, reps: 15 }] }
                 ]
               }
             ]
           }
-        ]
+        ],
+        generatedBy: 'manual' as const,
+        createdAt: now,
+        updatedAt: now
       };
-      // Try to save using the workout repository if available
-      // @ts-ignore
+      
+      // Store in localStorage as a fallback
+      localStorage.setItem('mock-workout-plan-import', JSON.stringify(mockPlan));
+      
+      // Try using repositories if available
+      // @ts-ignore - repositories is on window but not typed
       if (window.repositories && window.repositories.workout) {
         // @ts-ignore
-        window.repositories.workout.createWorkoutPlan(mockPlan);
+        return window.repositories.workout.createWorkoutPlan(mockPlan);
       }
+      
+      return mockPlan.id;
     });
     
-    await page.waitForTimeout(1000);
-    await page.reload();
+    console.log('Created test plan:', planId);
+    
+    // Navigate to workouts page to trigger a fresh data load
+    await page.goto('./#/workouts');
     await page.waitForLoadState('networkidle');
     
-    // Check for workout plans
-    const plans = page.locator('[data-testid^="workout-plan-"]');
-    const planCount = await plans.count();
+    // Wait a moment for data to load
+    await page.waitForTimeout(2000);
     
-    if (planCount === 0) {
-      console.log('No workout plans found, generating one...');
-      page.on('dialog', dialog => dialog.accept());
-      await page.getByTestId('generate-workout-plan-btn').click();
-      
-      // Wait for workout plan to appear with a longer timeout
-      await expect(page.locator('[data-testid^="workout-plan-"]')).toBeVisible({ timeout: 15000 });
-    }
+    // Verify the plan appears
+    const workoutPlanSelector = page.locator('[data-testid^="workout-plan-"]').first();
+    await expect(workoutPlanSelector).toBeVisible({ timeout: 10000 });
+    console.log('Workout plan visible');
     
-    // Verify at least one plan exists before proceeding
-    const actualPlanCount = await page.locator('[data-testid^="workout-plan-"]').count();
-    if (actualPlanCount === 0) {
-      console.log('Still no workout plans after generation attempt');
-      return;
-    }
+    // Verify the plan has actual workout content 
+    // Look for workout day cards within the plan (each day card shows exercises)
+    const workoutDayCards = page.locator('[data-testid^="workout-day-card"]');
+    await expect(workoutDayCards.first()).toBeVisible({ timeout: 5000 });
+    console.log('Workout day cards visible');
     
-    // Now try to view and import a plan
-    const firstPlan = page.locator('[data-testid^="workout-plan-"]').first();
-    await expect(firstPlan.getByRole('button', { name: 'View' })).toBeVisible({ timeout: 5000 });
+    // Now click View on the first plan
+    await workoutPlanSelector.getByRole('button', { name: 'View' }).click();
     await firstPlan.getByRole('button', { name: 'View' }).click();
+    
+    // Wait for plan detail view to open
     await page.waitForTimeout(500);
     
-    // Look for "Import to Log" button
-    const importButton = page.getByRole('button', { name: /Import to Log/i });
+    // Click "Import to Log" button - should be available on individual workout days
+    const importButton = page.getByRole('button', { name: /Import to Log/i }).first();
+    await expect(importButton).toBeVisible({ timeout: 5000 });
+    await importButton.click();
     
-    if (await importButton.isVisible({ timeout: 3000 })) {
-      await importButton.click();
-      await page.waitForTimeout(500);
-      
-      // Select first exercise
-      const firstExerciseCheckbox = page.locator('input[type="checkbox"]').first();
-      if (await firstExerciseCheckbox.isVisible({ timeout: 1000 })) {
-        await firstExerciseCheckbox.check();
-        await page.waitForTimeout(300);
-        
-        // Click "Import Selected"
-        const importSelectedButton = page.getByRole('button', { name: /Import Selected/i });
-        await importSelectedButton.click();
-        
-        // Should navigate to logger
-        await page.waitForTimeout(1000);
-        expect(page.url()).toContain('/log/workout');
-        
-        // Verify exercises are loaded
-        const exerciseContainer = page.locator('.space-y-3');
-        await expect(exerciseContainer.first()).toBeVisible({ timeout: 5000 });
-        
-        console.log('Successfully imported workout to logger');
-      }
-    } else {
-      console.log('Import to Log button not found - may need to be in edit mode');
-    }
+    // Should show exercise selection modal
+    await page.waitForTimeout(500);
+    
+    // Select at least one exercise by checking the first checkbox
+    const firstExerciseCheckbox = page.locator('input[type="checkbox"]').first();
+    await expect(firstExerciseCheckbox).toBeVisible({ timeout: 5000 });
+    await firstExerciseCheckbox.check();
+    await page.waitForTimeout(300);
+    
+    // Click "Import Selected" button
+    const importSelectedButton = page.getByRole('button', { name: /Import \(.*\)/i }).or(page.getByRole('button', { name: /Import Selected/i }));
+    await expect(importSelectedButton.first()).toBeVisible({ timeout: 5000 });
+    await importSelectedButton.first().click();
+    
+    // Should navigate to workout logger page
+    await expect(page).toHaveURL(/.*\/log\/workout/, { timeout: 5000 });
+    
+    // Verify exercises are displayed on the logger page
+    const exerciseEntries = page.locator('[data-testid^="exercise-entry-"]').or(page.locator('.space-y-3').first());
+    await expect(exerciseEntries.first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should show loading state during exercise data loading', async ({ page }) => {
