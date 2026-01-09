@@ -337,15 +337,21 @@ async function generateDayWorkout(
   const targetExerciseCount = experienceLevel === 'beginner' ? 4 : 6;
   
   // Get candidate exercises with cascading fallbacks
-  const candidateExercises = getExercisesForBodyPart(bodyPartFocus, exercises, usedExerciseIds);
+  let candidateExercises = getExercisesForBodyPart(bodyPartFocus, exercises, usedExerciseIds);
   
   console.log(`Found ${candidateExercises.length} candidate exercises for day ${dayIndex}`);
   
+  // Fallback: if no exercises match the focus, use any available unused exercises
   if (candidateExercises.length === 0) {
-    throw new Error(
-      `No exercises available for day ${dayIndex} (focus: ${bodyPartFocus.join(', ')}) after checking all options. `
-      + 'Please check equipment settings or add exercises to the database.'
-    );
+    console.log(`No exercises for ${bodyPartFocus.join(', ')}. Using fallback...`);
+    // Use all exercises that haven't been used yet
+    candidateExercises = exercises.filter(ex => !usedExerciseIds.has(ex.id));
+    
+    // Still no exercises? Use ANY exercises (even if used - better than nothing)
+    if (candidateExercises.length === 0) {
+      console.warn(`Day ${dayIndex}: No available exercises. Using all exercises as last resort.`);
+      candidateExercises = exercises;
+    }
   }
   
   // Select exercises: prefer compound first, then isolation

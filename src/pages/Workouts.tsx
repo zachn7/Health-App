@@ -543,6 +543,7 @@ export default function Workouts() {
                   generateWorkoutPlan();
                 }}
                 className="text-sm text-yellow-700 hover:text-yellow-900 font-medium underline"
+                data-testid="workout-generator-retry-btn"
               >
                 Retry
               </button>

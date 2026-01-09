@@ -104,6 +104,7 @@ export const testIds = {
     generateEmptyPlanButton: 'generate-empty-workout-plan-btn',
     generatePlanButton: 'generate-workout-plan-btn',
     generatorError: 'workout-generator-error',
+    generatorRetryButton: 'workout-generator-retry-btn',
     
     // Plans
     workoutPlan: (id: string | number) => `workout-plan-${id}`,
