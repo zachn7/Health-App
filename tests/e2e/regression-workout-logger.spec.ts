@@ -22,9 +22,9 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     }
     
     // Add an exercise manually
-    const addAnotherBtn = page.locator('button', { hasText: 'Add Another Exercise' });
-    await expect(addAnotherBtn).toBeVisible({ timeout: 5000 });
-    await addAnotherBtn.click();
+    const addExerciseBtn = page.getByTestId(testIds.workoutLogger.addExerciseBtn);
+    await expect(addExerciseBtn).toBeVisible({ timeout: 5000 });
+    await addExerciseBtn.click();
     await page.waitForTimeout(500);
     
     // Search for and select an exercise
@@ -125,8 +125,8 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     console.log(`Time entry: ${timeEntryText}`);
     
     // Add an exercise to save with timer
-    const addAnotherBtn = page.locator('button', { hasText: 'Add Another Exercise' });
-    await addAnotherBtn.click();
+    const addExerciseBtn = page.getByTestId(testIds.workoutLogger.addExerciseBtn);
+    await addExerciseBtn.click();
     await page.waitForTimeout(500);
     
     const searchInput = page.getByTestId('exercise-search-input');

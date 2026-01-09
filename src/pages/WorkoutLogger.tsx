@@ -38,6 +38,7 @@ export default function WorkoutLogger() {
   
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [manualWorkoutMode, setManualWorkoutMode] = useState(false);
+  const [swapExerciseIndex, setSwapExerciseIndex] = useState<number | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -504,6 +505,12 @@ export default function WorkoutLogger() {
   };
 
   const handleAddExerciseManually = () => {
+    setSwapExerciseIndex(null); // Clear any swap state
+    setShowExercisePicker(true);
+  };
+
+  const handleSwapExercise = (exerciseIndex: number) => {
+    setSwapExerciseIndex(exerciseIndex);
     setShowExercisePicker(true);
   };
 
@@ -512,14 +519,31 @@ export default function WorkoutLogger() {
 
   
   const handleSelectExercise = (exercise: ExerciseDBItem) => {
-    const newEntry: ExerciseLogEntry = {
-      exerciseId: exercise.id,
-      exerciseName: exercise.name,
-      sets: []
-    };
-    
-    setExerciseEntries(prev => [...prev, newEntry]);
-    setManualWorkoutMode(true);
+    if (swapExerciseIndex !== null) {
+      // Swap mode: replace existing exercise
+      const updatedEntries = [...exerciseEntries];
+      const oldEntry = updatedEntries[swapExerciseIndex];
+      updatedEntries[swapExerciseIndex] = {
+        ...oldEntry,
+        exerciseId: exercise.id,
+        exerciseName: exercise.name
+      };
+      setExerciseEntries(updatedEntries);
+      setSwapExerciseIndex(null);
+      // Ensure logging mode is active so we can save
+      setIsLogging(true);
+      setManualWorkoutMode(true);
+    } else {
+      // Add mode: append new exercise
+      const newEntry: ExerciseLogEntry = {
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        sets: []
+      };
+      
+      setExerciseEntries(prev => [...prev, newEntry]);
+      setManualWorkoutMode(true);
+    }
   };
 
   const handleRemoveExercise = (exerciseIndex: number) => {
@@ -871,15 +895,25 @@ export default function WorkoutLogger() {
         <div key={exercise.exerciseId} className="card mb-4" data-testid={`workout-logger-exercise-row-${exerciseIndex}`}>
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-lg font-medium text-gray-900">{exercise.exerciseName}</h3>
-            {(manualWorkoutMode || isLogging) && (
-              <button
-                onClick={() => handleRemoveExercise(exerciseIndex)}
-                className="text-red-500 hover:text-red-700 text-sm"
-                title="Remove exercise"
-                data-testid="workout-logger-exercise-delete-btn"
-              >
-                Remove
-              </button>
+            {(workoutLog || manualWorkoutMode || isLogging) && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSwapExercise(exerciseIndex)}
+                  className="text-blue-500 hover:text-blue-700 text-sm"
+                  title="Swap exercise"
+                  data-testid="workout-logger-exercise-swap-btn"
+                >
+                  Swap
+                </button>
+                <button
+                  onClick={() => handleRemoveExercise(exerciseIndex)}
+                  className="text-red-500 hover:text-red-700 text-sm"
+                  title="Remove exercise"
+                  data-testid="workout-logger-exercise-delete-btn"
+                >
+                  Remove
+                </button>
+              </div>
             )}
           </div>
           
@@ -952,14 +986,15 @@ export default function WorkoutLogger() {
       ))}
       </div>
       
-      {/* Add Exercise Button (Manual Mode) */}
-      {manualWorkoutMode && (
+      {/* Add Exercise Button (Available for all logs) */}
+      {(workoutLog || isLogging || manualWorkoutMode) && (
         <div className="card mb-6">
           <button
             onClick={handleAddExerciseManually}
             className="btn btn-secondary"
+            data-testid="workout-logger-add-exercise-btn"
           >
-            Add Another Exercise
+            Add Exercise
           </button>
         </div>
       )}
