@@ -178,6 +178,7 @@ export const testIds = {
     workoutStatus: 'workout-logger-workout-status',
     workoutInProgressStatus: 'workout-logger-in-progress-status',
     workoutCompleteStatus: 'workout-logger-complete-status',
+    successToast: 'success-toast',
     repsInput: (exerciseIndex: number, setIndex: number) => `workout-logger-reps-${exerciseIndex}-${setIndex}`,
     weightInput: (exerciseIndex: number, setIndex: number) => `workout-logger-weight-${exerciseIndex}-${setIndex}`,
     timerStart: 'workout-logger-timer-start',

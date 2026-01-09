@@ -63,7 +63,7 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     await page.waitForTimeout(1000);
     
     // Verify the workout is saved (shows "Workout Complete" status)
-    await expect(page.getByText('Workout Complete!')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId(testIds.workoutLogger.workoutCompleteStatus)).toBeVisible({ timeout: 5000 });
     
     // KEY TEST: Verify inputs are still enabled (not disabled) after saving
     await expect(allInputs.first()).toBeEnabled();

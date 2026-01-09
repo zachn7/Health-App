@@ -326,6 +326,7 @@ export default function WorkoutLogger() {
     try {
       await autosaveWorkout(); // Save final state
       setIsLogging(false);
+      setManualWorkoutMode(false); // Clear manual mode after saving
       
       // Show success message
       const successDiv = document.createElement('div');
@@ -473,13 +474,6 @@ export default function WorkoutLogger() {
       // Don't set isLogging to true for imported workouts - they're already saved
       // This prevents showing a "Save Workout" button or starting a timer
       setIsLogging(false);
-      
-      // Show success message
-      const successDiv = document.createElement('div');
-      successDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50';
-      successDiv.innerHTML = `✓ Imported ${entries.length} exercise(s) from ${workout.day}`;
-      document.body.appendChild(successDiv);
-      setTimeout(() => document.body.removeChild(successDiv), 3000);
       
     } catch (error) {
       console.error('Failed to import exercises:', error);
@@ -705,46 +699,8 @@ export default function WorkoutLogger() {
         )}
       </div>
       
-      {/* Today's Workout Status */}
-      {workoutLog ? (
-        <div className="card mb-6 bg-green-50 border-green-200">
-          <h2 className="text-lg font-medium text-green-900 mb-2">Workout Complete! ✅</h2>
-          <div className="text-green-700">
-            <p>Duration: {workoutLog.duration} minutes</p>
-            <p>Exercises: {workoutLog.entries.length}</p>
-            <p>Total Sets: {workoutLog.entries.reduce((sum, entry) => sum + entry.sets.length, 0)}</p>
-          </div>
-        </div>
-      ) : (isLogging || manualWorkoutMode) ? (
-        <div className="card mb-6 bg-blue-50 border-blue-200">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-medium text-blue-900">
-                {manualWorkoutMode ? 'Manual Workout' : 'Workout in Progress'}
-              </h2>
-              <p className="text-blue-700">
-                {manualWorkoutMode ? `${exerciseEntries.length} exercises added` : `Duration: ${getWorkoutDuration()}`}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {manualWorkoutMode && !isLogging && exerciseEntries.length > 0 && (
-                <button
-                  onClick={startWorkout}
-                  className="btn btn-primary"
-                >
-                  Start Logging
-                </button>
-              )}
-              <button
-                onClick={finishWorkout}
-                className="btn btn-success"
-              >
-                Finish Workout
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : currentWorkout ? (
+      {/* Ready to Start / Choose Your Workout - Show when no workout log exists */}
+      {currentWorkout && !workoutLog ? (
         <div className="card mb-6">
           <h2 className="text-lg font-medium text-gray-900 mb-2">Ready to Start</h2>
           <p className="text-gray-600 mb-4">
