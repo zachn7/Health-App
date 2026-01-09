@@ -272,4 +272,94 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     
     console.log('✅ All workout days have exercises (no empty days)');
   });
+
+  test('should generate workout plan successfully in offline mode', async ({ page, context }) => {
+    // Set up age gate and onboarding
+    await context.addInitScript(() => {
+      localStorage.setItem('age_gate_accepted', 'true');
+      localStorage.setItem('onboarding_completed', 'true');
+    });
+
+    // Setup a test profile first (must be done online)
+    await setupTestProfile(page);
+    console.log('✓ Profile created online');
+
+    // Navigate to Workouts page
+    await page.goto('./#/workouts');
+    await page.waitForLoadState('networkidle');
+    console.log('✓ Navigated to workouts page');
+
+    // Set offline mode before generating
+    await context.setOffline(true);
+    console.log('✓ Browser set to offline mode');
+
+    try {
+      // Click "Generate Workout Plan" button
+      const generateButton = page.getByTestId('generate-workout-plan-btn');
+      await expect(generateButton).toBeVisible({ timeout: 5000 });
+
+      // Capture any console errors during generation
+      const consoleErrors: string[] = [];
+      page.on('console', msg => {
+        if (msg.type() === 'error') {
+          consoleErrors.push(msg.text());
+        }
+      });
+
+      // Click generate button
+      await generateButton.click();
+      console.log('✓ Clicked generate button');
+
+      // Handle the success dialog
+      let dialogMessage = '';
+      page.on('dialog', async dialog => {
+        dialogMessage = dialog.message();
+        console.log('Dialog message:', dialogMessage);
+        await dialog.accept();
+      });
+
+      // Wait for plan to appear
+      const planCard = page.locator('[data-testid^="workout-plan-"]').first();
+      await expect(planCard).toBeVisible({ timeout: 15000 });
+      console.log('✓ Workout plan appeared offline');
+
+      // Verify plan is not empty
+      const planText = await planCard.textContent();
+      expect(planText).toBeTruthy();
+
+      // Click "View" button to see the plan details
+      const viewButton = planCard.getByRole('button', { name: 'View', exact: true });
+      await viewButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Check that exercises are present in the plan
+      const exerciseRow = page.locator('[data-testid^="plan-exercise-"]').first();
+      await expect(exerciseRow).toBeVisible({ timeout: 5000 });
+
+      // Get count of exercises
+      const exerciseCount = await page.locator('[data-testid^="plan-exercise-"]').count();
+      console.log(`✓ Found ${exerciseCount} exercises in the offline-generated plan`);
+      expect(exerciseCount).toBeGreaterThan(0);
+
+      // Verify no exercise DB load errors (offline data access worked)
+      const exerciseLoadErrors = consoleErrors.filter(e => 
+        e.includes('exercise') && (e.includes('Failed to load') || e.includes('failed to fetch'))
+      );
+      
+      expect(exerciseLoadErrors.length).toBe(0);
+      console.log('✓ No exercise DB load errors offline');
+
+      // Verify generator error banner is NOT visible (generation succeeded)
+      const errorBanner = page.getByTestId('workout-generator-error');
+      await expect(errorBanner).not.toBeVisible({ timeout: 2000 });
+      console.log('✓ No generator error banner shown');
+
+      console.log('✅ Offline workout generation test passed!');
+
+    } finally {
+      // Restore online mode
+      await context.setOffline(false);
+      console.log('✓ Browser restored to online mode');
+    }
+  });
 });
