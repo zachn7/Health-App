@@ -58,28 +58,34 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   const searchExercises = async () => {
     setLoading(true);
     try {
+      // Get base results: either from search or all exercises
       let searchResults: ExerciseDBItem[] = [];
       
-      if (searchQuery) {
+      if (searchQuery.trim()) {
         searchResults = await ExerciseDBService.searchExercises(searchQuery);
-      } else if (selectedBodyPart) {
-        searchResults = await ExerciseDBService.getExercisesByBodyPart(selectedBodyPart);
-      } else if (selectedEquipment) {
-        searchResults = await ExerciseDBService.getExercisesByEquipment(selectedEquipment);
       } else {
-        // Show sample exercises when no search or filters
+        // Show all exercises when no search query
         searchResults = await ExerciseDBService.searchExercises('');
       }
       
-      // Apply filters
+      // Apply all filters (AND logic across different filter categories)
+      // Difficulty filter
       if (selectedDifficulty) {
         searchResults = searchResults.filter(ex => ex.difficulty === selectedDifficulty);
       }
-      if (selectedBodyPart && !searchQuery) {
+      
+      // Body Part filter (case-sensitive match)
+      if (selectedBodyPart) {
         searchResults = searchResults.filter(ex => ex.bodyPart === selectedBodyPart);
       }
-      if (selectedEquipment && !searchQuery) {
-        searchResults = searchResults.filter(ex => ex.equipment.includes(selectedEquipment));
+      
+      // Equipment filter (arrays, check if filter value is in the exercise's equipment array)
+      if (selectedEquipment) {
+        searchResults = searchResults.filter(ex => {
+          // Exercise.equipment is an array of strings
+          // Check if the selected equipment value (from filter) is in the exercise's equipment array
+          return ex.equipment.some(eq => eq.toLowerCase() === selectedEquipment.toLowerCase());
+        });
       }
       
       // Exclude specified IDs
@@ -334,6 +340,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
                 value={selectedBodyPart}
                 onChange={(e) => setSelectedBodyPart(e.target.value)}
                 className="input text-sm"
+                data-testid="exercise-filter-body-part"
               >
                 <option value="">All Body Parts</option>
                 {bodyParts.map(part => (
@@ -348,6 +355,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
                 value={selectedEquipment}
                 onChange={(e) => setSelectedEquipment(e.target.value)}
                 className="input text-sm"
+                data-testid="exercise-filter-equipment"
               >
                 <option value="">All Equipment</option>
                 {equipment.map(equip => (
@@ -362,6 +370,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
                 value={selectedDifficulty}
                 onChange={(e) => setSelectedDifficulty(e.target.value)}
                 className="input text-sm"
+                data-testid="exercise-filter-difficulty"
               >
                 <option value="">All Levels</option>
                 <option value="beginner">Beginner</option>
@@ -374,6 +383,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
               <button
                 onClick={clearFilters}
                 className="btn btn-secondary text-sm w-full"
+                data-testid="exercise-filter-clear"
               >
                 Clear Filters
               </button>

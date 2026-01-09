@@ -27,6 +27,12 @@ export const testIds = {
     resultRow: 'exercise-result-',
     emptyState: 'exercise-search-empty-state',
     result: (id: string | number) => `exercise-result-${id}`,
+    filters: {
+      bodyPart: 'exercise-filter-body-part',
+      equipment: 'exercise-filter-equipment',
+      difficulty: 'exercise-filter-difficulty',
+      clearButton: 'exercise-filter-clear',
+    },
   },
 
   // Coach
