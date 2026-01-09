@@ -431,7 +431,7 @@ export default function Coach() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid="coach-loading">
         <div className="text-center">Loading coach...</div>
       </div>
     );
@@ -439,7 +439,7 @@ export default function Coach() {
 
   if (!profile) {
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid="coach-profile-required">
         <div className="card text-center py-12">
           <h2 className="text-xl font-medium text-gray-900 mb-4">Profile Required</h2>
           <p className="text-gray-600 mb-6">Please complete your profile to get personalized coaching</p>
@@ -454,7 +454,7 @@ export default function Coach() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">AI Coach</h1>
+        <h1 className="text-3xl font-bold text-gray-900" data-testid="coach-heading">AI Coach</h1>
         <p className="mt-2 text-gray-600">Your personal training assistant</p>
       </div>
 
