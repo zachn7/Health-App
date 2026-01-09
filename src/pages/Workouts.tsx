@@ -3,7 +3,7 @@ import { repositories, db } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
 import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
-import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle } from 'lucide-react';
+import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile } from '../types';
 
@@ -949,25 +949,33 @@ export default function Workouts() {
                                     <div className="flex space-x-1">
                                       <button
                                         onClick={() => setShowExercisePicker(true)}
-                                        className="text-blue-600 hover:text-blue-800"
-                                        title="Replace exercise"
+                                        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs"
+                                        title="Replace with different exercise"
+                                        aria-label="Swap exercise"
+                                        data-testid="replace-exercise-btn"
                                       >
-                                        <Edit3 className="w-4 h-4" />
+                                        <ArrowLeftRight className="w-4 h-4" />
+                                        <span className="hidden md:inline">Swap</span>
                                       </button>
                                       <button
                                         onClick={() => editExercisePrescription(selectedWeek, dayIndex, exIndex)}
-                                        className="text-green-600 hover:text-green-800"
-                                        title="Edit sets/reps/weight"
+                                        className="text-green-600 hover:text-green-800 flex items-center gap-1 text-xs"
+                                        title="Edit sets, reps, and weight"
+                                        aria-label="Edit sets and reps"
+                                        data-testid="edit-prescription-btn"
                                       >
-                                        <Edit3 className="w-4 h-4" />
+                                        <Sliders className="w-4 h-4" />
+                                        <span className="hidden md:inline">Edit Sets</span>
                                       </button>
                                       <button
                                         onClick={() => substituteExercise(selectedWeek, dayIndex, exIndex, exercise.exerciseId)}
-                                        className="text-purple-600 hover:text-purple-800"
-                                        title="Substitute with similar exercise"
+                                        className="text-purple-600 hover:text-purple-800 flex items-center gap-1 text-xs"
+                                        title="Find similar exercise to swap"
+                                        aria-label="Substitute with similar exercise"
                                         data-testid="substitute-exercise-btn"
                                       >
                                         <RefreshCw className="w-4 h-4" />
+                                        <span className="hidden md:inline">Auto-Swap</span>
                                       </button>
                                       <button
                                         onClick={() => removeExercise(selectedWeek, dayIndex, exercise.exerciseId)}

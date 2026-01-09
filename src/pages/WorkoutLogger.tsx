@@ -944,6 +944,8 @@ export default function WorkoutLogger() {
                         className="input text-sm"
                         min="0"
                         max="100"
+                        data-testid={`workout-logger-reps-${exerciseIndex}-${setIndex}`}
+                        aria-label={`Reps for set ${setIndex + 1}`}
                       />
                     </div>
                     <div className="col-span-4">
@@ -955,6 +957,8 @@ export default function WorkoutLogger() {
                         min="0"
                         max="1000"
                         step="0.5"
+                        data-testid={`workout-logger-weight-${exerciseIndex}-${setIndex}`}
+                        aria-label={`Weight for set ${setIndex + 1}`}
                       />
                     </div>
                     <div className="col-span-2">

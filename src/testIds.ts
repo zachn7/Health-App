@@ -130,6 +130,8 @@ export const testIds = {
     planExercise: (exerciseId: string | number) => `plan-exercise-${exerciseId}`,
     
     // Exercise actions
+    replaceExerciseButton: 'replace-exercise-btn',
+    editPrescriptionButton: 'edit-prescription-btn',
     substituteExerciseButton: 'substitute-exercise-btn',
     removeExerciseButton: 'remove-exercise-btn',
     substituteError: 'substitute-error',
@@ -176,6 +178,8 @@ export const testIds = {
     workoutStatus: 'workout-logger-workout-status',
     workoutInProgressStatus: 'workout-logger-in-progress-status',
     workoutCompleteStatus: 'workout-logger-complete-status',
+    repsInput: (exerciseIndex: number, setIndex: number) => `workout-logger-reps-${exerciseIndex}-${setIndex}`,
+    weightInput: (exerciseIndex: number, setIndex: number) => `workout-logger-weight-${exerciseIndex}-${setIndex}`,
     timerStart: 'workout-logger-timer-start',
     timerStop: 'workout-logger-timer-stop',
     timeEntry: (index: number) => `workout-logger-time-entry-${index}`,
