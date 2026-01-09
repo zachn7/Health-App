@@ -127,7 +127,8 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await expect(page.getByTestId('current-weight-display')).toContainText('175.0');
     
     // Navigate to previous day and log second weight
-    await page.getByRole('button').filter({ hasText: '←' }).or(page.getByTestId('prev-day-button')).click();
+    await page.getByTestId('prev-day-button').click();
+    await page.waitForLoadState();
     await page.getByRole('button', { name: 'Log Weight' }).click();
     await page.waitForLoadState();
     await page.getByTestId('weight-input').fill('174.5');
@@ -137,7 +138,8 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForTimeout(500);
     
     // Go back to today
-    await page.getByRole('button').filter({ hasText: '→' }).or(page.getByTestId('next-day-button')).click();
+    await page.getByTestId('next-day-button').click();
+    await page.waitForLoadState();
     
     // Refresh the page
     await page.reload();

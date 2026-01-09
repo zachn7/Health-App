@@ -249,6 +249,7 @@ export default function Progress() {
               setSelectedDate(addDaysToLocalDate(selectedDate, -1));
             }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            data-testid="prev-day-button"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
@@ -268,6 +269,7 @@ export default function Progress() {
               setSelectedDate(addDaysToLocalDate(selectedDate, 1));
             }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            data-testid="next-day-button"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
