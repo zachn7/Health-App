@@ -150,8 +150,8 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Wait for "Adding..." to disappear (indicating add is complete)
     await expect(addFoodButton).not.toHaveText('Adding...', { timeout: 10000 });
     
-    // Close the USDA import modal by clicking the search button again
-    await page.getByTestId('usda-search-button').click();
+    // Close the USDA import modal by clicking the Close button
+    await page.getByRole('button', { name: 'Close' }).click();
     
     // Wait for modal to be hidden
     await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
@@ -175,7 +175,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
     await appleButton.click();
     await expect(appleButton).not.toHaveText('Adding...', { timeout: 10000 });
-    await page.getByTestId('usda-search-button').click();
+    await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
     
     // Add second food (banana)
@@ -186,7 +186,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     const bananaButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Banana' });
     await bananaButton.click();
     await expect(bananaButton).not.toHaveText('Adding...', { timeout: 10000 });
-    await page.getByTestId('usda-search-button').click();
+    await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
     
     // Should show accumulated food items in log
@@ -203,7 +203,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
     await appleButton.click();
     await expect(appleButton).not.toHaveText('Adding...', { timeout: 10000 });
-    await page.getByTestId('usda-search-button').click();
+    await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
     
     // Add banana
@@ -214,7 +214,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     const bananaButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Banana' });
     await bananaButton.click();
     await expect(bananaButton).not.toHaveText('Adding...', { timeout: 10000 });
-    await page.getByTestId('usda-search-button').click();
+    await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
     
     // Verify food items are present
@@ -241,7 +241,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
     await appleButton.click();
     await expect(appleButton).not.toHaveText('Adding...', { timeout: 10000 });
-    await page.getByTestId('usda-search-button').click();
+    await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
     
     // Find the apple item and click edit serving
