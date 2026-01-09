@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { repositories } from '../db';
+import { repositories, db } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
 import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
-import { Edit3, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile } from '../types';
 
@@ -29,6 +29,8 @@ export default function Workouts() {
   const [importMode, setImportMode] = useState<{ weekIndex: number; dayIndex: number } | null>(null);
   const [selectedExercises, setSelectedExercises] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
 
@@ -288,20 +290,48 @@ export default function Workouts() {
         return;
       }
       
-      setLoading(true);
+      setGenerating(true);
+      setGenerationError(null);
+
+      console.log('Starting workout plan generation for profile:', profile.id);
+      
+      // Initialize exercise DB first to ensure data is loaded
+      await ExerciseDBService.initialize();
+      
+      // Verify exercises are available
+      const exerciseCount = await db.table('exercises').count();
+      console.log(`Exercise database has ${exerciseCount} exercises`);
+      
+      if (exerciseCount === 0) {
+        throw new Error('Exercise database is empty. Please reload the page and try again.');
+      }
 
       const { generateWorkoutPlan: coachEngineGenerate } = await import('../lib/coach-engine');
       const plan = await coachEngineGenerate(profile);
       
+      // Verify plan has exercises
+      const totalExercises = plan.weeks.reduce((sum, week) => 
+        sum + week.workouts.reduce((weekSum, workout) => 
+          weekSum + workout.exercises.length, 0), 0);
+      
+      console.log(`Generated plan with ${totalExercises} exercises across ${plan.weeks.length} weeks`);
+      
+      if (totalExercises === 0) {
+        throw new Error('Generated plan has no exercises. Please try again or check your profile settings.');
+      }
+      
       await repositories.workout.createWorkoutPlan(plan);
       setWorkoutPlans([plan, ...workoutPlans]);
       
+      console.log('Workout plan generated successfully:', plan.id);
       alert('Workout plan generated successfully!');
     } catch (error) {
       console.error('Failed to generate workout plan:', error);
-      alert('Failed to generate workout plan. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate workout plan. Please try again.';
+      setGenerationError(errorMessage);
+      alert(errorMessage);
     } finally {
-      setLoading(false);
+      setGenerating(false);
     }
   };
 
@@ -484,10 +514,11 @@ export default function Workouts() {
       <div className="mb-6 flex flex-wrap gap-3">
         <button
           onClick={generateWorkoutPlan}
+          disabled={generating}
           className="btn btn-primary"
-          data-testid="generate-workout-plan-btn"
+          data-testid="generate-empty-workout-plan-btn"
         >
-          Generate New Workout Plan
+          {generating ? 'Generating...' : 'Generate New Workout Plan'}
         </button>
         <button
           onClick={() => setShowManualBuilder(true)}
@@ -498,6 +529,34 @@ export default function Workouts() {
         </button>
       </div>
       
+      {/* Generator Error Banner */}
+      {generationError && (
+        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4" role="alert" data-testid="workout-generator-error">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="font-medium text-yellow-900 mb-1">Generation Failed</h4>
+              <p className="text-sm text-yellow-800 mb-2">{generationError}</p>
+              <button
+                onClick={() => {
+                  setGenerationError(null);
+                  generateWorkoutPlan();
+                }}
+                className="text-sm text-yellow-700 hover:text-yellow-900 font-medium underline"
+              >
+                Retry
+              </button>
+            </div>
+            <button
+              onClick={() => setGenerationError(null)}
+              className="text-yellow-400 hover:text-yellow-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Workout Plans List */}
       <div className="space-y-4 mb-8">
         {workoutPlans.length > 0 ? (
@@ -564,9 +623,11 @@ export default function Workouts() {
             <p className="text-gray-600 mb-4">Generate your first personalized workout plan to get started</p>
             <button
               onClick={generateWorkoutPlan}
+              disabled={generating}
+              data-testid="generate-workout-plan-btn"
               className="btn btn-primary"
             >
-              Generate Workout Plan
+              {generating ? 'Generating...' : 'Generate Workout Plan'}
             </button>
           </div>
         )}
@@ -627,7 +688,11 @@ export default function Workouts() {
                                    editingWorkout?.dayIndex === dayIndex;
                   
                   return (
-                    <div key={dayIndex} className="border rounded-lg p-4">
+                    <div 
+                      key={dayIndex} 
+                      data-testid={`workout-day-${selectedWeek}-${dayIndex}`}
+                      className="border rounded-lg p-4"
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex-1">
                           {isEditing ? (
