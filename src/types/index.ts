@@ -52,6 +52,16 @@ export type FoodSource = typeof FoodSource[keyof typeof FoodSource];
 
 export type UnitSystem = 'metric' | 'imperial';
 
+export type GeneratorMode = 'profile' | 'custom';
+
+export interface GeneratorOptions {
+  mode: GeneratorMode;
+  goalType: GoalType;
+  daysPerWeek: number;
+  experienceLevel: ExperienceLevel;
+  equipment: string[];
+}
+
 export interface Goal {
   id: string;
   type: GoalType;

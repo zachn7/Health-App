@@ -124,6 +124,14 @@ export const testIds = {
     generatorError: 'workout-generator-error',
     generatorRetryButton: 'workout-generator-retry-btn',
     
+    // Generator Mode Selection
+    modeProfileBtn: 'workout-program-mode-profile-btn',
+    modeCustomBtn: 'workout-program-mode-custom-btn',
+    customGoalSelect: 'workout-program-custom-goal-select',
+    customDaysSelect: 'workout-program-custom-days-select',
+    customExperienceSelect: 'workout-program-custom-experience-select',
+    customEquipmentCheckbox: (equipment: string) => `workout-program-custom-equipment-${equipment.replace(/\s+/g, '-')}`,
+    
     // Plans
     workoutPlan: (id: string | number) => `workout-plan-${id}`,
     workoutDay: (week: number, day: number) => `workout-day-${week}-${day}`,

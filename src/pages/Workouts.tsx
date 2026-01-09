@@ -3,9 +3,9 @@ import { repositories, db } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
 import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
-import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders } from 'lucide-react';
+import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
-import type { WorkoutPlan, ExerciseDBItem, Profile } from '../types';
+import type { WorkoutPlan, ExerciseDBItem, Profile, GeneratorOptions, ExperienceLevel, GoalType } from '../types';
 
 interface ExerciseData {
   [id: string]: {
@@ -54,6 +54,15 @@ export default function Workouts() {
       }]
     }]
   });
+  const [showGeneratorMode, setShowGeneratorMode] = useState(false);
+  const [generatorMode, setGeneratorMode] = useState<'profile' | 'custom'>('profile');
+  const [customOptions, setCustomOptions] = useState<GeneratorOptions>({
+    mode: 'custom',
+    goalType: 'general_fitness' as GoalType,
+    daysPerWeek: 3,
+    experienceLevel: 'beginner' as ExperienceLevel,
+    equipment: ['bodyweight', 'dumbbells']
+  });
 
   useEffect(() => {
     loadWorkoutData();
@@ -64,6 +73,18 @@ export default function Workouts() {
     try {
       const userProfile = await repositories.profile.get();
       setProfile(userProfile || null);
+      
+      // Pre-fill custom options from profile
+      if (userProfile) {
+        const primaryGoal = userProfile.goals.find(g => g.isPrimary) || userProfile.goals[0];
+        setCustomOptions({
+          mode: 'custom',
+          goalType: primaryGoal?.type || 'general_fitness',
+          daysPerWeek: Object.values(userProfile.schedule).filter(Boolean).length,
+          experienceLevel: userProfile.experienceLevel,
+          equipment: userProfile.equipment || ['bodyweight']
+        });
+      }
     } catch (error) {
       console.error('Failed to load profile:', error);
     }
@@ -326,16 +347,18 @@ export default function Workouts() {
 
   const generateWorkoutPlan = async () => {
     try {
-      const profile = await repositories.profile.get();
-      if (!profile) {
+      // Check profile exists (required even for custom mode)
+      const baseProfile = await repositories.profile.get();
+      if (!baseProfile) {
         alert('Please create a profile first!');
         return;
       }
       
       setGenerating(true);
       setGenerationError(null);
+      setShowGeneratorMode(false);
 
-      console.log('Starting workout plan generation for profile:', profile.id);
+      console.log(`Starting workout plan generation for mode: ${generatorMode}`);
       
       // Initialize exercise DB first to ensure data is loaded
       await ExerciseDBService.initialize();
@@ -349,9 +372,52 @@ export default function Workouts() {
       }
 
       const { generateWorkoutPlan: coachEngineGenerate } = await import('../lib/coach-engine');
+      
       // Use deterministic seed: hash of timestamp to ensure variety
       const seed = Date.now() + Math.floor(Math.random() * 10000);
-      const plan = await coachEngineGenerate(profile, undefined, seed);
+      
+      // Build profile for generation based on mode
+      let generationProfile: Profile;
+      let generationGoalId: string | undefined;
+      
+      if (generatorMode === 'profile') {
+        // Use actual profile as-is
+        generationProfile = baseProfile;
+        const primaryGoal = baseProfile.goals.find(g => g.isPrimary) || baseProfile.goals[0];
+        generationGoalId = primaryGoal?.id;
+      } else {
+        // Custom mode: build a profile with custom options
+        // Create a goal object for the custom goal type
+        const customGoalId = `custom-${Date.now()}`;
+        const customGoal = {
+          id: customGoalId,
+          type: customOptions.goalType,
+          targetDate: undefined,
+          priority: 1,
+          isPrimary: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Build schedule based on daysPerWeek
+        const days: ('monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday')[] = 
+          ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const schedule = days.reduce((acc, day, idx) => {
+          acc[day] = idx < customOptions.daysPerWeek;
+          return acc;
+        }, {} as any);
+        
+        generationProfile = {
+          ...baseProfile,
+          goals: [customGoal],
+          experienceLevel: customOptions.experienceLevel,
+          equipment: customOptions.equipment,
+          schedule: schedule
+        };
+        generationGoalId = customGoalId;
+      }
+      
+      const plan = await coachEngineGenerate(generationProfile, generationGoalId, seed);
       
       // Verify plan has exercises
       const totalExercises = plan.weeks.reduce((sum, week) => 
@@ -566,7 +632,7 @@ export default function Workouts() {
       
       <div className="mb-6 flex flex-wrap gap-3">
         <button
-          onClick={generateWorkoutPlan}
+          onClick={() => setShowGeneratorMode(true)}
           disabled={generating}
           className="btn btn-primary"
           data-testid="generate-empty-workout-plan-btn"
@@ -581,6 +647,164 @@ export default function Workouts() {
           Create Program Manually
         </button>
       </div>
+      
+      {/* Generator Mode Selection Modal */}
+      {showGeneratorMode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Generate Workout Plan</h2>
+              <button
+                onClick={() => setShowGeneratorMode(false)}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Mode Selection */}
+            {generatorMode === 'profile' ? (
+              <>
+                <p className="text-gray-600 mb-6">Choose how you'd like to generate your workout plan:</p>
+                <div className="grid md:grid-cols-2 gap-4 mb-6">
+                  <button
+                    onClick={() => setGeneratorMode('profile')}
+                    className={`card p-6 text-left hover:border-blue-500 transition-colors border-blue-500 ring-2 ring-blue-200`}
+                    data-testid="workout-program-mode-profile-btn"
+                  >
+                    <User className="w-8 h-8 text-blue-600 mb-3" />
+                    <h3 className="font-semibold text-gray-900 mb-2">Based on Profile</h3>
+                    <p className="text-sm text-gray-600">
+                      Uses your saved profile settings (goal, experience, equipment) to generate a personalized plan.
+                    </p>
+                  </button>
+                  
+                  <button
+                    onClick={() => setGeneratorMode('custom')}
+                    className="card p-6 text-left hover:border-purple-500 transition-colors"
+                    data-testid="workout-program-mode-custom-btn"
+                  >
+                    <Settings className="w-8 h-8 text-purple-600 mb-3" />
+                    <h3 className="font-semibold text-gray-900 mb-2">Custom</h3>
+                    <p className="text-sm text-gray-600">
+                      Choose your own goal, training days, experience level, and equipment.
+                    </p>
+                  </button>
+                </div>
+              </>
+            ) : null}
+            
+            {/* Custom Options Form */}
+            {generatorMode === 'custom' && (
+              <div className="space-y-4 mb-6">
+                <button
+                  onClick={() => setGeneratorMode('profile')}
+                  className="text-sm text-blue-600 hover:text-blue-800 mb-4"
+                >
+                  ← Back to mode selection
+                </button>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Goal
+                  </label>
+                  <select
+                    value={customOptions.goalType}
+                    onChange={(e) => setCustomOptions({...customOptions, goalType: e.target.value as any})}
+                    className="input w-full"
+                    data-testid="workout-program-custom-goal-select"
+                  >
+                    <option value="strength">Strength</option>
+                    <option value="hypertrophy">Hypertrophy (Muscle Growth)</option>
+                    <option value="fat_loss">Fat Loss</option>
+                    <option value="endurance">Endurance</option>
+                    <option value="general_fitness">General Fitness</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Days per week
+                  </label>
+                  <select
+                    value={customOptions.daysPerWeek}
+                    onChange={(e) => setCustomOptions({...customOptions, daysPerWeek: parseInt(e.target.value)})}
+                    className="input w-full"
+                    data-testid="workout-program-custom-days-select"
+                  >
+                    <option value={2}>2 days</option>
+                    <option value={3}>3 days</option>
+                    <option value={4}>4 days</option>
+                    <option value={5}>5 days</option>
+                    <option value={6}>6 days</option>
+                    <option value={7}>7 days</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Experience level
+                  </label>
+                  <select
+                    value={customOptions.experienceLevel}
+                    onChange={(e) => setCustomOptions({...customOptions, experienceLevel: e.target.value as any})}
+                    className="input w-full"
+                    data-testid="workout-program-custom-experience-select"
+                  >
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="advanced">Advanced</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Available equipment
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {['bodyweight', 'dumbbells', 'barbell', 'kettlebells', 'resistance bands', 'cable machine', 'squat rack', 'bench'].map((equipment) => (
+                      <label key={equipment} className="flex items-center space-x-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={customOptions.equipment.includes(equipment)}
+                          onChange={(e) => {
+                            const updated = e.target.checked
+                              ? [...customOptions.equipment, equipment]
+                              : customOptions.equipment.filter(e => e !== equipment);
+                            setCustomOptions({...customOptions, equipment: updated});
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          data-testid={`workout-program-custom-equipment-${equipment.replace(/\s+/g, '-')}`}
+                        />
+                        <span className="capitalize">{equipment}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Generate Button */}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowGeneratorMode(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generatorMode === 'profile' ? generateWorkoutPlan : generateWorkoutPlan}
+                disabled={generating || customOptions.equipment.length === 0}
+                className="btn btn-primary"
+                data-testid="workout-program-generate-btn"
+              >
+                {generating ? 'Generating...' : 'Generate Workout Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Generator Error Banner */}
       {generationError && (
@@ -676,7 +900,7 @@ export default function Workouts() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Workout Plans</h3>
             <p className="text-gray-600 mb-4">Generate your first personalized workout plan to get started</p>
             <button
-              onClick={generateWorkoutPlan}
+              onClick={() => setShowGeneratorMode(true)}
               disabled={generating}
               data-testid="generate-workout-plan-btn"
               className="btn btn-primary"

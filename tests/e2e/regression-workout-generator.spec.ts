@@ -18,12 +18,24 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await page.goto('./#/workouts');
     await page.waitForLoadState('networkidle');
     
-    // Click "Generate Workout Plan" button
+    // Click "Generate Workout Plan" button to open mode selection modal
     const generateButton = page.getByTestId('generate-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     
-    // Click generate button
+    // Click generate button to open mode selection modal
     await generateButton.click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.generatePlanButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     
     // Wait for generation to complete (alert should appear)
     page.on('dialog', dialog => {
@@ -381,9 +393,21 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
         }
       });
 
-      // Click generate button
+      // Click generate button to open mode selection modal
       await generateButton.click();
       console.log('✓ Clicked generate button');
+      await page.waitForTimeout(500); // Wait for modal to appear
+      
+      // Select "Based on Profile" mode
+      const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+      await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+      await profileModeButton.click();
+      await page.waitForTimeout(300); // Wait for state update
+      
+      // Click the generate button in the modal
+      const modalGenerateButton = page.getByTestId(testIds.workouts.generatePlanButton);
+      await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+      await modalGenerateButton.click();
 
       // Handle the success dialog
       let dialogMessage = '';
