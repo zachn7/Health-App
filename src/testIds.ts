@@ -125,6 +125,12 @@ export const testIds = {
     removeExerciseButton: 'remove-exercise-btn',
     substituteError: 'substitute-error',
     substituteSuccess: 'substitute-success',
+    
+    // Import actions
+    importToLogBtn: 'import-to-log-btn',
+    importSelectedBtn: 'import-selected-btn',
+    cancelImportBtn: 'cancel-import-btn',
+    dayCard: (week: number, day: number) => `workout-day-${week}-${day}`,
   },
 
   // Profile
@@ -151,7 +157,11 @@ export const testIds = {
 
   // Workout Logger
   workoutLogger: {
+    pageHeading: 'workout-logger-heading',
+    exerciseList: 'workout-logger-exercise-list',
     exerciseRow: (index: number) => `workout-logger-exercise-row-${index}`,
+    addExerciseButton: 'workout-logger-add-exercise',
+    saveWorkoutButton: 'workout-logger-save-workout',
     timerStart: 'workout-logger-timer-start',
     timerStop: 'workout-logger-timer-stop',
     timeEntry: (index: number) => `workout-logger-time-entry-${index}`,

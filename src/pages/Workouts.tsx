@@ -805,6 +805,7 @@ export default function Workouts() {
                                   }
                                 }}
                                 className="btn btn-primary text-sm"
+                                data-testid="import-selected-btn"
                               >
                                 Import Selected ({selectedExercises.size})
                               </button>
@@ -814,6 +815,7 @@ export default function Workouts() {
                                   setSelectedExercises(new Set());
                                 }}
                                 className="btn btn-secondary text-sm"
+                                data-testid="cancel-import-btn"
                               >
                                 Cancel Import
                               </button>
@@ -833,6 +835,7 @@ export default function Workouts() {
                                   setSelectedExercises(new Set());
                                 }}
                                 className="btn btn-primary text-sm"
+                                data-testid="import-to-log-btn"
                               >
                                 Import to Log
                               </button>

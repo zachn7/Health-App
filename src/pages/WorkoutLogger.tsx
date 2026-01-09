@@ -117,8 +117,34 @@ export default function WorkoutLogger() {
       
       // Initialize exercise entries if starting new workout
       if (currentWorkout && !dateLog) {
+        console.log('Loading imported workout with exercises:', currentWorkout.exercises);
+        
         // Use ExerciseDBService to load exercise names (base-path safe)
         const entries: ExerciseLogEntry[] = [];
+        
+        for (const ex of currentWorkout.exercises) {
+          let exerciseName = `Exercise ${ex.exerciseId}`;
+          try {
+            const exercise = await ExerciseDBService.getExerciseById(ex.exerciseId);
+            if (exercise) {
+              exerciseName = exercise.name;
+            }
+          } catch (error) {
+            console.warn(`Failed to load exercise ${ex.exerciseId}:`, error);
+          }
+          
+          entries.push({
+            exerciseId: ex.exerciseId,
+            exerciseName,
+            sets: []
+          });
+        }
+        
+        console.log('Setting exercise entries:', entries);
+        setExerciseEntries(entries);
+        
+        // For imported workouts from generated plans, immediately set logging mode
+        setIsLogging(true);
         
         for (const ex of currentWorkout.exercises) {
           let exerciseName = `Exercise ${ex.exerciseId}`;
@@ -504,7 +530,7 @@ export default function WorkoutLogger() {
       <div className="mb-8">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Workout Logger</h1>
+            <h1 className="text-3xl font-bold text-gray-900" data-testid="workout-logger-heading">Workout Logger</h1>
             <p className="mt-2 text-gray-600">Record your training sessions</p>
           </div>
           
@@ -824,6 +850,7 @@ export default function WorkoutLogger() {
       )}
             
       {/* Workout Logging Interface - Always Editable When Content Exists */}
+      <div data-testid="workout-logger-exercise-list">
       {(workoutLog || isLogging || manualWorkoutMode) && exerciseEntries.map((exercise, exerciseIndex) => (
         <div key={exercise.exerciseId} className="card mb-4" data-testid={`workout-logger-exercise-row-${exerciseIndex}`}>
           <div className="flex justify-between items-start mb-4">
@@ -906,6 +933,7 @@ export default function WorkoutLogger() {
           )}
         </div>
       ))}
+      </div>
       
       {/* Add Exercise Button (Manual Mode) */}
       {manualWorkoutMode && (
