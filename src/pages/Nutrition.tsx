@@ -481,7 +481,7 @@ export default function Nutrition() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Nutrition</h1>
+        <h1 className="text-3xl font-bold text-gray-900" data-testid="nutrition-page-heading">Nutrition</h1>
         <p className="mt-2 text-gray-600">Track your meals and macros</p>
       </div>
       
@@ -581,6 +581,7 @@ export default function Nutrition() {
       {/* Add Food Buttons */}
       <div className="mb-6 flex flex-wrap gap-2">
         <button
+          data-testid="nutrition-manual-entry-btn"
           onClick={() => {
             setShowAddFood(true);
             setShowUSDAImport(false);

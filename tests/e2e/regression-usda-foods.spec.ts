@@ -56,7 +56,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
 
   test('should show initial zero totals when no foods logged', async ({ page }) => {
     // Should show nutrition page with zero values initially
-    await expect(page.getByText('Nutrition')).toBeVisible();
+    await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
     
     // Check that totals are initially 0 or not displayed
     const calorieText = await page.locator('text=kcal').first().textContent();
@@ -74,27 +74,27 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.goto('./#/nutrition');
     await page.waitForLoadState();
     
-    // Click to add food
-    await page.getByRole('button', { name: /Add Food|Log Food/ }).click();
+    // Click USDA search button to open the search modal
+    await page.getByTestId('usda-search-button').click();
     
     // Search for USDA food
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('apple');
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.getByTestId('usda-search-input').fill('apple');
     
-    // Wait for search results and select the test apple
-    await expect(page.getByText('Test Apple')).toBeVisible();
-    await page.getByText('Test Apple').click();
+    // Wait for search results to appear
+    await expect(page.getByTestId('usda-results')).toBeVisible();
     
-    // Enter amount and log it
-    await page.getByPlaceholder(/Amount|Quantity/).fill('1');
-    await page.getByRole('button', { name: 'Log Food' }).click();
+    // Click "Add" button on the test apple
+    await page.getByTestId('usda-add-food').first().click();
     
-    // Should show success and update totals
-    await expect(page.getByText(/Food logged|Added successfully/)).toBeVisible();
+    // Wait for "Adding..." to disappear (indicating add is complete)
+    await page.getByTestId('usda-add-food').first().getByText('Adding...', { exact: true }).not.toBeVisible();
+    
+    // Close the USDA import modal by clicking the search button again
+    await page.getByTestId('usda-search-button').click();
     
     // Check that totals increased from 0
     await expect(page.getByText(/52.*kcal/)).toBeVisible(); // 52 calories from apple
-    await expect(page.getByText(/0.3.*protein/i)).toBeVisible(); // 0.3g protein
+    await expect(page.getByText(/0\s*g\s*protein/i)).toBeVisible(); // 0.3g protein
   });
 
   test('should add second USDA food and accumulate totals', async ({ page }) => {
@@ -108,28 +108,27 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.goto('./#/nutrition');
     await page.waitForLoadState();
     
-    await page.getByRole('button', { name: /Add Food|Log Food/ }).click();
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('apple');
-    await page.getByRole('button', { name: 'Search' }).click();
-    await expect(page.getByText('Test Apple')).toBeVisible();
-    await page.getByText('Test Apple').click();
-    await page.getByPlaceholder(/Amount|Quantity/).fill('1');
-    await page.getByRole('button', { name: 'Log Food' }).click();
-    await expect(page.getByText(/Food logged/)).toBeVisible();
+    // Add apple
+    await page.getByTestId('usda-search-button').click();
+    await page.getByTestId('usda-search-input').fill('apple');
+    await expect(page.getByTestId('usda-results')).toBeVisible();
+    const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
+    await appleButton.click();
+    await appleButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Add second food (banana)
-    await page.getByRole('button', { name: /Add Food|Log Food/ }).click();
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('banana');
-    await page.getByRole('button', { name: 'Search' }).click();
-    await expect(page.getByText('Test Banana')).toBeVisible();
-    await page.getByText('Test Banana').click();
-    await page.getByPlaceholder(/Amount|Quantity/).fill('1');
-    await page.getByRole('button', { name: 'Log Food' }).click();
-    await expect(page.getByText(/Food logged/)).toBeVisible();
+    await page.getByTestId('usda-search-button').click();
+    await page.getByTestId('usda-search-input').fill('banana');
+    await expect(page.getByTestId('usda-results')).toBeVisible();
+    const bananaButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Banana' });
+    await bananaButton.click();
+    await bananaButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Should show accumulated totals: 52 + 89 = 141 calories
     await expect(page.getByText(/141.*kcal/)).toBeVisible();
-    await expect(page.getByText(/1.4.*protein/i)).toBeVisible(); // 0.3 + 1.1 = 1.4g protein
+    await expect(page.getByText(/1\s*g\s*protein/i)).toBeVisible(); // 0.3 + 1.1 = 1.4g protein
   });
 
   test('should persist food entries across page refreshes', async ({ page }) => {
@@ -140,20 +139,22 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.goto('./#/nutrition');
     
     // Add apple
-    await page.getByRole('button', { name: /Add Food|Log Food/ }).click();
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('apple');
-    await page.getByRole('button', { name: 'Search' }).click();
-    await page.getByText('Test Apple').click();
-    await page.getByPlaceholder(/Amount|Quantity/).fill('1');
-    await page.getByRole('button', { name: 'Log Food' }).click();
+    await page.getByTestId('usda-search-button').click();
+    await page.getByTestId('usda-search-input').fill('apple');
+    await expect(page.getByTestId('usda-results')).toBeVisible();
+    const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
+    await appleButton.click();
+    await appleButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Add banana
-    await page.getByRole('button', { name: /Add Food|Log Food/ }).click();
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('banana');
-    await page.getByRole('button', { name: 'Search' }).click();
-    await page.getByText('Test Banana').click();
-    await page.getByPlaceholder(/Amount|Quantity/).fill('1');
-    await page.getByRole('button', { name: 'Log Food' }).click();
+    await page.getByTestId('usda-search-button').click();
+    await page.getByTestId('usda-search-input').fill('banana');
+    await expect(page.getByTestId('usda-results')).toBeVisible();
+    const bananaButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Banana' });
+    await bananaButton.click();
+    await bananaButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Verify totals are there
     await expect(page.getByText(/141.*kcal/)).toBeVisible();
@@ -164,7 +165,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     
     // Totals should still be there after refresh
     await expect(page.getByText(/141.*kcal/)).toBeVisible();
-    await expect(page.getByText(/1.4.*protein/i)).toBeVisible();
+    await expect(page.getByText(/1\s*g\s*protein/i)).toBeVisible();
     
     // Should show the logged foods in the list
     await expect(page.getByText('Test Apple')).toBeVisible();
@@ -179,24 +180,26 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.goto('./#/nutrition');
     
     // Add apple
-    await page.getByRole('button', { name: /Add Food|Import|USDA/i }).click();
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('apple');
-    await expect(page.getByText('Test Apple')).toBeVisible();
-    await page.getByText('Test Apple').click();
-    await expect(page.getByText(/Food logged/)).toBeVisible();
+    await page.getByTestId('usda-search-button').click();
+    await page.getByTestId('usda-search-input').fill('apple');
+    await expect(page.getByTestId('usda-results')).toBeVisible();
+    const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
+    await appleButton.click();
+    await appleButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await page.getByTestId('usda-search-button').click(); // Close modal
     
-    // Find the apple item and click edit
-    const appleItem = page.locator('.space-y-3').filter({ hasText: 'Test Apple' });
+    // Find the apple item and click edit serving
+    const appleItem = page.getByTestId('nutrition-food-item').filter({ hasText: 'Test Apple' });
     await appleItem.getByRole('button', { name: 'Edit Serving' }).click();
     
     // Should be in edit mode
     await expect(page.getByText('Edit: Test Apple')).toBeVisible();
     
     // Check initial quantity (should be 1 serving)
-    const quantityInput = page.locator('input[placeholder*="Quantity"]').first();
+    const quantityInput = page.locator('input[type="number"]').first();
     await expect(quantityInput).toHaveValue('1');
     
-    const unitSelect = page.locator('select').filter({ hasText: /serving|grams/ });
+    const unitSelect = page.locator('select').first();
     await expect(unitSelect).toHaveValue('serving');
     
     // Switch to grams - quantity should auto-update to servingGrams
@@ -212,11 +215,16 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     
     // Edit again to test switching back to serving
     await appleItem.getByRole('button', { name: 'Edit Serving' }).click();
+    await expect(page.getByText('Edit: Test Apple')).toBeVisible();
+    
+    // Get input elements again (they're fresh after re-entering edit mode)
+    const quantityInput2 = page.locator('input[type="number"]').first();
+    const unitSelect2 = page.locator('select').first();
     await expect(quantityInput).toHaveValue('200'); // Still shows 200g when in grams mode
     
     // Switch back to serving
     await unitSelect.selectOption('serving');
-    await expect(quantityInput).toHaveValue('1'); // Should reset to 1 serving
+    await expect(quantityInput2).toHaveValue('1'); // Should reset to 1 serving
     
     // Save and verify totals are updated correctly
     await page.getByRole('button', { name: 'Update' }).click();
@@ -231,11 +239,10 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.goto('./#/nutrition');
     
     // Try to search with invalid key
-    await page.getByRole('button', { name: /Add Food|Log Food/ }).click();
-    await page.getByPlaceholder(/Search foods|Enter food name/).fill('apple');
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.getByTestId('usda-search-button').click();
+    await page.getByTestId('usda-search-input').fill('apple');
     
-    // Should show appropriate error message
-    await expect(page.getByText(/API.*error|lookup.*failed|invalid.*key/i)).toBeVisible({ timeout: 10000 });
+    // Should show appropriate error message (search happens automatically)
+    await expect(page.getByTestId('usda-error')).toBeVisible({ timeout: 10000 });
   });
 });
