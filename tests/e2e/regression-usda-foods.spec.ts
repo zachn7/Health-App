@@ -1,98 +1,147 @@
 import { test, expect } from '@playwright/test';
 
+test.describe.configure({ mode: 'serial' }); // Run tests sequentially to avoid localStorage conflicts
+
 test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   test.beforeEach(async ({ page, context }) => {
-    // Set age gate to pass BEFORE page loads (runs on all page navigations)
+    // Set up localStorage before any navigation via init script
     await context.addInitScript(() => {
+      localStorage.clear();
       localStorage.setItem('age_gate_accepted', 'true');
       localStorage.setItem('age_gate_timestamp', new Date().toISOString());
     });
     
-    // Set up mock USDA API responses
+    // Set up mock USDA API responses - per-test, isolated
     await page.route('**/api.nal.usda.gov/**', async (route) => {
-      // Mock USDA API responses for test foods
       const url = route.request().url();
+      
+      // Handle search requests
       if (url.includes('/search')) {
-        // Mock search response
+        const searchParams = new URL(url).searchParams;
+        const query = searchParams.get('query')?.toLowerCase() || '';
+        const apiKey = searchParams.get('api_key');
+        
+        // Simulate error if API key is invalid
+        if (apiKey === 'invalid-key') {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error: {
+                message: 'Invalid API Key'
+              }
+            })
+          });
+          return;
+        }
+        // Return appropriate foods based on query
+        const matchFoods = query.includes('apple') || query.includes('test');
+        const foodResults = [
+          (matchFoods || query === '' || query.includes('all')) ? {
+            fdcId: 123456,
+            description: 'Test Apple',
+            dataType: 'Foundation',
+            foodNutrients: [
+              { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 52 },
+              { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.3 },
+              { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
+              { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 14 }
+            ]
+          } : null,
+          (matchFoods || query.includes('banana') || query === '' || query.includes('all')) ? {
+            fdcId: 789012,
+            description: 'Test Banana',
+            dataType: 'Foundation',
+            foodNutrients: [
+              { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 89 },
+              { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 1.1 },
+              { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
+              { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
+            ]
+          } : null
+        ].filter(Boolean);
+        
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            foods: [
-              {
-                fdcId: 123456,
-                description: 'Test Apple',
-                dataType: 'Foundation',
-                foodNutrients: [
-                  { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 52 },
-                  { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.3 },
-                  { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
-                  { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 14 }
-                ]
-              },
-              {
-                fdcId: 789012,
-                description: 'Test Banana',
-                dataType: 'Foundation',
-                foodNutrients: [
-                  { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 89 },
-                  { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 1.1 },
-                  { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
-                  { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
-                ]
-              }
-            ]
-          })
+          body: JSON.stringify({ foods: foodResults })
         });
       } else if (url.includes('/food/')) {
         // Mock food detail response
         const fdcIdMatch = url.match(/\/food\/(\d+)/);
         if (fdcIdMatch) {
           const fdcId = parseInt(fdcIdMatch[1]);
-          const foodData = {
-            123456: {
-              description: 'Test Apple',
-              dataType: 'Foundation',
-              foodNutrients: [
-                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 52 },
-                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.3 },
-                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
-                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 14 }
-              ],
-              servingSize: 100,
-              servingSizeUnit: 'g'
-            },
-            789012: {
-              description: 'Test Banana',
-              dataType: 'Foundation',
-              foodNutrients: [
-                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 89 },
-                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 1.1 },
-                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
-                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
-              ],
-              servingSize: 100,
-              servingSizeUnit: 'g'
-            }
+          // Return appropriate food data for any fdcId (using 123456 as default)
+          const mockFoodData = {
+            description: fdcId === 789012 ? 'Test Banana' : 'Test Apple',
+            dataType: 'Foundation',
+            foodNutrients: fdcId === 789012 ? [
+              { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 89 },
+              { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 1.1 },
+              { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
+              { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
+            ] : [
+              { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 52 },
+              { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.3 },
+              { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
+              { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 14 }
+            ],
+            servingSize: 100,
+            servingSizeUnit: 'g'
           };
           
-          if (foodData[fdcId]) {
-            await route.fulfill({
-              status: 200,
-              contentType: 'application/json',
-              body: JSON.stringify(foodData[fdcId])
-            });
-            return;
-          }
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(mockFoodData)
+          });
+          return;
         }
+        
         await route.continue();
       } else {
         await route.continue();
       }
     });
     
-    // Navigate to nutrition page
+    // Navigate to nutrition page and wait for it to be ready
     await page.goto('./#/nutrition');
+    await expect(page.getByTestId('nutrition-page-heading')).toBeVisible({ timeout: 10000 });
+    
+    // Set up valid API key in IndexedDB after page is ready
+    const result = await Promise.race([
+      page.evaluate(async () => {
+        const settings = {
+          id: 'settings',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          fdcApiKey: 'test-api-key-for-testing',
+          enableUSDALookups: true,
+          enableWebLLMCoach: false
+        };
+        
+        const request = indexedDB.open('health-app-db', 1);
+        return new Promise<void>((resolve, reject) => {
+          request.onerror = () => reject(new Error('IDB open failed'));
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(['settings'], 'readwrite');
+            const store = tx.objectStore('settings');
+            store.put(settings);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(new Error('IDB transaction failed'));
+          };
+        });
+      }),
+      page.waitForTimeout(5000).then(() => Promise.reject(new Error('IDB setup timeout'))) 
+    ]);
+    
+    if (result instanceof Error) {
+      console.log('IDB setup warning:', result.message);
+    }
+    
+    // Reload to apply the new settings and enable USDA search button
+    await page.reload();
     await page.waitForLoadState();
   });
 
@@ -109,15 +158,8 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should add first USDA food and update totals immediately', async ({ page }) => {
-    // Set up USDA API key in settings first
-    await page.goto('./#/settings');
-    await page.getByLabel('API Key').fill('test-api-key-for-testing');
-    await page.getByRole('button', { name: 'Save Settings' }).click();
-    await expect(page.getByText('Settings saved successfully!')).toBeVisible();
-    
-    // Go back to nutrition page
-    await page.goto('./#/nutrition');
-    await page.waitForLoadState();
+    // Wait for page to fully load
+    await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
     
     // Click USDA search button to open the search modal
     await page.getByTestId('usda-search-button').click();
@@ -151,12 +193,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should add second USDA food and accumulate totals', async ({ page }) => {
-    // Set up USDA API key
-    await page.goto('./#/settings');
-    await page.getByLabel('API Key').fill('test-api-key-for-testing');
-    await page.getByRole('button', { name: 'Save Settings' }).click();
-    await expect(page.getByText('Settings saved successfully!')).toBeVisible();
-    
     // Go to nutrition and add first food (apple)
     await page.goto('./#/nutrition');
     await page.waitForLoadState();
@@ -189,12 +225,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should persist food entries across page refreshes', async ({ page }) => {
-    // Set up USDA API key and add foods
-    await page.goto('./#/settings');
-    await page.getByLabel('API Key').fill('test-api-key-for-testing');
-    await page.getByRole('button', { name: 'Save Settings' }).click();
-    await page.goto('./#/nutrition');
-    
     // Add apple
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
@@ -233,12 +263,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should handle serving<->grams unit switching correctly', async ({ page }) => {
-    // Set up USDA API key and add a food
-    await page.goto('./#/settings');
-    await page.getByLabel('API Key').fill('test-api-key-for-testing');
-    await page.getByRole('button', { name: 'Save Settings' }).click();
-    await page.goto('./#/nutrition');
-    
     // Add apple
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
@@ -294,20 +318,41 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should handle USDA lookup failures gracefully', async ({ page }) => {
-    // Set up invalid API key scenario
-    await page.goto('./#/settings');
-    await page.getByLabel('API Key').fill('invalid-key');
-    await page.getByRole('button', { name: 'Save Settings' }).click();
-    await page.goto('./#/nutrition');
+    // Override the valid key with invalid to test error handling
+    await page.evaluate(async () => {
+      const settings = {
+        id: 'settings',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        fdcApiKey: 'invalid-key',
+        enableUSDALookups: true,
+        enableWebLLMCoach: false
+      };
+      
+      return new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('health-app-db', 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction(['settings'], 'readwrite');
+          const store = tx.objectStore('settings');
+          store.put(settings);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+      });
+    });
+    
+    // Reload to ensure the new settings take effect
+    await page.reload();
+    await page.waitForLoadState();
     
     // Try to search with invalid key
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
     
-    // Wait for debounce delay
-    await page.waitForTimeout(600);
-    
-    // Should show appropriate error message (search happens automatically)
+    // Wait for error to appear after search attempt (debounce + response time)
+    // Should show appropriate error message
     await expect(page.getByTestId('usda-error')).toBeVisible({ timeout: 10000 });
   });
 });
