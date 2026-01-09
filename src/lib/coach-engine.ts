@@ -3,6 +3,146 @@ import { ActivityLevel, GoalType, ExperienceLevel } from '../types';
 import { ExerciseDBService } from './exercise-db';
 import { db } from '@/db';
 
+// ============================================
+// SEEDED RANDOM NUMBER GENERATOR (Mulberry32)
+// ============================================
+// Generates a seeded random number generator function
+function seededRandom(seed: number): () => number {
+  return function() {
+    var t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ============================================
+// EXERCISE SCORING FOR STANDARD/EASY PREFERENCE
+// ============================================
+// Equipment allowlist: prefer these simple, common items
+const PREFERRED_EQUIPMENT = ['body only', 'bodyweight', 'dumbbell', 'dumbbells', 'barbell', 'machine', 'cable', 'cable machine', 'bench'];
+
+// Keywords that indicate simple/standard exercises
+const SIMPLE_KEYWORDS = ['press', 'curl', 'row', 'squat', 'deadlift', 'bench', 'lunge', 'step-up', 'push', 'pull', 'extension', 'raise', 'fly', 'crunch', 'plank', 'bridge'];
+
+// Advanced/complex keywords (de-prioritize but don't exclude)
+const ADVANCED_KEYWORDS = ['snatch', 'clean', 'jerk', 'pistol', 'muscle-up', 'butterfly', 'sumo', ' Bulgarian', 'front squat', 'overhead press', 'good morning'];
+
+/**
+ * Score an exercise for program generation preference.
+ * Higher scores = more preferred (simpler, more standard)
+ * @param exercise - The exercise to score
+ * @param equipmentPrefs - Available equipment (optional, for bonus points)
+ * @returns Score between 0 and 100
+ */
+function scoreExerciseForProgram(
+  exercise: ExerciseDBItem,
+  equipmentPrefs: Set<string> = new Set()
+): number {
+  let score = 50; // Base score
+  const nameLower = exercise.name.toLowerCase();
+  const equipmentLower = exercise.equipment.map(e => e.toLowerCase());
+  
+  // Preference 1: Standard equipment (+15)
+  const hasPreferredEquipment = equipmentLower.some(eq => PREFERRED_EQUIPMENT.includes(eq));
+  if (hasPreferredEquipment) {
+    score += 15;
+  }
+  
+  // Bonus for matching user's equipment (+10)
+  if (equipmentPrefs.size > 0) {
+    const matchesUserEquipment = equipmentLower.some(eq => equipmentPrefs.has(eq));
+    if (matchesUserEquipment) {
+      score += 10;
+    }
+  }
+  
+  // Preference 2: Simple keywords (+10 each, max +20)
+  const simpleCount = SIMPLE_KEYWORDS.filter(keyword => nameLower.includes(keyword)).length;
+  score += Math.min(simpleCount * 10, 20);
+  
+  // Preference 3: Shorter, simpler names (+5 for names < 15 chars, +3 for 15-20)
+  if (exercise.name.length < 15) {
+    score += 5;
+  } else if (exercise.name.length < 20) {
+    score += 3;
+  }
+  
+  // Preference 4: Beginner-friendly difficulty (+10)
+  if (exercise.difficulty?.toLowerCase() === 'beginner') {
+    score += 10;
+  } else if (exercise.difficulty?.toLowerCase() === 'intermediate') {
+    score += 5;
+  }
+  
+  // De-prioritize advanced exercises (-15 each, max -30)
+  const advancedCount = ADVANCED_KEYWORDS.filter(keyword => nameLower.includes(keyword)).length;
+  score -= Math.min(advancedCount * 15, 30);
+  
+  // De-prioritize excessive equipment variety (-10 for >2 equipment types)
+  if (equipmentLower.length > 2) {
+    score -= 10;
+  }
+  
+  // Clamp score between 0 and 100
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * Select exercises from candidates with weighted random selection based on scores.
+ * Uses seeded RNG for reproducibility.
+ * @param candidates - Candidate exercises
+ * @param count - Number to select
+ * @param seed - Random seed for selection
+ * @param usedIds - IDs to avoid (already used)
+ * @param equipmentPrefs - Equipment preferences for scoring bonus
+ * @returns Selected exercises
+ */
+function selectExercisesWeighted(
+  candidates: ExerciseDBItem[],
+  count: number,
+  seed: number,
+  usedIds: Set<string> = new Set(),
+  equipmentPrefs: Set<string> = new Set()
+): ExerciseDBItem[] {
+  const rng = seededRandom(seed);
+  const selected: ExerciseDBItem[] = [];
+  const available = candidates.filter(ex => !usedIds.has(ex.id));
+  
+  // Score all candidates with equipment preferences
+  const scored = available.map(ex => ({
+    exercise: ex,
+    score: scoreExerciseForProgram(ex, equipmentPrefs)
+  }));
+  
+  // Select based on weighted probability (higher score = more likely)
+  for (let i = 0; i < count && scored.length > 0; i++) {
+    // Calculate total score for probability
+    const totalScore = scored.reduce((sum, s) => sum + s.score, 0);
+    
+    // Weighted random selection
+    let random = rng() * totalScore;
+    let selectedIndex = 0;
+    
+    for (let j = 0; j < scored.length; j++) {
+      random -= scored[j].score;
+      if (random <= 0) {
+        selectedIndex = j;
+        break;
+      }
+    }
+    
+    // Add selected exercise
+    selected.push(scored[selectedIndex].exercise);
+    usedIds.add(scored[selectedIndex].exercise.id);
+    
+    // Remove from scored pool
+    scored.splice(selectedIndex, 1);
+  }
+  
+  return selected;
+}
+
 type ExerciseSubstitutionHistory = Record<string, Set<string>>; // slot key -> set of used exercise IDs
 
 // Track substitutions per exercise slot to avoid cycling back
@@ -126,10 +266,18 @@ export function calculateMacroTargets(profile: Profile, tdee: number): MacroTarg
 }
 
 // Generate workout plan based on profile and goals
-export async function generateWorkoutPlan(profile: Profile, goalId?: string): Promise<WorkoutPlan> {
+export async function generateWorkoutPlan(
+  profile: Profile,
+  goalId?: string,
+  seed?: number
+): Promise<WorkoutPlan> {
   const { experienceLevel, goals, equipment, schedule } = profile;
   const selectedGoal = goals.find(g => g.id === goalId) || goals.find(g => g.isPrimary) || goals[0];
   const primaryGoal = selectedGoal?.type || GoalType.GENERAL_FITNESS;
+  
+  // Generate or use provided seed for variety
+  const generationSeed = seed ?? Math.floor(Math.random() * 4294967296);
+  console.log('Generation seed:', generationSeed);
   
   // Initialize exercise DB to ensure data is loaded
   await ExerciseDBService.initialize();
@@ -183,15 +331,23 @@ export async function generateWorkoutPlan(profile: Profile, goalId?: string): Pr
   let workoutIndex = 0;
   const usedExerciseIds = new Set<string>();
   
+  // Create equipment preference set for scoring bonus
+  const equipmentPrefs = new Set(normalizedEquipment);
+  
   for (const day of dayNames) {
     if (schedule[day as keyof typeof schedule]) {
+      // Use deterministic seed per day: base seed + day index
+      const daySeed = generationSeed + workoutIndex * 1000;
+      
       const { exercises: workout, newlyUsedIds } = await generateDayWorkout(
         workoutIndex, 
         trainingDays, 
         availableExercises, 
         experienceLevel, 
         primaryGoal,
-        usedExerciseIds
+        usedExerciseIds,
+        equipmentPrefs,
+        daySeed
       );
       week1.workouts.push({
         day: day.charAt(0).toUpperCase() + day.slice(1),
@@ -237,7 +393,8 @@ export async function generateWorkoutPlan(profile: Profile, goalId?: string): Pr
     generatedBy: 'coach' as const,
     notes: generatePlanNotes(primaryGoal, experienceLevel),
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    generationSeed // Store seed for reproducibility
   };
 }
 
@@ -320,7 +477,9 @@ async function generateDayWorkout(
   exercises: ExerciseDBItem[],
   experienceLevel: ExperienceLevel,
   primaryGoal: GoalType,
-  usedExerciseIds: Set<string> = new Set()
+  usedExerciseIds: Set<string> = new Set(),
+  equipmentPrefs: Set<string> = new Set(),
+  seed: number = Math.floor(Math.random() * 4294967296)
 ): Promise<{ exercises: any[]; newlyUsedIds: Set<string> }> {
   const workout: any[] = [];
   const newlyUsedIds: Set<string> = new Set();
@@ -350,27 +509,19 @@ async function generateDayWorkout(
     }
   }
   
-  // Select exercises: prefer compound first, then isolation
-  const selectedExercises: ExerciseDBItem[] = [];
+  console.log(`Using weighted selection with seed ${seed}`);
   
-  // Prioritize compound exercises (get up to half of target count)
-  const compoundExercises = candidateExercises.filter(ex => ex.mechanicsType === 'compound');
-  const compoundTarget = Math.ceil(targetExerciseCount / 2);
-  const selectedCompound = compoundExercises.slice(0, compoundTarget);
+  // Create a copy of usedExerciseIds for the selection
+  const selectionUsedIds = new Set(usedExerciseIds);
   
-  // Add isolation exercises for the rest
-  const isolationExercises = candidateExercises.filter(ex => ex.mechanicsType === 'isolation');
-  const remainingNeeded = targetExerciseCount - selectedCompound.length;
-  const selectedIsolation = isolationExercises.slice(0, remainingNeeded);
-  
-  // If we don't have enough, fill from any remaining candidates
-  const allRemaining = candidateExercises.filter(
-    ex => !selectedCompound.includes(ex) && !selectedIsolation.includes(ex)
+  // Select exercises using weighted random selection based on scoring
+  const selectedExercises = selectExercisesWeighted(
+    candidateExercises,
+    targetExerciseCount,
+    seed,
+    selectionUsedIds,
+    equipmentPrefs // Pass equipment preferences for scoring bonus
   );
-  const stillNeeded = targetExerciseCount - selectedCompound.length - selectedIsolation.length;
-  const selectedFillers = allRemaining.slice(0, stillNeeded);
-  
-  selectedExercises.push(...selectedCompound, ...selectedIsolation, ...selectedFillers);
   
   console.log(`Selected ${selectedExercises.length} exercises for day ${dayIndex}`);
   

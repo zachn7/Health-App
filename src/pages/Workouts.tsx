@@ -327,7 +327,9 @@ export default function Workouts() {
       }
 
       const { generateWorkoutPlan: coachEngineGenerate } = await import('../lib/coach-engine');
-      const plan = await coachEngineGenerate(profile);
+      // Use deterministic seed: hash of timestamp to ensure variety
+      const seed = Date.now() + Math.floor(Math.random() * 10000);
+      const plan = await coachEngineGenerate(profile, undefined, seed);
       
       // Verify plan has exercises
       const totalExercises = plan.weeks.reduce((sum, week) => 

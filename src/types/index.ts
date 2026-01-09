@@ -137,6 +137,7 @@ export interface WorkoutPlan {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  generationSeed?: number; // Seed used for deterministic generation
 }
 
 export interface ExerciseLogEntry {

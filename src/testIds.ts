@@ -107,6 +107,15 @@ export const testIds = {
     foodEditTotalGramsDisplay: 'total-grams-display',
   },
 
+  // Workout Programs
+  workoutProgram: {
+    generateBtn: 'workout-program-generate-btn',
+    regenerateBtn: 'workout-program-regenerate-btn',
+    programDayCard: 'workout-program-day-card',
+    exerciseRow: 'workout-program-exercise-row',
+    exerciseName: 'workout-program-exercise-name',
+  },
+
   // Workouts
   workouts: {
     // Generator
