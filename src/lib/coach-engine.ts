@@ -499,7 +499,8 @@ function getDayNotes(_primaryGoal: GoalType, experienceLevel: ExperienceLevel, d
 export async function substituteExercise(
   currentExerciseId: string,
   planId: string,
-  equipment?: string[]
+  equipment?: string[],
+  usedInCurrentDay?: Set<string>
 ): Promise<ExerciseDBItem | null> {
   await ExerciseDBService.initialize();
   
@@ -516,57 +517,123 @@ export async function substituteExercise(
   // Get all exercises from the DB
   const allExercises = await db.table('exercises').toArray();
   
-  // Filter for compatible exercises:
-  // 1. Same body part or targets the same muscles
-  // 2. Matches equipment (if specified)
-  // 3. Not the current exercise
-  // 4. Not recently substituted (to avoid cycling)
-  const compatibleExercises = allExercises.filter((exercise: ExerciseDBItem) => {
-    // Skip the same exercise
-    if (exercise.id === currentExerciseId) return false;
-    
-    // Check if recently substituted (avoid cycling back within 10 minutes)
-    const recentSubstitution = history.find((sub: ExerciseSubstitution) => sub.newExerciseId === exercise.id);
-    if (recentSubstitution && Date.now() - recentSubstitution.timestamp < 600000) {
-      return false;
-    }
-    
-    // Check body part match (exact or via target muscles)
-    const shareTargetMuscles = currentExercise.targetMuscles.some((m: string) => 
-      exercise.targetMuscles.includes(m)
-    );
-    const shareBodyPart = exercise.bodyPart === currentExercise.bodyPart;
-    
-    if (!shareBodyPart && !shareTargetMuscles) {
-      return false;
-    }
-    
-    // Check equipment match (if specified)
-    if (equipment && equipment.length > 0) {
-      const hasRequiredEquipment = exercise.equipment.some((eq: string) => equipment.includes(eq));
-      if (!hasRequiredEquipment) return false;
-    }
-    
-    // Prefer similar mechanics type
-    if (exercise.mechanicsType !== currentExercise.mechanicsType) {
-      // Allow different mechanics type but prioritize same type later
-      return true;
-    }
-    
-    return true;
-  });
+  // Normalize equipment names for better matching (same logic as generateWorkoutPlan)
+  const EQUIPMENT_MAPPING: Record<string, string[]> = {
+    'bodyweight': ['body only', 'bodyweight', 'body only'],
+    'barbell': ['barbell'],
+    'dumbbells': ['dumbbell', 'dumbbells'],
+    'kettlebells': ['kettlebells'],
+    'resistance bands': ['bands', 'resistance bands'],
+    'cable machine': ['cable', 'cable machine'],
+    'squat rack': ['barbell', 'squat rack'],
+    'bench': ['barbell', 'bench', 'machine']
+  };
   
-  if (compatibleExercises.length === 0) {
-    console.warn(' no compatible exercises found for substitution');
+  let normalizedEquipment: string[] = [];
+  if (equipment && equipment.length > 0) {
+    normalizedEquipment = equipment.flatMap(eq => 
+      EQUIPMENT_MAPPING[eq.toLowerCase()] || [eq]
+    ).map(eq => eq.toLowerCase());
+    console.log('Substitute - Profile equipment:', equipment);
+    console.log('Substitute - Normalized equipment:', normalizedEquipment);
+  }
+  
+  console.log('Trying to find substitute for:', currentExercise.name);
+  console.log('Current exercise equipment:', currentExercise.equipment);
+  console.log('Current exercise bodyPart:', currentExercise.bodyPart);
+  console.log('Current exercise targetMuscles:', currentExercise.targetMuscles);
+  
+  // Helper function to check if exercises share similar muscles/body part
+  const musclesOverlap = (exercise: ExerciseDBItem): boolean => {
+    // Check body part match (with normalization)
+    const bodyPartsMatch = exercise.bodyPart.toLowerCase() === currentExercise.bodyPart.toLowerCase();
+    
+    // Check target muscle overlap
+    const currentTargets = currentExercise.targetMuscles.map(m => m.toLowerCase());
+    const exerciseTargets = exercise.targetMuscles.map(m => m.toLowerCase());
+    const targetMusclesMatch = currentTargets.some((m: string) => 
+      exerciseTargets.some((em: string) => 
+        m.includes(em) || em.includes(m)
+      )
+    );
+    
+    return bodyPartsMatch || targetMusclesMatch;
+  };
+  
+  function findCandidates(restrictEquipment: boolean): ExerciseDBItem[] {
+    return allExercises.filter((exercise: ExerciseDBItem) => {
+      // Skip the same exercise
+      if (exercise.id === currentExerciseId) return false;
+      
+      // Skip exercises already used in this day's workout (if specified)
+      if (usedInCurrentDay && usedInCurrentDay.has(exercise.id)) {
+        return false;
+      }
+      
+      // Check if recently substituted (avoid cycling back within 10 minutes)
+      const recentSubstitution = history.find((sub: ExerciseSubstitution) => sub.newExerciseId === exercise.id);
+      if (recentSubstitution && Date.now() - recentSubstitution.timestamp < 600000) {
+        return false;
+      }
+      
+      // Must have overlapping muscles or body part
+      if (!musclesOverlap(exercise)) {
+        return false;
+      }
+      
+      // Check equipment match (if specified and restricting)
+      if (restrictEquipment && normalizedEquipment.length > 0) {
+        const exerciseEquipment = exercise.equipment.map(eq => eq.toLowerCase());
+        const hasMatchingEquipment = exerciseEquipment.some((eq: string) => 
+          normalizedEquipment.includes(eq)
+        );
+        if (!hasMatchingEquipment) return false;
+      }
+      
+      return true;
+    });
+  }
+  
+  // Try 1: Same muscle/body part + matching equipment
+  let candidates = findCandidates(true);
+  console.log(`Step 1 - Equipment-restricted candidates: ${candidates.length} exercises`);
+  
+  // Try 2: Same muscle/body part, any equipment
+  if (candidates.length === 0) {
+    candidates = findCandidates(false);
+    console.log(`Step 2 - Any equipment candidates: ${candidates.length} exercises`);
+  }
+  
+  // Try 3: Any exercise from DB (last resort - still exclude current exercise and recently substituted)
+  if (candidates.length === 0) {
+    console.log('Step 3 - Fallback to any available exercise');
+    candidates = allExercises.filter((exercise: ExerciseDBItem) => {
+      if (exercise.id === currentExerciseId) return false;
+      if (usedInCurrentDay && usedInCurrentDay.has(exercise.id)) return false;
+      const recentSubstitution = history.find((sub: ExerciseSubstitution) => sub.newExerciseId === exercise.id);
+      if (recentSubstitution && Date.now() - recentSubstitution.timestamp < 600000) {
+        return false;
+      }
+      return true;
+    });
+    console.log(`Step 3 - Fallback candidates: ${candidates.length} exercises`);
+  }
+  
+  if (candidates.length === 0) {
+    console.warn('No compatible exercises found for substitution at all - this should not happen with a valid database');
     return null;
   }
   
   // Sort deterministically and pick the first
-  const sorted = sortExercisesDeterministically(compatibleExercises as ExerciseDBItem[]);
-  const newExercise = sorted[0] as ExerciseDBItem;
+  const sorted = sortExercisesDeterministically(candidates as ExerciseDBItem[]);
+  // Prefer same mechanics type if available
+  const sameMechanics = sorted.filter(ex => ex.mechanicsType === currentExercise.mechanicsType);
+  const candidatesToUse = sameMechanics.length > 0 ? sameMechanics : sorted;
+  
+  const newExercise = candidatesToUse[0] as ExerciseDBItem;
   
   if (!newExercise) {
-    console.warn('No exercises found after shuffling');
+    console.warn('No exercises found after sorting');
     return null;
   }
   
@@ -588,7 +655,9 @@ export async function substituteExercise(
   
   exerciseSubstitutionHistory[planId].push(substitution);
   
-  console.log(`Substituted ${currentExercise.name} with ${newExercise.name}`);
+  console.log(`✅ Substituted ${currentExercise.name} with ${newExercise.name}`);
+  console.log(`   Body part: ${currentExercise.bodyPart} -> ${newExercise.bodyPart}`);
+  console.log(`   Equipment: ${currentExercise.equipment.join(', ')} -> ${newExercise.equipment.join(', ')}`);
   
   return newExercise;
 }

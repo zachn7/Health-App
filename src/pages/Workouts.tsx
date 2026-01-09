@@ -31,6 +31,8 @@ export default function Workouts() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [substituteError, setSubstituteError] = useState<string | null>(null);
+  const [substituteSuccess, setSubstituteSuccess] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
 
@@ -152,25 +154,39 @@ export default function Workouts() {
   const substituteExercise = async (weekIndex: number, dayIndex: number, exerciseId: string) => {
     if (!selectedPlan) return;
     
+    // Clear previous messages
+    setSubstituteError(null);
+    setSubstituteSuccess(null);
+    
     try {
       const { substituteExercise: coachEngineSubstitute } = await import('../lib/coach-engine');
       const profile = await repositories.profile.get();
       
+      // Get exercises used in this day's workout to avoid duplicates
+      const currentWorkout = selectedPlan.weeks[weekIndex]?.workouts[dayIndex];
+      const usedInCurrentDay = new Set(
+        currentWorkout?.exercises.map((ex: any) => ex.exerciseId) || []
+      );
+      
       const newExercise = await coachEngineSubstitute(
         exerciseId,
         selectedPlan.id,
-        profile?.equipment
+        profile?.equipment,
+        usedInCurrentDay
       );
       
       if (!newExercise) {
-        alert('Could not find a suitable substitute exercise');
+        setSubstituteError('Could not find a suitable substitute exercise');
         return;
       }
       
       await replaceExercise(weekIndex, dayIndex, exerciseId, newExercise.id);
+      setSubstituteSuccess('Exercise substituted successfully');
+      // Clear success message after 3 seconds
+      setTimeout(() => setSubstituteSuccess(null), 3000);
     } catch (error) {
       console.error('Failed to substitute exercise:', error);
-      alert('Failed to substitute exercise. Please try again.');
+      setSubstituteError('Failed to substitute exercise. Please try again.');
     }
   };
 
@@ -803,6 +819,7 @@ export default function Workouts() {
                               <button
                                 onClick={() => setEditingWorkout({ weekIndex: selectedWeek, dayIndex })}
                                 className="btn btn-secondary text-sm"
+                                data-testid={`edit-workout-day-btn-${selectedWeek}-${dayIndex}`}
                               >
                                 <Edit3 className="w-4 h-4" />
                               </button>
@@ -888,38 +905,62 @@ export default function Workouts() {
                                   )}
                                 </div>
                                 {isEditing && (
-                                  <div className="flex space-x-1">
-                                    <button
-                                      onClick={() => setShowExercisePicker(true)}
-                                      className="text-blue-600 hover:text-blue-800"
-                                      title="Replace exercise"
-                                    >
-                                      <Edit3 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => editExercisePrescription(selectedWeek, dayIndex, exIndex)}
-                                      className="text-green-600 hover:text-green-800"
-                                      title="Edit sets/reps/weight"
-                                      data-testid="substitute-exercise-btn"
-                                    >
-                                      <Edit3 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => substituteExercise(selectedWeek, dayIndex, exercise.exerciseId)}
-                                      className="text-purple-600 hover:text-purple-800"
-                                      title="Substitute with similar exercise"
-                                    >
-                                      <RefreshCw className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => removeExercise(selectedWeek, dayIndex, exercise.exerciseId)}
-                                      className="text-red-600 hover:text-red-800"
-                                      title="Remove exercise"
-                                      data-testid="remove-exercise-btn"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                                  <>
+                                    <div className="flex space-x-1">
+                                      <button
+                                        onClick={() => setShowExercisePicker(true)}
+                                        className="text-blue-600 hover:text-blue-800"
+                                        title="Replace exercise"
+                                      >
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => editExercisePrescription(selectedWeek, dayIndex, exIndex)}
+                                        className="text-green-600 hover:text-green-800"
+                                        title="Edit sets/reps/weight"
+                                      >
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => substituteExercise(selectedWeek, dayIndex, exercise.exerciseId)}
+                                        className="text-purple-600 hover:text-purple-800"
+                                        title="Substitute with similar exercise"
+                                        data-testid="substitute-exercise-btn"
+                                      >
+                                        <RefreshCw className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => removeExercise(selectedWeek, dayIndex, exercise.exerciseId)}
+                                        className="text-red-600 hover:text-red-800"
+                                        title="Remove exercise"
+                                        data-testid="remove-exercise-btn"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    {substituteError && (
+                                      <div 
+                                        className="absolute top-full right-0 mt-2 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded shadow-lg z-10"
+                                        data-testid="substitute-error"
+                                      >
+                                        {substituteError}
+                                        <button
+                                          onClick={() => setSubstituteError(null)}
+                                          className="ml-2 text-red-600 hover:text-red-800"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                    {substituteSuccess && (
+                                      <div 
+                                        className="absolute top-full right-0 mt-2 p-2 bg-green-50 border border-green-200 text-green-700 text-xs rounded shadow-lg z-10"
+                                        data-testid="substitute-success"
+                                      >
+                                        {substituteSuccess}
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
