@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { setupTestProfile } from './helpers/setupProfile';
+import { testIds } from '../../src/testIds';
 
 test.describe('Regression: Workout Plan Generator (R07)', () => {
   test.beforeEach(async ({ page, context }) => {
@@ -123,6 +124,80 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     expect(updatedExerciseText).toBeTruthy();
     
     console.log('✅ Substitute exercise test passed');
+  });
+  
+  test('should support multiple substitutions on the same exercise', async ({ page }) => {
+    // Setup profile and generate a plan
+    await setupTestProfile(page);
+    
+    // Navigate to Workouts page
+    await page.goto('./#/workouts');
+    await page.waitForLoadState('networkidle');
+    
+    // Generate a plan
+    page.on('dialog', dialog => dialog.accept());
+    
+    const generateButton = page.getByTestId('generate-workout-plan-btn');
+    await expect(generateButton).toBeVisible({ timeout: 5000 });
+    await generateButton.click();
+    
+    // Wait for plan to appear and view it
+    const plans = page.locator('[data-testid^="workout-plan-"]');
+    await expect(plans.first()).toBeVisible({ timeout: 15000 });
+    
+    const firstPlan = page.locator('[data-testid^="workout-plan-"]').first();
+    await firstPlan.getByRole('button', { name: 'View', exact: true }).click();
+    await page.waitForTimeout(500);
+    
+    // Enable editing mode
+    const editWorkoutDayButton = page.getByTestId('edit-workout-day-btn-0-0').first();
+    if (await editWorkoutDayButton.isVisible({ timeout: 3000 })) {
+      await editWorkoutDayButton.click();
+      await page.waitForTimeout(500);
+    }
+    
+    // Capture the original exercise name
+    const firstExercise = page.locator('[data-testid^="plan-exercise-"]').first();
+    const originalExerciseText = await firstExercise.textContent();
+    console.log('Original exercise:', originalExerciseText);
+    
+    // Get the substitute button for the first exercise
+    const firstExerciseRow = page.locator('[data-testid^="plan-exercise-"]').first();
+    const substituteButton = firstExerciseRow.getByTestId(testIds.workouts.substituteExerciseButton).first();
+    await expect(substituteButton).toBeVisible({ timeout: 3000 });
+    
+    // Do first substitution
+    await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
+    await substituteButton.click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
+    
+    let afterFirstSub = await firstExercise.textContent();
+    console.log('After 1st substitution:', afterFirstSub);
+    expect(afterFirstSub).not.toBe(originalExerciseText);
+    
+    // Do second substitution on the same exercise
+    await substituteButton.click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
+    
+    let afterSecondSub = await firstExercise.textContent();
+    console.log('After 2nd substitution:', afterSecondSub);
+    expect(afterSecondSub).not.toBe(afterFirstSub);
+    expect(afterSecondSub).not.toBe(originalExerciseText);
+    
+    // Do third substitution to verify we can keep iterating
+    await substituteButton.click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
+    
+    let afterThirdSub = await firstExercise.textContent();
+    console.log('After 3rd substitution:', afterThirdSub);
+    expect(afterThirdSub).not.toBe(afterSecondSub);
+    expect(afterThirdSub).not.toBe(afterFirstSub);
+    expect(afterThirdSub).not.toBe(originalExerciseText);
+    
+    console.log('✅ Multiple substitutions test passed - can iterate through exercises');
   });
 
   test('should handle generation without crashing', async ({ page }) => {

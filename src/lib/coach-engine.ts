@@ -3,14 +3,10 @@ import { ActivityLevel, GoalType, ExperienceLevel } from '../types';
 import { ExerciseDBService } from './exercise-db';
 import { db } from '@/db';
 
-type ExerciseSubstitution = {
-  originalExerciseId: string;
-  newExerciseId: string;
-  timestamp: number;
-};
+type ExerciseSubstitutionHistory = Record<string, Set<string>>; // slot key -> set of used exercise IDs
 
-// Track substitutions to avoid cycling back to the same exercises
-const exerciseSubstitutionHistory: Record<string, ExerciseSubstitution[]> = {};
+// Track substitutions per exercise slot to avoid cycling back
+const exerciseSubstitutionHistory: ExerciseSubstitutionHistory = {};
 
 // Body part mapping: general focus -> specific muscles in the exercise DB
 const BODY_PART_MAPPINGS = {
@@ -498,9 +494,10 @@ function getDayNotes(_primaryGoal: GoalType, experienceLevel: ExperienceLevel, d
 // Substitute an exercise with a different one from the same body part/equipment
 export async function substituteExercise(
   currentExerciseId: string,
-  planId: string,
+  _planId: string, // Not used for slot-based history (kept for backward compatibility)
   equipment?: string[],
-  usedInCurrentDay?: Set<string>
+  usedInCurrentDay?: Set<string>,
+  slotKey?: string // Format: "${weekIndex}-${dayIndex}-${exerciseIndex}" for per-slot history
 ): Promise<ExerciseDBItem | null> {
   await ExerciseDBService.initialize();
   
@@ -511,8 +508,21 @@ export async function substituteExercise(
     return null;
   }
   
-  // Get substitution history for this plan
-  const history = exerciseSubstitutionHistory[planId] || [];
+  // Get substitution history for this exercise slot (if slotKey provided)
+  const slotHistory = slotKey ? (exerciseSubstitutionHistory[slotKey] || new Set<string>()) : null;
+  
+  // Always exclude current exercise from candidate pool
+  const excludedExercises = new Set([currentExerciseId]);
+  
+  // Add slot history to exclusions
+  if (slotHistory) {
+    slotHistory.forEach(id => excludedExercises.add(id));
+  }
+  
+  // Add exercises used in the current day to exclusions
+  if (usedInCurrentDay) {
+    usedInCurrentDay.forEach(id => excludedExercises.add(id));
+  }
   
   // Get all exercises from the DB
   const allExercises = await db.table('exercises').toArray();
@@ -562,19 +572,8 @@ export async function substituteExercise(
   
   function findCandidates(restrictEquipment: boolean): ExerciseDBItem[] {
     return allExercises.filter((exercise: ExerciseDBItem) => {
-      // Skip the same exercise
-      if (exercise.id === currentExerciseId) return false;
-      
-      // Skip exercises already used in this day's workout (if specified)
-      if (usedInCurrentDay && usedInCurrentDay.has(exercise.id)) {
-        return false;
-      }
-      
-      // Check if recently substituted (avoid cycling back within 10 minutes)
-      const recentSubstitution = history.find((sub: ExerciseSubstitution) => sub.newExerciseId === exercise.id);
-      if (recentSubstitution && Date.now() - recentSubstitution.timestamp < 600000) {
-        return false;
-      }
+      // Skip excluded exercises (current, slot history, current day)
+      if (excludedExercises.has(exercise.id)) return false;
       
       // Must have overlapping muscles or body part
       if (!musclesOverlap(exercise)) {
@@ -604,14 +603,13 @@ export async function substituteExercise(
     console.log(`Step 2 - Any equipment candidates: ${candidates.length} exercises`);
   }
   
-  // Try 3: Any exercise from DB (last resort - still exclude current exercise and recently substituted)
+  // Try 3: Any exercise from DB (last resort - still respect exclusions)
   if (candidates.length === 0) {
     console.log('Step 3 - Fallback to any available exercise');
     candidates = allExercises.filter((exercise: ExerciseDBItem) => {
+      // Still exclude current and current day exercises
       if (exercise.id === currentExerciseId) return false;
-      if (usedInCurrentDay && usedInCurrentDay.has(exercise.id)) return false;
-      const recentSubstitution = history.find((sub: ExerciseSubstitution) => sub.newExerciseId === exercise.id);
-      if (recentSubstitution && Date.now() - recentSubstitution.timestamp < 600000) {
+      if (usedInCurrentDay && usedInCurrentDay.has(exercise.id)) {
         return false;
       }
       return true;
@@ -637,23 +635,15 @@ export async function substituteExercise(
     return null;
   }
   
-  // Record substitution
-  const substitution: ExerciseSubstitution = {
-    originalExerciseId: currentExerciseId,
-    newExerciseId: newExercise.id,
-    timestamp: Date.now()
-  };
-  
-  if (!exerciseSubstitutionHistory[planId]) {
-    exerciseSubstitutionHistory[planId] = [];
+  // Record substitution in slot history (if slotKey provided)
+  if (slotKey) {
+    if (!exerciseSubstitutionHistory[slotKey]) {
+      exerciseSubstitutionHistory[slotKey] = new Set<string>();
+    }
+    // Add current exercise to history so we don't go back to it
+    exerciseSubstitutionHistory[slotKey].add(currentExerciseId);
+    console.log(`Added ${currentExercise.name} to slot ${slotKey} history`);
   }
-  
-  // Clean up old substitutions (older than 1 hour)
-  exerciseSubstitutionHistory[planId] = exerciseSubstitutionHistory[planId].filter(
-    sub => Date.now() - sub.timestamp < 3600000
-  );
-  
-  exerciseSubstitutionHistory[planId].push(substitution);
   
   console.log(`✅ Substituted ${currentExercise.name} with ${newExercise.name}`);
   console.log(`   Body part: ${currentExercise.bodyPart} -> ${newExercise.bodyPart}`);

@@ -151,7 +151,7 @@ export default function Workouts() {
     }
   };
   
-  const substituteExercise = async (weekIndex: number, dayIndex: number, exerciseId: string) => {
+  const substituteExercise = async (weekIndex: number, dayIndex: number, exerciseIndex: number, exerciseId: string) => {
     if (!selectedPlan) return;
     
     // Clear previous messages
@@ -168,11 +168,15 @@ export default function Workouts() {
         currentWorkout?.exercises.map((ex: any) => ex.exerciseId) || []
       );
       
+      // Create slot key for per-substitution history
+      const slotKey = `${weekIndex}-${dayIndex}-${exerciseIndex}`;
+      
       const newExercise = await coachEngineSubstitute(
         exerciseId,
         selectedPlan.id,
         profile?.equipment,
-        usedInCurrentDay
+        usedInCurrentDay,
+        slotKey
       );
       
       if (!newExercise) {
@@ -922,7 +926,7 @@ export default function Workouts() {
                                         <Edit3 className="w-4 h-4" />
                                       </button>
                                       <button
-                                        onClick={() => substituteExercise(selectedWeek, dayIndex, exercise.exerciseId)}
+                                        onClick={() => substituteExercise(selectedWeek, dayIndex, exIndex, exercise.exerciseId)}
                                         className="text-purple-600 hover:text-purple-800"
                                         title="Substitute with similar exercise"
                                         data-testid="substitute-exercise-btn"
