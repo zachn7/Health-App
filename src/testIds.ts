@@ -123,6 +123,8 @@ export const testIds = {
     // Exercise actions
     substituteExerciseButton: 'substitute-exercise-btn',
     removeExerciseButton: 'remove-exercise-btn',
+    substituteError: 'substitute-error',
+    substituteSuccess: 'substitute-success',
   },
 
   // Profile

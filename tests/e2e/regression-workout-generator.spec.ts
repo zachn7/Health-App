@@ -77,51 +77,52 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await firstPlan.getByRole('button', { name: 'View', exact: true }).click();
     await page.waitForTimeout(500);
     
-    // Enable editing mode
-    const editButton = page.getByRole('button', { name: /Edit/i });
-    if (await editButton.isVisible({ timeout: 3000 })) {
-      await editButton.click();
+    // Enable editing mode for the first workout day
+    const editWorkoutDayButton = page.getByTestId('edit-workout-day-btn-0-0').first();
+    if (await editWorkoutDayButton.isVisible({ timeout: 3000 })) {
+      await editWorkoutDayButton.click();
       await page.waitForTimeout(500);
     }
     
-    // Get the first exercise's ID
+    // Get the first exercise's text content before substitution
     const firstExercise = page.locator('[data-testid^="plan-exercise-"]').first();
-    const firstExerciseTestId = await firstExercise.getAttribute('data-testid');
-    const originalExerciseId = firstExerciseTestId?.replace('plan-exercise-', '') || '';
-    const originalExerciseName = await firstExercise.getByRole('heading').count() > 0 
-      ? await firstExercise.getByRole('heading').textContent()
-      : await firstExercise.textContent();
-    console.log('Original exercise:', originalExerciseName);
+    const originalExerciseText = await firstExercise.textContent();
+    console.log('Original exercise text:', originalExerciseText);
     
-    // Click the substitute button (refresh icon)
-    const substituteButtons = page.locator('button').filter({ hasText: '' }).filter(async (btn) => {
-      return await btn.getAttribute('title') === 'Substitute with similar exercise';
-    });
+    // Count exercises before substitution
+    const exerciseCountBefore = await page.locator('[data-testid^="plan-exercise-"]').count();
+    console.log('Exercise count before substitution:', exerciseCountBefore);
     
-    const substituteButtonCount = await substituteButtons.count();
-    console.log(`Found ${substituteButtonCount} substitute buttons`);
+    // Click the substitute button on the first exercise
+    const substituteButton = page.getByTestId('substitute-exercise-btn').first();
+    await expect(substituteButton).toBeVisible({ timeout: 3000 });
     
-    if (substituteButtonCount > 0) {
-      // Click the first visible substitute button
-      const visibleSubstitute = substituteButtons.filter({ hasText: '' }).first();
-      if (await visibleSubstitute.isVisible().catch(() => false)) {
-        await visibleSubstitute.click();
-        await page.waitForTimeout(1000);
-        
-        // Verify the exercise has changed (or stayed the same if no substitute found)
-        const updatedExercise = page.locator('[data-testid^="plan-exercise-"]').first();
-        const updatedExerciseText = await updatedExercise.textContent();
-        console.log('Updated exercise:', updatedExerciseText);
-        
-        // The exercise should still exist (substitute may have changed it or kept it the same)
-        expect(updatedExerciseText).toBeTruthy();
-      } else {
-        console.log('Substitute buttons found but not visible - likely in collapsed section');
-      }
-    } else {
-      console.log('No substitute buttons found - may need to enable edit mode or button may have different structure');
-      // This is ok - the button may not be visible or may have a different structure
-    }
+    // Make sure no error message is visible before clicking
+    const errorMessage = page.getByTestId('substitute-error');
+    await expect(errorMessage).not.toBeVisible({ timeout: 1000 });
+    
+    await substituteButton.click();
+    await page.waitForTimeout(1000);
+    
+    // Verify no error message is shown
+    await expect(errorMessage).not.toBeVisible({ timeout: 2000 });
+    
+    // Get the first exercise's text content after substitution
+    const updatedExercise = page.locator('[data-testid^="plan-exercise-"]').first();
+    const updatedExerciseText = await updatedExercise.textContent();
+    console.log('Updated exercise text:', updatedExerciseText);
+    
+    // Count exercises after substitution
+    const exerciseCountAfter = await page.locator('[data-testid^="plan-exercise-"]').count();
+    console.log('Exercise count after substitution:', exerciseCountAfter);
+    
+    // The exercise count should remain the same
+    expect(exerciseCountAfter).toBe(exerciseCountBefore);
+    
+    // The exercise should still exist
+    expect(updatedExerciseText).toBeTruthy();
+    
+    console.log('✅ Substitute exercise test passed');
   });
 
   test('should handle generation without crashing', async ({ page }) => {
