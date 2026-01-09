@@ -81,12 +81,15 @@ export default function WorkoutLogger() {
 
   const loadWorkoutData = async () => {
     try {
-      // Check for workout passed from Workouts page
+      // Check for workout passed from Workouts page via sessionStorage
       const storedWorkout = sessionStorage.getItem('currentWorkout');
+      let importedWorkout: CurrentWorkout | null = null;
+      
       if (storedWorkout) {
         const parseResult = safeJSONParse(storedWorkout, CurrentWorkoutSchema, 'WorkoutLogger sessionStorage');
         
         if (parseResult.success && parseResult.data) {
+          importedWorkout = parseResult.data;
           setCurrentWorkout(parseResult.data);
           if (process.env.NODE_ENV === 'development') {
             console.log('✅ Successfully loaded workout from sessionStorage:', parseResult.data);
@@ -113,16 +116,14 @@ export default function WorkoutLogger() {
       const dateLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
       setWorkoutLog(dateLog || null);
       
-
-      
-      // Initialize exercise entries if starting new workout
-      if (currentWorkout && !dateLog) {
-        console.log('Loading imported workout with exercises:', currentWorkout.exercises);
+      // Handle imported workout (use importedWorkout, NOT currentWorkout which is stale)
+      if (importedWorkout && !dateLog) {
+        console.log('Loading imported workout with exercises:', importedWorkout.exercises);
         
-        // Use ExerciseDBService to load exercise names (base-path safe)
+        // Load exercise names using ExerciseDBService
         const entries: ExerciseLogEntry[] = [];
         
-        for (const ex of currentWorkout.exercises) {
+        for (const ex of importedWorkout.exercises) {
           let exerciseName = `Exercise ${ex.exerciseId}`;
           try {
             const exercise = await ExerciseDBService.getExerciseById(ex.exerciseId);
@@ -139,33 +140,31 @@ export default function WorkoutLogger() {
             sets: []
           });
         }
+        
+        // Create workout log immediately for persistence
+        const newLog: WorkoutLog = {
+          id: crypto.randomUUID(),
+          date: selectedDate,
+          workoutPlanId: importedWorkout.workoutPlanId,
+          entries: entries,
+          cardioEntries: [],
+          sessionNotes: importedWorkout.notes || '',
+          duration: 0,
+          timeEntries: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        await repositories.workout.createWorkoutLog(newLog);
         
         console.log('Setting exercise entries:', entries);
         setExerciseEntries(entries);
-        
-        // For imported workouts from generated plans, immediately set logging mode
+        setWorkoutLog(newLog);
         setIsLogging(true);
-        
-        for (const ex of currentWorkout.exercises) {
-          let exerciseName = `Exercise ${ex.exerciseId}`;
-          try {
-            const exercise = await ExerciseDBService.getExerciseById(ex.exerciseId);
-            if (exercise) {
-              exerciseName = exercise.name;
-            }
-          } catch (error) {
-            console.warn(`Failed to load exercise ${ex.exerciseId}:`, error);
-          }
-          
-          entries.push({
-            exerciseId: ex.exerciseId,
-            exerciseName,
-            sets: []
-          });
-        }
-        
-        setExerciseEntries(entries);
+        setStartTime(new Date());
+
       } else if (dateLog) {
+        // Load existing workout log from database
         console.log('Loading existing workout log:', dateLog);
         console.log('Workout entries with sets:', dateLog.entries.map(entry => ({
           exerciseName: entry.exerciseName,
@@ -432,18 +431,6 @@ export default function WorkoutLogger() {
         throw new Error('No valid exercises could be imported');
       }
       
-      // Set the state
-      setExerciseEntries(entries);
-      setCurrentWorkout({
-        workoutPlanId: plan.id,
-        exercises: workout.exercises,
-        notes: workout.notes || ''
-      });
-      setShowImportFromProgram(false);
-      setManualWorkoutMode(false);
-      setIsLogging(true);
-      setStartTime(new Date());
-      
       // Clear any existing workout log for this date first
       try {
         const existingLog = await repositories.workout.getWorkoutLogByDate(selectedDate);
@@ -454,6 +441,35 @@ export default function WorkoutLogger() {
         console.error('Warning: Failed to clear existing log:', err);
         // Don't throw - continue with import
       }
+      
+      // Create a new workout log entry immediately for imported workouts
+      const newLog: WorkoutLog = {
+        id: crypto.randomUUID(),
+        date: selectedDate,
+        workoutPlanId: plan.id,
+        entries: entries, // Save exercises even if they have no sets yet
+        cardioEntries: [],
+        sessionNotes: workout.notes || '',
+        duration: 0, // Will be updated when workout is finished
+        timeEntries: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await repositories.workout.createWorkoutLog(newLog);
+      
+      // Set the state AFTER saving to ensure persistence
+      setExerciseEntries(entries);
+      setWorkoutLog(newLog);
+      setCurrentWorkout({
+        workoutPlanId: plan.id,
+        exercises: workout.exercises,
+        notes: workout.notes || ''
+      });
+      setShowImportFromProgram(false);
+      setManualWorkoutMode(false);
+      setIsLogging(true);
+      setStartTime(new Date());
       
       // Show success message
       const successDiv = document.createElement('div');
