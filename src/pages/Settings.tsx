@@ -162,6 +162,110 @@ export default function Settings() {
     await loadAIDiagnostics();
   };
 
+  const resetAppData = async () => {
+    const confirmed = window.confirm(
+      '⚠️ Warning: This will permanently delete all your data and cached assets:\n\n' +
+      '• All profiles and settings\n' +
+      '• Workout plans and logs\n' +
+      '• Meal plans and nutrition data\n' +
+      '• All cached assets and service workers\n\n' +
+      'This action cannot be undone.\n\n' +
+      'Are you sure you want to continue?'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      console.log('🔄 Starting app data reset...');
+      
+      // 1. Clear all storage and session storage
+      console.log('Step 1: Clearing localStorage and sessionStorage...');
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // 2. Delete IndexedDB databases
+      console.log('Step 2: Deleting IndexedDB databases...');
+      if ('indexedDB' in window) {
+        const dbNames = await indexedDB.databases();
+        console.log('Found databases:', dbNames);
+        
+        for (const dbInfo of dbNames) {
+          if (dbInfo.name) {
+            try {
+              await new Promise<void>((resolve, reject) => {
+                const request = indexedDB.deleteDatabase(dbInfo.name!);
+                request.onsuccess = () => {
+                  console.log(`✅ Deleted database: ${dbInfo.name}`);
+                  resolve();
+                };
+                request.onerror = () => {
+                  console.error(`❌ Failed to delete database: ${dbInfo.name}`);
+                  reject();
+                };
+                request.onblocked = () => {
+                  console.warn(`⚠️ Database blocked: ${dbInfo.name}`);
+                  resolve();
+                };
+              });
+            } catch (error) {
+              console.error(`Error deleting ${dbInfo.name}:`, error);
+            }
+          }
+        }
+      }
+      
+      // 3. Clear all Cache Storage
+      console.log('Step 3: Clearing Cache Storage...');
+      if ('caches' in window) {
+        try {
+          const cacheNames = await caches.keys();
+          console.log('Found caches:', cacheNames);
+          
+          for (const cacheName of cacheNames) {
+            try {
+              await caches.delete(cacheName);
+              console.log(`✅ Cleared cache: ${cacheName}`);
+            } catch (error) {
+              console.error(`Error clearing cache ${cacheName}:`, error);
+            }
+          }
+        } catch (error) {
+          console.error('Error clearing caches:', error);
+        }
+      }
+      
+      // 4. Unregister all service workers
+      console.log('Step 4: Unregistering service workers...');
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          console.log('Found service workers:', registrations.length);
+          
+          for (const registration of registrations) {
+            try {
+              await registration.unregister();
+              console.log('✅ Unregistered service worker:', registration.scope);
+            } catch (error) {
+              console.error('Error unregistering SW:', error);
+            }
+          }
+        } catch (error) {
+          console.error('Error unregistering service workers:', error);
+        }
+      }
+      
+      console.log('✅ App data reset complete. Reloading page...');
+      
+      // 5. Reload the page with cache-busting
+      console.log('Step 5: Reloading application...');
+      window.location.href = window.location.href.split('#')[0] + '?reset=' + Date.now();
+      
+    } catch (error) {
+      console.error('❌ Error during app data reset:', error);
+      alert('Some data could not be cleared. Please try reloading the page or clearing browser data manually.');
+    }
+  };
+
   const saveSettings = async () => {
     if (!settings) return;
     
@@ -688,13 +792,15 @@ export default function Settings() {
           </div>
         </div>
         
-        {/* Storage Information */}
+        {/* Privacy & Storage with Reset */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-3">
             <Shield className="h-5 w-5 text-primary-600" />
             <h2 className="text-xl font-semibold text-gray-900">Privacy & Storage</h2>
           </div>
-          <div className="space-y-3 text-sm text-gray-600">
+          
+          {/* Storage Info */}
+          <div className="space-y-3 text-sm text-gray-600 mb-6">
             <p>
               • All settings are stored locally in your browser using IndexedDB
             </p>
@@ -707,6 +813,25 @@ export default function Settings() {
             <p>
               • You can export your data at any time from the Privacy settings
             </p>
+          </div>
+          
+          {/* Reset Data Section */}
+          <div className="border-t pt-6 mt-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-3">Reset App Data</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Reset all local data, cached assets, and service workers. This returns the app to a clean state, 
+              useful for testing new deployments or starting fresh.
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              This will delete: profiles, workouts, meals, settings, caches, and service workers.
+            </p>
+            <button
+              onClick={resetAppData}
+              data-testid="reset-app-data-btn"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors"
+            >
+              Reset App Data & Reload
+            </button>
           </div>
         </div>
       </div>
