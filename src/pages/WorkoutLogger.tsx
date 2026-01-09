@@ -161,13 +161,13 @@ export default function WorkoutLogger() {
         console.log('Setting exercise entries:', entries);
         setExerciseEntries(entries);
         setWorkoutLog(newLog);
-        setIsLogging(true);
-        setStartTime(new Date());
-
+        // Don't set isLogging to true - these are already saved/imported logs
+        // This prevents showing "Save Workout" button for completed logs
+        setIsLogging(false);
       } else if (dateLog) {
-        // Load existing workout log from database
+        // Load existing workout log from database (already saved, not in progress)
         console.log('Loading existing workout log:', dateLog);
-        console.log('Workout entries with sets:', dateLog.entries.map(entry => ({
+        console.log('Workout entries with sets:', dateLog.entries.map((entry: ExerciseLogEntry) => ({
           exerciseName: entry.exerciseName,
           setsCount: entry.sets.length,
           firstSet: entry.sets[0]
@@ -175,7 +175,8 @@ export default function WorkoutLogger() {
         setExerciseEntries(dateLog.entries);
         setSessionNotes(dateLog.sessionNotes || '');
         setTimeEntries(dateLog.timeEntries || []);
-        setIsLogging(true);
+        // Don't set isLogging to true - this is an already saved log, not in progress
+        setIsLogging(false);
       }
     } catch (error) {
       console.error('Failed to load workout data:', error);
@@ -469,8 +470,9 @@ export default function WorkoutLogger() {
       });
       setShowImportFromProgram(false);
       setManualWorkoutMode(false);
-      setIsLogging(true);
-      setStartTime(new Date());
+      // Don't set isLogging to true for imported workouts - they're already saved
+      // This prevents showing a "Save Workout" button or starting a timer
+      setIsLogging(false);
       
       // Show success message
       const successDiv = document.createElement('div');
@@ -846,8 +848,11 @@ export default function WorkoutLogger() {
       
       {/* Today's Workout Status - Always Show Editable Interface */}
       {(workoutLog || isLogging || manualWorkoutMode) && (
-        <div className={`card mb-6 ${workoutLog && !(isLogging || manualWorkoutMode) ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-          <div className="flex justify-between items-center">
+        <div 
+          className={`card mb-6 ${workoutLog && !(isLogging || manualWorkoutMode) ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}
+          data-testid={workoutLog && !(isLogging || manualWorkoutMode) ? 'workout-logger-complete-status' : 'workout-logger-in-progress-status'}
+        >
+          <div className="flex justify-between items-center" data-testid="workout-logger-workout-status">
             <div>
               <h2 className={`text-lg font-medium ${workoutLog && !(isLogging || manualWorkoutMode) ? 'text-green-900' : 'text-blue-900'}`}>
                 {workoutLog && !(isLogging || manualWorkoutMode) ? 'Workout Complete! ✅' :
@@ -880,6 +885,7 @@ export default function WorkoutLogger() {
                 <button
                   onClick={finishWorkout}
                   className="btn btn-success"
+                  data-testid="workout-logger-save-workout"
                 >
                   Save Workout
                 </button>

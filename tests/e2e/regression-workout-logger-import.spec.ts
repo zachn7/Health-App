@@ -136,9 +136,12 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     expect(countBefore).toBeGreaterThan(0);
     console.log(`Exercises before reload: ${countBefore}`);
     
-    // Verify we're in "Workout in Progress" state (NOT "Start Workout")
-    await expect(page.getByText('Workout in Progress')).toBeVisible({ timeout: 5000 });
+    // Verify workout status is shown (either "Workout Complete" or "Workout in Progress")
+    // and NO "Start Workout" or "Save Workout" buttons (imported exercises are already saved/loaded)
+    const workoutStatus = page.getByTestId(testIds.workoutLogger.workoutStatus);
+    await expect(workoutStatus).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Start Workout')).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByTestId(testIds.workoutLogger.saveWorkoutButton)).not.toBeVisible({ timeout: 3000 });
     
     // Reload the page WITHOUT clicking save
     await page.reload();
@@ -219,10 +222,13 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     expect(countBefore).toBeGreaterThan(0);
     console.log(`Exercises imported: ${countBefore}`);
     
-    // Verify we're in "Workout in Progress" state (NOT "Ready to Start" or "Start Workout")
-    await expect(page.getByText('Workout in Progress')).toBeVisible({ timeout: 5000 });
+    // Verify workout status is shown and NO "Start Workout" or "Save Workout" buttons required
+    // (imported exercises are already saved/loaded)
+    const workoutStatus = page.getByTestId(testIds.workoutLogger.workoutStatus);
+    await expect(workoutStatus).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Start Workout')).not.toBeVisible({ timeout: 3000 });
     await expect(page.getByText('Ready to Start')).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByTestId(testIds.workoutLogger.saveWorkoutButton)).not.toBeVisible({ timeout: 3000 });
     
     // Reload to verify persistence WITHOUT clicking save
     await page.reload();
