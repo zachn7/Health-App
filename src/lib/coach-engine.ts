@@ -138,12 +138,34 @@ export async function generateWorkoutPlan(profile: Profile, goalId?: string): Pr
   // Initialize exercise DB to ensure data is loaded
   await ExerciseDBService.initialize();
   
+  // Normalize equipment names for better matching
+  // Map UI equipment names to exercise database equipment names
+  const EQUIPMENT_MAPPING: Record<string, string[]> = {
+    'bodyweight': ['body only', 'bodyweight', 'body only'],
+    'barbell': ['barbell'],
+    'dumbbells': ['dumbbell', 'dumbbells'],
+    'kettlebells': ['kettlebells'],
+    'resistance bands': ['bands', 'resistance bands'],
+    'cable machine': ['cable', 'cable machine'],
+    'squat rack': ['barbell', 'squat rack'], // squat rack primarily uses barbells
+    'bench': ['barbell', 'bench', 'machine'] // bench can use various equipment
+  };
+  
+  // Build list of all matching equipment names for profile selection
+  // Convert everything to lowercase for consistent comparison
+  const normalizedEquipment = equipment.flatMap(eq => 
+    EQUIPMENT_MAPPING[eq.toLowerCase()] || [eq]
+  ).map(eq => eq.toLowerCase());
+  
+  console.log('Profile equipment:', equipment);
+  console.log('Normalized equipment:', normalizedEquipment);
+  
   // Get all available exercises from the database
   const allExercises = await db.table('exercises').toArray();
   
-  // Filter exercises by available equipment
+  // Filter exercises by available equipment using normalized names
   const availableExercises = allExercises.filter((exercise: ExerciseDBItem) => 
-    exercise.equipment.some((eq: string) => equipment.includes(eq))
+    exercise.equipment.some((eq: string) => normalizedEquipment.includes(eq.toLowerCase()))
   );
   
   console.log(`Found ${allExercises.length} total exercises, ${availableExercises.length} match equipment`);
@@ -287,7 +309,7 @@ function getExercisesForBodyPart(
     console.log(`Step 3 - Synergist muscle match: ${exercises.length} exercises`);
   }
   
-  if (exercises.length === 0 && !bodyParts.includes('full body')) {
+  if (exercises.length === 0) {
     // Fallback 3: Use any exercises (full body fallback)
     console.log('Step 4 - Fallback to all available exercises');
     exercises = availableExercises.filter(ex => !usedExerciseIds.has(ex.id));
