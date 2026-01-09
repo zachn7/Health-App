@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { repositories } from '../db';
+import { repositories, db } from '../db';
 import { calculateTDEE, calculateMacroTargets } from '../lib/coach-engine';
+import { ExerciseDBService } from '../lib/exercise-db';
 import { webllmService } from '../lib/webllm-service';
 import { formatWeight } from '../lib/unit-conversions';
 import { getWebGPUDiagnostics } from '../ai/webgpu';
@@ -202,8 +203,32 @@ export default function Coach() {
     setGenerationError(null);
     try {
       console.log('Generating workout plan for profile:', profile.id, 'goal:', selectedGoalId);
+      
+      // Initialize exercise DB first to ensure data is loaded
+      await ExerciseDBService.initialize();
+      
+      // Verify exercises are available
+      const exerciseCount = await db.table('exercises').count();
+      console.log(`Exercise database has ${exerciseCount} exercises`);
+      
+      if (exerciseCount === 0) {
+        throw new Error('Exercise database is empty. Please reload the page and try again.');
+      }
+
       const { generateWorkoutPlan } = await import('../lib/coach-engine');
       const newPlan = await generateWorkoutPlan(profile, selectedGoalId);
+      
+      // Verify plan has exercises
+      const totalExercises = newPlan.weeks.reduce((sum, week) => 
+        sum + week.workouts.reduce((weekSum, workout) => 
+          weekSum + workout.exercises.length, 0), 0);
+      
+      console.log(`Generated plan with ${totalExercises} exercises across ${newPlan.weeks.length} weeks`);
+      
+      if (totalExercises === 0) {
+        throw new Error('Generated plan has no exercises. Please try again or check your profile settings.');
+      }
+      
       console.log('Workout plan generated successfully:', newPlan.name);
       setGeneratedPlan(newPlan);
     } catch (error) {
@@ -962,6 +987,7 @@ export default function Coach() {
             <button
               onClick={generateNewPlan}
               disabled={generating}
+              data-testid="coach-generate-plan-btn"
               className="btn btn-primary"
             >
               {generating ? 'Generating...' : 'Generate with Coach Engine'}
