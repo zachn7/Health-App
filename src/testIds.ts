@@ -22,6 +22,9 @@ export const testIds = {
   // Exercise Search / Picker
   exerciseSearch: {
     input: 'exercise-search-input',
+    resultsList: 'exercise-results-list',
+    resultsCount: 'exercise-results-count',
+    resultRow: 'exercise-result-',
     emptyState: 'exercise-search-empty-state',
     result: (id: string | number) => `exercise-result-${id}`,
   },

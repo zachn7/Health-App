@@ -509,8 +509,14 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
               <p>No exercises found. Try adjusting your search or filters.</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {results.map((exercise) => (
+            <>
+              {/* Results Count */}
+              <div className="mb-4 text-sm text-gray-600" data-testid="exercise-results-count">
+                Showing {results.length} exercise{results.length !== 1 ? 's' : ''}
+              </div>
+              
+              <div className="space-y-2" data-testid="exercise-results-list">
+                {results.map((exercise) => (
                 <button
                   key={exercise.id}
                   onClick={() => handleSelect(exercise)}
@@ -543,7 +549,8 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
                   </div>
                 </button>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
