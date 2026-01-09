@@ -160,6 +160,13 @@ export interface CardioLogEntry {
   notes?: string;
 }
 
+export interface TimeEntry {
+  id: string;
+  startTime: string; // ISO string
+  endTime?: string; // ISO string (undefined if timer is running)
+  duration?: number; // Duration in minutes (calculated when endTime is set)
+}
+
 export interface WorkoutLog {
   id: string;
   date: string;
@@ -168,6 +175,7 @@ export interface WorkoutLog {
   cardioEntries: CardioLogEntry[];
   sessionNotes?: string;
   duration: number;
+  timeEntries?: TimeEntry[]; // Optional timer entries
   createdAt: string;
   updatedAt: string;
 }

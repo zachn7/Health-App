@@ -147,6 +147,16 @@ export const testIds = {
     saveWeightButton: 'save-weight-button',
   },
 
+  // Workout Logger
+  workoutLogger: {
+    exerciseRow: (index: number) => `workout-logger-exercise-row-${index}`,
+    timerStart: 'workout-logger-timer-start',
+    timerStop: 'workout-logger-timer-stop',
+    timeEntry: (index: number) => `workout-logger-time-entry-${index}`,
+    timeEntryDelete: (index: number) => `workout-logger-time-entry-delete-${index}`,
+    timeSection: 'workout-logger-time-section',
+  },
+
   // Settings
   settings: {
     resetAppDataButton: 'reset-app-data-btn',

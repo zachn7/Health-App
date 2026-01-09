@@ -7,7 +7,7 @@ import { safeJSONParse, CurrentWorkoutSchema } from '../lib/schemas';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { ExerciseDBService } from '../lib/exercise-db';
 
-import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan } from '../types';
+import type { WorkoutLog, ExerciseLogEntry, ExerciseDBItem, Profile, WorkoutPlan, TimeEntry } from '../types';
 
 interface CurrentWorkout {
   workoutPlanId?: string;
@@ -31,6 +31,8 @@ export default function WorkoutLogger() {
   const [loading, setLoading] = useState(true);
   const [isLogging, setIsLogging] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [activeTimer, setActiveTimer] = useState<TimeEntry | null>(null);
   const [exerciseEntries, setExerciseEntries] = useState<ExerciseLogEntry[]>([]);
   const [sessionNotes, setSessionNotes] = useState('');
   
@@ -125,6 +127,7 @@ export default function WorkoutLogger() {
         })));
         setExerciseEntries(dateLog.entries);
         setSessionNotes(dateLog.sessionNotes || '');
+        setTimeEntries(dateLog.timeEntries || []);
         setIsLogging(true);
       }
     } catch (error) {
@@ -137,6 +140,47 @@ export default function WorkoutLogger() {
   const startWorkout = () => {
     setIsLogging(true);
     setStartTime(new Date());
+  };
+
+  // Timer functions
+  const startTimer = () => {
+    const newTimer: TimeEntry = {
+      id: `timer-${Date.now()}`,
+      startTime: new Date().toISOString()
+    };
+    setActiveTimer(newTimer);
+    setTimeEntries(prev => [...prev, newTimer]);
+  };
+
+  const stopTimer = () => {
+    if (!activeTimer) return;
+    
+    const endTime = new Date();
+    const startTimeMs = new Date(activeTimer.startTime).getTime();
+    const endTimeMs = endTime.getTime();
+    const durationMinutes = Math.round((endTimeMs - startTimeMs) / 1000 / 60);
+    
+    const completedTimer: TimeEntry = {
+      ...activeTimer,
+      endTime: endTime.toISOString(),
+      duration: durationMinutes
+    };
+    
+    // Update time entries with completed timer
+    setTimeEntries(prev => 
+      prev.map(entry => entry.id === activeTimer.id ? completedTimer : entry)
+    );
+    setActiveTimer(null);
+
+    // Autosave the new time entry
+    autosaveWorkout();
+  };
+
+  const deleteTimeEntry = (timerId: string) => {
+    setTimeEntries(prev => prev.filter(entry => entry.id !== timerId));
+    if (activeTimer?.id === timerId) {
+      setActiveTimer(null);
+    }
   };
 
   const addSet = (exerciseIndex: number) => {
@@ -174,6 +218,7 @@ export default function WorkoutLogger() {
         cardioEntries: [],
         sessionNotes: sessionNotes,
         duration: duration,
+        timeEntries: timeEntries,
         createdAt: workoutLog?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -646,9 +691,109 @@ export default function WorkoutLogger() {
         </div>
       )}
       
-      {/* Workout Logging Interface */}
-      {(isLogging || manualWorkoutMode) && exerciseEntries.map((exercise, exerciseIndex) => (
-        <div key={exercise.exerciseId} className="card mb-4">
+      {/* Today's Workout Status - Always Show Editable Interface */}
+      {(workoutLog || isLogging || manualWorkoutMode) && (
+        <div className={`card mb-6 ${workoutLog && !(isLogging || manualWorkoutMode) ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className={`text-lg font-medium ${workoutLog && !(isLogging || manualWorkoutMode) ? 'text-green-900' : 'text-blue-900'}`}>
+                {workoutLog && !(isLogging || manualWorkoutMode) ? 'Workout Complete! ✅' :
+                 manualWorkoutMode ? 'Manual Workout' : 'Workout in Progress'}
+              </h2>
+              <div className={workoutLog && !(isLogging || manualWorkoutMode) ? 'text-green-700' : 'text-blue-700'}>
+                {workoutLog && !(isLogging || manualWorkoutMode) ? (
+                  <>
+                    <p>Duration: {workoutLog.duration} minutes</p>
+                    <p>Exercises: {exerciseEntries.length}</p>
+                    <p>Total Sets: {exerciseEntries.reduce((sum, entry) => sum + entry.sets.length, 0)}</p>
+                  </>
+                ) : manualWorkoutMode ? (
+                  <p>{exerciseEntries.length} exercises added</p>
+                ) : (
+                  <p>Duration: {getWorkoutDuration()}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 items-center">
+              {/* Timer Controls */}
+              {activeTimer ? (
+                <button
+                  onClick={stopTimer}
+                  className="btn btn-warning"
+                  data-testid="workout-logger-timer-stop"
+                >
+                  Stop Timer ⏱️
+                </button>
+              ) : (
+                <button
+                  onClick={startTimer}
+                  className="btn btn-outline-primary"
+                  data-testid="workout-logger-timer-start"
+                >
+                  Start Timer ⏱️
+                </button>
+              )}
+              
+              {manualWorkoutMode && !isLogging && exerciseEntries.length > 0 && (
+                <button
+                  onClick={startWorkout}
+                  className="btn btn-primary"
+                >
+                  Start Logging
+                </button>
+              )}
+              {(isLogging || manualWorkoutMode) && (
+                <button
+                  onClick={finishWorkout}
+                  className="btn btn-success"
+                >
+                  Save Workout
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Timer Entries */}
+          {timeEntries.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-2" data-testid="workout-logger-time-section">Timer Entries</h3>
+              <div className="space-y-2">
+                {timeEntries.map((entry, index) => {
+                  const duration = entry.endTime
+                    ? Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 1000 / 60)
+                    : Math.round((new Date().getTime() - new Date(entry.startTime).getTime()) / 1000 / 60);
+                  
+                  const startTime = new Date(entry.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const endTime = entry.endTime ? new Date(entry.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active';
+                  
+                  return (
+                    <div 
+                      key={entry.id} 
+                      className="flex items-center justify-between text-sm bg-white rounded p-2 border"
+                      data-testid={`workout-logger-time-entry-${index}`}
+                    >
+                      <span>
+                        {startTime} - {endTime} ({duration} min)
+                      </span>
+                      <button
+                        onClick={() => deleteTimeEntry(entry.id)}
+                        className="text-red-500 hover:text-red-700 text-xs ml-2"
+                        data-testid={`workout-logger-time-entry-delete-${index}`}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+            
+      {/* Workout Logging Interface - Always Editable When Content Exists */}
+      {(workoutLog || isLogging || manualWorkoutMode) && exerciseEntries.map((exercise, exerciseIndex) => (
+        <div key={exercise.exerciseId} className="card mb-4" data-testid={`workout-logger-exercise-row-${exerciseIndex}`}>
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-lg font-medium text-gray-900">{exercise.exerciseName}</h3>
             {manualWorkoutMode && (
@@ -743,7 +888,7 @@ export default function WorkoutLogger() {
       )}
       
       {/* Session Notes */}
-      {(isLogging || manualWorkoutMode) && (
+      {(workoutLog || isLogging || manualWorkoutMode) && (
         <div className="card mb-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Session Notes (Optional)</h3>
           <textarea
