@@ -160,6 +160,7 @@ export const testIds = {
     pageHeading: 'workout-logger-heading',
     exerciseList: 'workout-logger-exercise-list',
     exerciseRow: (index: number) => `workout-logger-exercise-row-${index}`,
+    exerciseDeleteBtn: 'workout-logger-exercise-delete-btn',
     addExerciseButton: 'workout-logger-add-exercise',
     saveWorkoutButton: 'workout-logger-save-workout',
     timerStart: 'workout-logger-timer-start',

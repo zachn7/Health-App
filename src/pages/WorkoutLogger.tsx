@@ -510,10 +510,10 @@ export default function WorkoutLogger() {
     const updatedEntries = exerciseEntries.filter((_, index) => index !== exerciseIndex);
     setExerciseEntries(updatedEntries);
     
-    // If no exercises left, exit manual mode
+    // If no exercises left, exit manual mode (but not logging mode for imported workouts)
     if (updatedEntries.length === 0) {
       setManualWorkoutMode(false);
-      setIsLogging(false);
+      // Don't exit logging mode for imported workouts to keep UI consistent
     }
   };
 
@@ -855,11 +855,12 @@ export default function WorkoutLogger() {
         <div key={exercise.exerciseId} className="card mb-4" data-testid={`workout-logger-exercise-row-${exerciseIndex}`}>
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-lg font-medium text-gray-900">{exercise.exerciseName}</h3>
-            {manualWorkoutMode && (
+            {(manualWorkoutMode || isLogging) && (
               <button
                 onClick={() => handleRemoveExercise(exerciseIndex)}
                 className="text-red-500 hover:text-red-700 text-sm"
                 title="Remove exercise"
+                data-testid="workout-logger-exercise-delete-btn"
               >
                 Remove
               </button>
