@@ -340,4 +340,118 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     console.log('First bench result:', firstBenchText);
     expect(firstBenchText?.toLowerCase()).toContain('bench');
   });
+
+  test('should apply filters and narrow results correctly', async ({ page }) => {
+    // Navigate to Workout Logger to open exercise picker
+    await page.goto('./#/log/workout');
+    await page.waitForLoadState('networkidle');
+    
+    // Click to open exercise picker
+    const logManuallyBtn = page.getByRole('button', { name: /Log Exercises Manually/i });
+    const addAnotherBtn = page.getByRole('button', { name: /Add Another Exercise/i });
+    
+    if (await logManuallyBtn.isVisible({ timeout: 3000 })) {
+      await logManuallyBtn.click();
+    } else if (await addAnotherBtn.isVisible({ timeout: 3000 })) {
+      await addAnotherBtn.click();
+    } else {
+      throw new Error('Could not find exercise picker button');
+    }
+    await page.waitForTimeout(500);
+    
+    // Wait for Exercise Picker to open
+    await expect(page.getByText('Exercise Picker')).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(1000);
+    
+    // Get initial results count (should show all exercises)
+    const resultsCount = page.getByTestId('exercise-results-count');
+    await expect(resultsCount).toBeVisible({ timeout: 5000 });
+    
+    const initialCountText = await resultsCount.textContent();
+    const initialCountMatch = initialCountText?.match(/Showing (\d+) exercise/);
+    const initialCount = initialCountMatch ? parseInt(initialCountMatch[1], 10) : 0;
+    
+    console.log(`Initial exercise count: ${initialCount}`);
+    expect(initialCount).toBeGreaterThan(100);
+    
+    // Apply a difficulty filter
+    const difficultyFilter = page.getByTestId('exercise-filter-difficulty');
+    await difficultyFilter.selectOption('beginner');
+    await page.waitForTimeout(500);
+    
+    // Get filtered results count
+    const beginnerCountText = await resultsCount.textContent();
+    const beginnerCountMatch = beginnerCountText?.match(/Showing (\d+) exercise/);
+    const beginnerCount = beginnerCountMatch ? parseInt(beginnerCountMatch[1], 10) : 0;
+    
+    console.log(`Beginner filter count: ${beginnerCount}`);
+    expect(beginnerCount).toBeGreaterThan(0);
+    expect(beginnerCount).toBeLessThan(initialCount); // Should be fewer than total
+    
+    // Verify first result has 'beginner' difficulty badge
+    const resultsList = page.getByTestId('exercise-results-list');
+    const firstResult = resultsList.locator('[data-testid^="exercise-result-"]').first();
+    
+    // Get difficulty badge from first result
+    const difficultyBadge = firstResult.locator('.bg-green-100'); // difficulty has green badge style
+    await expect(difficultyBadge).toBeVisible();
+    
+    const badgeText = await difficultyBadge.textContent();
+    expect(badgeText?.toLowerCase()).toBe('beginner');
+    
+    // Clear filters
+    const clearButton = page.getByTestId('exercise-filter-clear');
+    await clearButton.click();
+    await page.waitForTimeout(500);
+    
+    // Verify results count returns to initial count
+    const clearedCountText = await resultsCount.textContent();
+    const clearedCountMatch = clearedCountText?.match(/Showing (\d+) exercise/);
+    const clearedCount = clearedCountMatch ? parseInt(clearedCountMatch[1], 10) : 0;
+    
+    console.log(`After clearing filters: ${clearedCount}`);
+    expect(clearedCount).toBe(initialCount);
+    
+    // Now test combining search + filters
+    const searchInput = page.getByTestId('exercise-search-input');
+    await searchInput.fill('bench');
+    await page.waitForTimeout(500);
+    
+    const benchOnlyCountText = await resultsCount.textContent();
+    const benchOnlyCountMatch = benchOnlyCountText?.match(/Showing (\d+) exercise/);
+    const benchOnlyCount = benchOnlyCountMatch ? parseInt(benchOnlyCountMatch[1], 10) : 0;
+    
+    console.log(`Bench search count: ${benchOnlyCount}`);
+    expect(benchOnlyCount).toBeGreaterThan(0);
+    
+    // Now add difficulty filter on top of search
+    await difficultyFilter.selectOption('beginner');
+    await page.waitForTimeout(500);
+    
+    const benchBeginnerCountText = await resultsCount.textContent();
+    const benchBeginnerCountMatch = benchBeginnerCountText?.match(/Showing (\d+) exercise/);
+    const benchBeginnerCount = benchBeginnerCountMatch ? parseInt(benchBeginnerCountMatch[1], 10) : 0;
+    
+    console.log(`Bench + Beginner filter count: ${benchBeginnerCount}`);
+    expect(benchBeginnerCount).toBeGreaterThan(0);
+    expect(benchBeginnerCount).toBeLessThanOrEqual(benchOnlyCount); // Should be fewer or equal
+    
+    // Verify all results have 'bench' in name and 'beginner' difficulty
+    const allResults = resultsList.locator('[data-testid^="exercise-result-"]');
+    const resultCount = await allResults.count();
+    console.log(`Combined filter results count: ${resultCount}`);
+    
+    for (let i = 0; i < Math.min(resultCount, 3); i++) {
+      const result = allResults.nth(i);
+      const resultText = await result.textContent();
+      expect(resultText?.toLowerCase()).toContain('bench');
+      
+      const resultDifficultyBadge = result.locator('.bg-green-100');
+      await expect(resultDifficultyBadge).toBeVisible();
+      const resultBadgeText = await resultDifficultyBadge.textContent();
+      expect(resultBadgeText?.toLowerCase()).toBe('beginner');
+    }
+    
+    console.log('✅ Filters work correctly and combine with search');
+  });
 });
