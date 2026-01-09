@@ -40,11 +40,15 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const exerciseRow = page.getByTestId(testIds.workoutLogger.exerciseRow(0));
     await expect(exerciseRow).toBeVisible({ timeout: 5000 });
     
-    // Look for 'Add Set' button anywhere in the row, not just a filtered button
+    // When exercise has no sets, button is "Add First Set"
+    const addFirstSetButton = exerciseRow.getByRole('button', { name: 'Add First Set' });
+    await expect(addFirstSetButton).toBeVisible({ timeout: 5000 });
+    await addFirstSetButton.click();
+    await page.waitForTimeout(1000);
+    
+    // After adding first set, button becomes "Add Set"
     const addSetButton = exerciseRow.getByRole('button', { name: 'Add Set' });
     await expect(addSetButton).toBeVisible({ timeout: 5000 });
-    await addSetButton.click();
-    await page.waitForTimeout(1000);
     
     // Enter a rep value
     const allInputs = exerciseRow.locator('input[type="number"]');
@@ -173,10 +177,10 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     await page.goto('./#/log/workout');
     await page.waitForLoadState('networkidle');
     
-    // Click "Log Exercises Manually" if visible
-    const manuallyBtn = page.locator('button', { hasText: 'Log Exercises Manually' });
-    if (await manuallyBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await manuallyBtn.click();
+    // Click "Manual Workout" if visible to ensure timer is accessible
+    const manualWorkoutBtn = page.locator('button', { hasText: 'Manual Workout' });
+    if (await manualWorkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await manualWorkoutBtn.click();
       await page.waitForTimeout(500);
     }
     

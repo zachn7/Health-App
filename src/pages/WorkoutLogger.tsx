@@ -52,11 +52,32 @@ export default function WorkoutLogger() {
     setCurrentWorkout(null);
     setIsLogging(false);
     setStartTime(null);
+    setTimeEntries([]);
+    setActiveTimer(null);
     
     loadWorkoutData();
     loadProfile();
     loadWorkoutPlans();
   }, [selectedDate]);
+
+  // Real-time timer update using requestAnimationFrame
+  const timerUpdateRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (activeTimer) {
+      // Update timer display every second
+      timerUpdateRef.current = setInterval(() => {
+        // Force re-render to update elapsed time display
+        setTimeEntries(prev => [...prev]);
+      }, 1000);
+    }
+    
+    return () => {
+      if (timerUpdateRef.current) {
+        clearInterval(timerUpdateRef.current);
+        timerUpdateRef.current = null;
+      }
+    };
+  }, [activeTimer]);
 
   const loadWorkoutData = async () => {
     try {
@@ -172,8 +193,7 @@ export default function WorkoutLogger() {
     );
     setActiveTimer(null);
 
-    // Autosave the new time entry
-    autosaveWorkout();
+    // Note: Time entry will be saved when workout is saved via finishWorkout
   };
 
   const deleteTimeEntry = (timerId: string) => {
@@ -201,7 +221,8 @@ export default function WorkoutLogger() {
   };
 
   const autosaveWorkout = async () => {
-    if (!exerciseEntries.length || !exerciseEntries.some(entry => entry.sets.length > 0)) {
+    // Allow saving if there are exercises with sets OR time entries exist
+    if ((!exerciseEntries.length || !exerciseEntries.some(entry => entry.sets.length > 0)) && timeEntries.length === 0) {
       return; // Don't save empty workouts
     }
     
@@ -691,6 +712,72 @@ export default function WorkoutLogger() {
         </div>
       )}
       
+      {/* Timer Section - Always Available */}
+      <div className="card mb-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-medium text-gray-900">Timer</h2>
+            <p className="text-sm text-gray-600">Track your workout duration (optional)</p>
+          </div>
+          <div className="flex gap-2 items-center">
+            {/* Timer Controls - Always Visble */}
+            {activeTimer ? (
+              <button
+                onClick={stopTimer}
+                className="btn btn-warning"
+                data-testid="workout-logger-timer-stop"
+              >
+                Stop Timer ⏱️
+              </button>
+            ) : (
+              <button
+                onClick={startTimer}
+                className="btn btn-outline-primary"
+                data-testid="workout-logger-timer-start"
+              >
+                Start Timer ⏱️
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Timer Entries */}
+        {timeEntries.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-2" data-testid="workout-logger-time-section">Timer Entries</h3>
+            <div className="space-y-2">
+              {timeEntries.map((entry, index) => {
+                const duration = entry.endTime
+                  ? Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 1000 / 60)
+                  : Math.round((new Date().getTime() - new Date(entry.startTime).getTime()) / 1000 / 60);
+                
+                const startTime = new Date(entry.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const endTime = entry.endTime ? new Date(entry.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active';
+                
+                return (
+                  <div 
+                    key={entry.id} 
+                    className="flex items-center justify-between text-sm bg-white rounded p-2 border"
+                    data-testid={`workout-logger-time-entry-${index}`}
+                  >
+                    <span>
+                      {startTime} - {endTime} ({duration} min)
+                    </span>
+                    <button
+                      onClick={() => deleteTimeEntry(entry.id)}
+                      className="text-red-500 hover:text-red-700 text-xs ml-2"
+                      data-testid={`workout-logger-time-entry-delete-${index}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      
       {/* Today's Workout Status - Always Show Editable Interface */}
       {(workoutLog || isLogging || manualWorkoutMode) && (
         <div className={`card mb-6 ${workoutLog && !(isLogging || manualWorkoutMode) ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
@@ -715,25 +802,6 @@ export default function WorkoutLogger() {
               </div>
             </div>
             <div className="flex gap-2 items-center">
-              {/* Timer Controls */}
-              {activeTimer ? (
-                <button
-                  onClick={stopTimer}
-                  className="btn btn-warning"
-                  data-testid="workout-logger-timer-stop"
-                >
-                  Stop Timer ⏱️
-                </button>
-              ) : (
-                <button
-                  onClick={startTimer}
-                  className="btn btn-outline-primary"
-                  data-testid="workout-logger-timer-start"
-                >
-                  Start Timer ⏱️
-                </button>
-              )}
-              
               {manualWorkoutMode && !isLogging && exerciseEntries.length > 0 && (
                 <button
                   onClick={startWorkout}
@@ -752,42 +820,6 @@ export default function WorkoutLogger() {
               )}
             </div>
           </div>
-          
-          {/* Timer Entries */}
-          {timeEntries.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-2" data-testid="workout-logger-time-section">Timer Entries</h3>
-              <div className="space-y-2">
-                {timeEntries.map((entry, index) => {
-                  const duration = entry.endTime
-                    ? Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 1000 / 60)
-                    : Math.round((new Date().getTime() - new Date(entry.startTime).getTime()) / 1000 / 60);
-                  
-                  const startTime = new Date(entry.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  const endTime = entry.endTime ? new Date(entry.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active';
-                  
-                  return (
-                    <div 
-                      key={entry.id} 
-                      className="flex items-center justify-between text-sm bg-white rounded p-2 border"
-                      data-testid={`workout-logger-time-entry-${index}`}
-                    >
-                      <span>
-                        {startTime} - {endTime} ({duration} min)
-                      </span>
-                      <button
-                        onClick={() => deleteTimeEntry(entry.id)}
-                        className="text-red-500 hover:text-red-700 text-xs ml-2"
-                        data-testid={`workout-logger-time-entry-delete-${index}`}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
             
