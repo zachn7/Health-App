@@ -104,45 +104,15 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       }
     });
     
-    // Navigate to nutrition page and wait for it to be ready
+    // Set valid API key using the settings page (reliable UI-based approach)
+    await page.goto('./#/settings');
+    await page.getByLabel('API Key').fill('test-api-key-for-testing');
+    await page.getByRole('button', { name: 'Save Settings' }).click();
+    await expect(page.getByText('Settings saved successfully!')).toBeVisible({ timeout: 10000 });
+    
+    // Navigate to nutrition page with settings ready
     await page.goto('./#/nutrition');
     await expect(page.getByTestId('nutrition-page-heading')).toBeVisible({ timeout: 10000 });
-    
-    // Set up valid API key in IndexedDB after page is ready
-    const result = await Promise.race([
-      page.evaluate(async () => {
-        const settings = {
-          id: 'settings',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          fdcApiKey: 'test-api-key-for-testing',
-          enableUSDALookups: true,
-          enableWebLLMCoach: false
-        };
-        
-        const request = indexedDB.open('health-app-db', 1);
-        return new Promise<void>((resolve, reject) => {
-          request.onerror = () => reject(new Error('IDB open failed'));
-          request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction(['settings'], 'readwrite');
-            const store = tx.objectStore('settings');
-            store.put(settings);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(new Error('IDB transaction failed'));
-          };
-        });
-      }),
-      page.waitForTimeout(5000).then(() => Promise.reject(new Error('IDB setup timeout'))) 
-    ]);
-    
-    if (result instanceof Error) {
-      console.log('IDB setup warning:', result.message);
-    }
-    
-    // Reload to apply the new settings and enable USDA search button
-    await page.reload();
-    await page.waitForLoadState();
   });
 
   test('should show initial zero totals when no foods logged', async ({ page }) => {
@@ -318,40 +288,19 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should handle USDA lookup failures gracefully', async ({ page }) => {
-    // Override the valid key with invalid to test error handling
-    await page.evaluate(async () => {
-      const settings = {
-        id: 'settings',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        fdcApiKey: 'invalid-key',
-        enableUSDALookups: true,
-        enableWebLLMCoach: false
-      };
-      
-      return new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('health-app-db', 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction(['settings'], 'readwrite');
-          const store = tx.objectStore('settings');
-          store.put(settings);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        };
-      });
-    });
+    // Override the valid key with invalid using settings page
+    await page.goto('./#/settings');
+    await page.getByLabel('API Key').fill('invalid-key');
+    await page.getByRole('button', { name: 'Save Settings' }).click();
+    await expect(page.getByText('Settings saved successfully!')).toBeVisible({ timeout: 10000 });
     
-    // Reload to ensure the new settings take effect
-    await page.reload();
-    await page.waitForLoadState();
+    // Go to nutrition page
+    await page.goto('./#/nutrition');
     
     // Try to search with invalid key
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
     
-    // Wait for error to appear after search attempt (debounce + response time)
     // Should show appropriate error message
     await expect(page.getByTestId('usda-error')).toBeVisible({ timeout: 10000 });
   });
