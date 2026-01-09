@@ -119,7 +119,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.goto('./#/progress');
     await page.waitForLoadState();
     
-    // Log first weight
+    // Open weight log form
     await page.getByRole('button', { name: 'Log Weight' }).click();
     await page.waitForLoadState();
     await page.getByTestId('weight-input').fill('175.0');
@@ -142,6 +142,9 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Refresh the page
     await page.reload();
     await page.waitForLoadState();
+    
+    // Wait for weight display to update with imperial units
+    await page.waitForTimeout(500);
     
     // Both weight entries should still be there and in pounds
     await expect(page.getByTestId('current-weight-display')).toContainText('175.0');
@@ -245,6 +248,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     
     // Should still show imperial units for weight
     await expect(page.getByTestId('weight-input')).toBeVisible();
-    await expect(page.getByTestId('weight-unit-label')).toContainText('lb');
+    // Wait for profile to load and unit to update to lb
+    await expect(page.getByTestId('weight-unit-label')).toContainText('lb', { timeout: 10000 });
   });
 });
