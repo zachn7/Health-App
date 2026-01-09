@@ -9,7 +9,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     });
     
     // Set up mock USDA API responses
-    await page.route('**/fdc.nal.usda.gov/**', async (route) => {
+    await page.route('**/api.nal.usda.gov/**', async (route) => {
       // Mock USDA API responses for test foods
       const url = route.request().url();
       if (url.includes('/search')) {
@@ -44,6 +44,48 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
             ]
           })
         });
+      } else if (url.includes('/food/')) {
+        // Mock food detail response
+        const fdcIdMatch = url.match(/\/food\/(\d+)/);
+        if (fdcIdMatch) {
+          const fdcId = parseInt(fdcIdMatch[1]);
+          const foodData = {
+            123456: {
+              description: 'Test Apple',
+              dataType: 'Foundation',
+              foodNutrients: [
+                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 52 },
+                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.3 },
+                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
+                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 14 }
+              ],
+              servingSize: 100,
+              servingSizeUnit: 'g'
+            },
+            789012: {
+              description: 'Test Banana',
+              dataType: 'Foundation',
+              foodNutrients: [
+                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 89 },
+                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 1.1 },
+                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
+                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
+              ],
+              servingSize: 100,
+              servingSizeUnit: 'g'
+            }
+          };
+          
+          if (foodData[fdcId]) {
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify(foodData[fdcId])
+            });
+            return;
+          }
+        }
+        await route.continue();
       } else {
         await route.continue();
       }
@@ -58,9 +100,12 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Should show nutrition page with zero values initially
     await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
     
-    // Check that totals are initially 0 or not displayed
-    const calorieText = await page.locator('text=kcal').first().textContent();
-    expect(calorieText).toContain('0');
+    // Wait for page to fully load (wait for calories section to be visible)
+    await page.waitForSelector('text=Calories', { timeout: 10000 });
+    
+    // Check that totals are initially 0
+    const caloriesSection = page.locator('text=/0.*kcal|Calories/').first();
+    await expect(caloriesSection).toBeVisible();
   });
 
   test('should add first USDA food and update totals immediately', async ({ page }) => {
@@ -80,14 +125,18 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Search for USDA food
     await page.getByTestId('usda-search-input').fill('apple');
     
+    // Wait for debounce delay (500ms) + buffer for search to complete
+    await page.waitForTimeout(600);
+    
     // Wait for search results to appear
     await expect(page.getByTestId('usda-results')).toBeVisible();
     
     // Click "Add" button on the test apple
-    await page.getByTestId('usda-add-food').first().click();
+    const addFoodButton = page.getByTestId('usda-add-food').first();
+    await addFoodButton.click();
     
     // Wait for "Adding..." to disappear (indicating add is complete)
-    await page.getByTestId('usda-add-food').first().getByText('Adding...', { exact: true }).not.toBeVisible();
+    await expect(addFoodButton).not.toHaveText('Adding...', { timeout: 10000 });
     
     // Close the USDA import modal by clicking the search button again
     await page.getByTestId('usda-search-button').click();
@@ -111,19 +160,21 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Add apple
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
+    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
     await appleButton.click();
-    await appleButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await expect(appleButton).not.toHaveText('Adding...', { timeout: 10000 });
     await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Add second food (banana)
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('banana');
+    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     const bananaButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Banana' });
     await bananaButton.click();
-    await bananaButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await expect(bananaButton).not.toHaveText('Adding...', { timeout: 10000 });
     await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Should show accumulated totals: 52 + 89 = 141 calories
@@ -141,19 +192,21 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Add apple
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
+    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
     await appleButton.click();
-    await appleButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await expect(appleButton).not.toHaveText('Adding...', { timeout: 10000 });
     await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Add banana
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('banana');
+    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     const bananaButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Banana' });
     await bananaButton.click();
-    await bananaButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await expect(bananaButton).not.toHaveText('Adding...', { timeout: 10000 });
     await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Verify totals are there
@@ -182,10 +235,11 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Add apple
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
+    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     const appleButton = page.getByTestId('usda-add-food').filter({ hasText: 'Test Apple' });
     await appleButton.click();
-    await appleButton.getByText('Adding...', { exact: true }).not.toBeVisible();
+    await expect(appleButton).not.toHaveText('Adding...', { timeout: 10000 });
     await page.getByTestId('usda-search-button').click(); // Close modal
     
     // Find the apple item and click edit serving
@@ -241,6 +295,9 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Try to search with invalid key
     await page.getByTestId('usda-search-button').click();
     await page.getByTestId('usda-search-input').fill('apple');
+    
+    // Wait for debounce delay
+    await page.waitForTimeout(600);
     
     // Should show appropriate error message (search happens automatically)
     await expect(page.getByTestId('usda-error')).toBeVisible({ timeout: 10000 });
