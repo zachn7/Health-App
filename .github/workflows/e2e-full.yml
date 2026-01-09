@@ -28,6 +28,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
+      - name: Enforce no test skips
+        run: node scripts/assert-no-playwright-skips.mjs
+      
       - name: Run full E2E test suite
         run: npx playwright test
       
