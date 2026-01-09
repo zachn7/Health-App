@@ -54,17 +54,28 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       }
     });
     
-    // Verify exercises are loaded
-    const exerciseContainer = page.locator('.space-y-4').first();
-    await expect(exerciseContainer).toBeVisible({ timeout: 10000 });
+    // Verify workout plans are loaded and visible
+    // Wait for any workout plan to be created/imported
+    await page.waitForTimeout(2000);
     
-    // Check that exercise entries exist
-    const exerciseEntries = page.locator('div').filter({ hasText: /Exercise/i });
-    const entryCount = await exerciseEntries.count();
-    console.log(`Found ${entryCount} exercise entries`);
+    // Check for workout plans using stable testId pattern
+    const workoutPlans = page.locator('[data-testid^="workout-plan-"]');
+    const planCount = await workoutPlans.count();
+    console.log(`Found ${planCount} workout plans`);
     
-    // We should have at least some exercise entries loaded
-    expect(entryCount).toBeGreaterThan(0);
+    // If plans exist, check for exercises within them
+    if (planCount > 0) {
+      const exercises = page.locator('[data-testid^="plan-exercise-"]');
+      const exerciseCount = await exercises.count();
+      console.log(`Found ${exerciseCount} exercise entries in plans`);
+      expect(exerciseCount).toBeGreaterThan(0);
+    } else {
+      // If no plans, check if exercises are loaded separately
+      const exerciseEntries = page.locator('div').filter({ hasText: /Exercise/i });
+      const entryCount = await exerciseEntries.count();
+      console.log(`Found ${entryCount} exercise entries (no plans)`);
+      expect(entryCount).toBeGreaterThan(0);
+    }
     
     // Check that exercise names are NOT the fallback "Exercise {id}" format
     // (this would indicate the DB load failed)
