@@ -163,12 +163,12 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should add second USDA food and accumulate totals', async ({ page }) => {
-    // Go to nutrition and add first food (apple)
-    await page.goto('./#/nutrition');
-    await page.waitForLoadState();
+    // Wait for nutrition page to be ready
+    await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
     
     // Add apple
     await page.getByTestId('usda-search-button').click();
+    await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('apple');
     await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
@@ -180,6 +180,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     
     // Add second food (banana)
     await page.getByTestId('usda-search-button').click();
+    await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('banana');
     await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
@@ -197,6 +198,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   test('should persist food entries across page refreshes', async ({ page }) => {
     // Add apple
     await page.getByTestId('usda-search-button').click();
+    await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('apple');
     await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
@@ -208,6 +210,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     
     // Add banana
     await page.getByTestId('usda-search-button').click();
+    await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('banana');
     await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
@@ -233,8 +236,12 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
   });
 
   test('should handle serving<->grams unit switching correctly', async ({ page }) => {
+    // Wait for nutrition page to be ready
+    await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+    
     // Add apple
     await page.getByTestId('usda-search-button').click();
+    await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('apple');
     await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
