@@ -1354,16 +1354,20 @@ export default function Nutrition() {
                       return (
                         <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
                           <div className="text-center p-2 bg-blue-50 rounded" data-testid={testIds.quantity.macroTileCalories}>
-                            <div className="font-medium text-blue-800">{Math.round(result.newCalories)} cal</div>
+                            <div className="text-xs text-blue-600 mb-0.5" title="Calories">Cal</div>
+                            <div className="font-bold text-blue-800">{Math.round(result.newCalories)}</div>
                           </div>
                           <div className="text-center p-2 bg-purple-50 rounded" data-testid={testIds.quantity.macroTileProtein}>
-                            <div className="font-medium text-purple-800">{Math.round(result.newProteinG)}g</div>
+                            <div className="text-xs text-purple-600 mb-0.5" title="Protein">P</div>
+                            <div className="font-bold text-purple-800">{Math.round(result.newProteinG)}g</div>
                           </div>
                           <div className="text-center p-2 bg-orange-50 rounded" data-testid={testIds.quantity.macroTileCarbs}>
-                            <div className="font-medium text-orange-800">{Math.round(result.newCarbsG)}g</div>
+                            <div className="text-xs text-orange-600 mb-0.5" title="Carbs">C</div>
+                            <div className="font-bold text-orange-800">{Math.round(result.newCarbsG)}g</div>
                           </div>
                           <div className="text-center p-2 bg-yellow-50 rounded" data-testid={testIds.quantity.macroTileFat}>
-                            <div className="font-medium text-yellow-800">{Math.round(result.newFatG)}g</div>
+                            <div className="text-xs text-yellow-600 mb-0.5" title="Fat">F</div>
+                            <div className="font-bold text-yellow-800">{Math.round(result.newFatG)}g</div>
                           </div>
                         </div>
                       );
