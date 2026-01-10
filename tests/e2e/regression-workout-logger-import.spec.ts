@@ -176,6 +176,18 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     // Generate a workout plan
     page.on('dialog', dialog => dialog.accept());
     await page.getByTestId(testIds.workouts.generatePlanButton).click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     
     // Wait for the plan to appear - use auto-waiting assertion
     const workoutPlans = page.locator('[data-testid^="workout-plan-"]');
@@ -230,6 +242,10 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     await expect(page.getByText('Ready to Start')).not.toBeVisible({ timeout: 3000 });
     await expect(page.getByTestId(testIds.workoutLogger.saveWorkoutButton)).not.toBeVisible({ timeout: 3000 });
     
+    // Verify NO "workout complete" popup/dialog appears after import
+    await expect(page.getByTestId(testIds.workoutLogger.completePopup)).not.toBeVisible({ timeout: 3000 });
+    await expect(page.locator('dialog').filter({ hasText: 'workout complete' })).not.toBeVisible({ timeout: 3000 });
+    
     // Reload to verify persistence WITHOUT clicking save
     await page.reload();
     await page.waitForLoadState('networkidle');
@@ -258,6 +274,18 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     // Generate a workout plan
     page.on('dialog', dialog => dialog.accept());
     await page.getByTestId(testIds.workouts.generatePlanButton).click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     
     // Wait for the plan to appear
     const workoutPlans = page.locator('[data-testid^="workout-plan-"]');
@@ -291,6 +319,10 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Wait for exercises to load
     await expect(page.getByTestId(testIds.workoutLogger.exerciseList)).toBeVisible({ timeout: 5000 });
+    
+    // Verify NO "workout complete" popup/dialog appears after import
+    await expect(page.getByTestId(testIds.workoutLogger.completePopup)).not.toBeVisible({ timeout: 3000 });
+    await expect(page.locator('dialog').filter({ hasText: 'workout complete' })).not.toBeVisible({ timeout: 3000 });
     
     // Count exercises initially
     const exerciseRows = page.locator('[data-testid^="workout-logger-exercise-row-"]');
