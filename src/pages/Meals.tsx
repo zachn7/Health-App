@@ -39,6 +39,7 @@ export default function Meals() {
     servingSize: '',
     grams: ''
   });
+  const [editingMealItemIndex, setEditingMealItemIndex] = useState<number | null>(null);
 
   useEffect(() => {
     loadMeals();
@@ -90,6 +91,48 @@ export default function Meals() {
       }),
       { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
     );
+  };
+
+  const updateMealItemQuantity = (index: number, updates: {
+    quantidade?: number;
+    baseUnit?: 'serving' | 'grams';
+    servingGrams?: number;
+    servingSize?: string;
+  }) => {
+    const newItems = [...mealItems];
+    const item = newItems[index];
+    
+    // Calculate macros per gram based on original values
+    const macrosPerGram = {
+      calories: item.calories / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
+      proteinG: item.proteinG / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
+      carbsG: item.carbsG / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
+      fatG: item.fatG / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
+    };
+    
+    // Apply updates
+    if (updates.quantidade !== undefined) {
+      item.quantidade = updates.quantidade;
+    }
+    if (updates.baseUnit !== undefined) {
+      item.baseUnit = updates.baseUnit;
+    }
+    if (updates.servingGrams !== undefined) {
+      item.servingGrams = updates.servingGrams;
+    }
+    if (updates.servingSize !== undefined) {
+      item.servingSize = updates.servingSize;
+    }
+    
+    // Recalculate macros based on new quantity
+    const totalGrams = item.baseUnit === 'grams' ? item.quantidade : (item.quantidade * item.servingGrams);
+    item.computedTotalGrams = totalGrams;
+    item.calories = Math.round(macrosPerGram.calories * totalGrams * 10) / 10;
+    item.proteinG = Math.round(macrosPerGram.proteinG * totalGrams * 10) / 10;
+    item.carbsG = Math.round(macrosPerGram.carbsG * totalGrams * 10) / 10;
+    item.fatG = Math.round(macrosPerGram.fatG * totalGrams * 10) / 10;
+    
+    setMealItems(newItems);
   };
 
   const startNewMeal = () => {
@@ -685,22 +728,116 @@ export default function Meals() {
               ) : (
                 <div className="space-y-3">
                   {mealItems.map((item, index) => (
-                    <div key={index} className="p-4 border border-gray-200 rounded-lg">
+                    <div 
+                      key={index} 
+                      data-testid={`meal-item-row-${index}`}
+                      className={`p-4 border rounded-lg ${editingMealItemIndex === index ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}
+                    >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-900">{item.name}</h4>
                           <p className="text-sm text-gray-600">
-                            {item.servingSize} • {Math.round(item.calories)} cal
+                            {item.baseUnit === 'grams' 
+                              ? `${item.quantidade} g` 
+                              : `${item.quantidade} ${item.servingSize}`
+                            } • {Math.round(item.calories)} cal
                           </p>
                         </div>
-                        <button
-                          onClick={() => setDeleteConfirmItemIndex(index)}
-                          className="text-red-500 hover:text-red-700"
-                          title="Remove food"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingMealItemIndex(editingMealItemIndex === index ? null : index)}
+                            className={`text-blue-500 hover:text-blue-700 ${editingMealItemIndex === index ? 'ring-2 ring-blue-400' : ''}`}
+                            title="Edit quantity"
+                            data-testid={`meal-item-edit-btn-${index}`}
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmItemIndex(index)}
+                            className="text-red-500 hover:text-red-700"
+                            title="Remove food"
+                            data-testid={`meal-item-delete-btn-${index}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Quantity Editor */}
+                      {editingMealItemIndex === index && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex gap-3">
+                            {/* Quantity Type Toggle */}
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Amount Type</label>
+                              <div className="flex rounded-md shadow-sm" role="group">
+                                <button
+                                  type="button"
+                                  onClick={() => updateMealItemQuantity(index, { baseUnit: 'serving' })}
+                                  className={`px-3 py-2 text-sm font-medium rounded-l-lg border ${
+                                    item.baseUnit === 'serving' 
+                                      ? 'bg-blue-600 text-white border-blue-600' 
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                  data-testid={`meal-item-qty-type-toggle-${index}`}
+                                >
+                                  Servings
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateMealItemQuantity(index, { baseUnit: 'grams' })}
+                                  className={`px-3 py-2 text-sm font-medium rounded-r-lg border ${
+                                    item.baseUnit === 'grams' 
+                                      ? 'bg-blue-600 text-white border-blue-600' 
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  Grams
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Quantity Input */}
+                            <div className="w-32">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0.1"
+                                value={item.quantidade}
+                                onChange={(e) => {
+                                  const value = parseFloat(e.target.value);
+                                  if (!isNaN(value) && value > 0) {
+                                    updateMealItemQuantity(index, { quantidade: value });
+                                  }
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                data-testid={`meal-item-qty-input-${index}`}
+                              />
+                            </div>
+
+                            {/* Serving Info */}
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                {item.baseUnit === 'grams' ? 'Total Grams' : 'Serving Size'}
+                              </label>
+                              <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700">
+                                {item.baseUnit === 'grams'
+                                  ? `${Math.round(item.computedTotalGrams)} g`
+                                  : item.servingSize
+                                }
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Portion Grams Display */}
+                          {item.baseUnit === 'serving' && (
+                            <div className="mt-2 text-xs text-gray-600">
+                              1 serving = {Math.round(item.servingGrams)} g
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Macros for this item */}
                       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">

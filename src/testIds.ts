@@ -60,6 +60,12 @@ export const testIds = {
     mealCard: (id: string | number) => `meal-card-${id}`,
     foodSearchResults: 'meals-food-search-results',
     addFoodToMealBtn: 'add-food-to-meal-btn',
+    mealItemRow: (index: number) => `meal-item-row-${index}`,
+    mealItemQtyTypeToggle: (index: number) => `meal-item-qty-type-toggle-${index}`,
+    mealItemQtyInput: (index: number) => `meal-item-qty-input-${index}`,
+    mealItemPortionSelect: (index: number) => `meal-item-portion-select-${index}`,
+    mealItemEditBtn: (index: number) => `meal-item-edit-btn-${index}`,
+    mealItemDeleteBtn: (index: number) => `meal-item-delete-btn-${index}`,
     editor: {
       nameInput: 'meal-editor-name-input',
       searchUsdaButton: 'meal-editor-search-usda-btn',
