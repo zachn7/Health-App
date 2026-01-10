@@ -2,6 +2,142 @@ import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
 import { FoodItem, FoodLogItem } from '@/types';
 
+/**
+ * Atwater general factors for estimating missing macros
+ * Protein: 4 kcal/g, Carbs: 4 kcal/g, Fat: 9 kcal/g
+ */
+export const ATWATER_FACTORS = {
+  protein: 4,
+  carbs: 4,
+  fat: 9
+};
+
+/**
+ * Validation result for USDA nutrient data
+ */
+export interface NutrientValidationResult {
+  isValid: boolean;
+  hasCalories: boolean;
+  hasProtein: boolean;
+  hasCarbs: boolean;
+  hasFat: boolean;
+  canEstimate: boolean; // Can we estimate the missing macro?
+  missingMacros: string[]; // Names of missing macros
+  recommendedAction: 'import' | 'manual' | 'estimate' | 'skip';
+}
+
+/**
+ * Validate that essential macros are present
+ * At minimum: calories + at least one of protein/carbs/fat
+ */
+export function validateMacros(macros: Partial<{
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}>): NutrientValidationResult {
+  const hasCalories = macros.calories != null && macros.calories > 0;
+  const hasProtein = macros.proteinG != null && macros.proteinG >= 0;
+  const hasCarbs = macros.carbsG != null && macros.carbsG >= 0;
+  const hasFat = macros.fatG != null && macros.fatG >= 0;
+  
+  const missingMacros: string[] = [];
+  if (!hasCalories) missingMacros.push('calories');
+  if (!hasProtein) missingMacros.push('protein');
+  if (!hasCarbs) missingMacros.push('carbs');
+  if (!hasFat) missingMacros.push('fat');
+  
+  // Must have calories (or can estimate) and at least 2 other macros
+  const hasBasicMacros = [hasProtein, hasCarbs, hasFat].filter(Boolean).length >= 2;
+  
+  // Can we estimate the missing macro?
+  // Only if we have calories and exactly 2 macros (protein/carbs/fat)
+  const presentMacrosCount = [hasProtein, hasCarbs, hasFat].filter(Boolean).length;
+  const canEstimate = hasCalories && presentMacrosCount >= 2 && presentMacrosCount < 3;
+  
+  // Determine recommended action
+  let recommendedAction: 'import' | 'manual' | 'estimate' | 'skip' = 'import';
+  
+  if (!hasCalories && !hasBasicMacros) {
+    // No usable data at all
+    recommendedAction = 'skip';
+  } else if (!hasCalories) {
+    // No calories - can't estimate, need manual
+    recommendedAction = 'manual';
+  } else if (!hasBasicMacros) {
+    // Has calories but missing macros - can we estimate?
+    recommendedAction = canEstimate ? 'estimate' : 'manual';
+  }
+  
+  const isValid = recommendedAction === 'import' || recommendedAction === 'estimate';
+  
+  return {
+    isValid,
+    hasCalories,
+    hasProtein,
+    hasCarbs,
+    hasFat,
+    canEstimate,
+    missingMacros,
+    recommendedAction
+  };
+}
+
+/**
+ * Estimate missing macro using Atwater factors
+ * Should only be called when we have calories + 2 of protein/carbs/fat
+ */
+export function estimateMissingMacro(
+  macros: {
+    calories: number;
+    proteinG?: number;
+    carbsG?: number;
+    fatG?: number;
+  }
+): { proteinG?: number; carbsG?: number; fatG?: number } {
+  const { calories, proteinG, carbsG, fatG } = macros;
+  
+  if (!calories || calories <= 0) {
+    // Can't estimate without calories
+    return { proteinG, carbsG, fatG };
+  }
+  
+  // Calculate known calories from present macros
+  let knownCalories = 0;
+  if (proteinG) knownCalories += proteinG * ATWATER_FACTORS.protein;
+  if (carbsG) knownCalories += carbsG * ATWATER_FACTORS.carbs;
+  if (fatG) knownCalories += fatG * ATWATER_FACTORS.fat;
+  
+  const remainingCalories = calories - knownCalories;
+  
+  // Determine which macro is missing and estimate it
+  if (proteinG === undefined && carbsG !== undefined && fatG !== undefined) {
+    // Missing protein
+    return {
+      proteinG: Math.round(Math.max(0, remainingCalories / ATWATER_FACTORS.protein) * 10) / 10,
+      carbsG,
+      fatG
+    };
+  } else if (carbsG === undefined && proteinG !== undefined && fatG !== undefined) {
+    // Missing carbs
+    return {
+      proteinG,
+      carbsG: Math.round(Math.max(0, remainingCalories / ATWATER_FACTORS.carbs) * 10) / 10,
+      fatG
+    };
+  } else if (fatG === undefined && proteinG !== undefined && carbsG !== undefined) {
+    // Missing fat
+    return {
+      proteinG,
+      carbsG,
+      fatG: Math.round(Math.max(0, remainingCalories / ATWATER_FACTORS.fat) * 10) / 10
+    };
+  }
+  
+  // Can't estimate - need more data
+  return { proteinG, carbsG, fatG };
+}
+
 export interface SearchDiagnostics {
   query: string;
   url: string;
@@ -461,9 +597,28 @@ class USDAService {
       sodiumMg: macroNutrients.sodiumMg !== undefined ? Math.round((macroNutrients.sodiumMg * scaleFactor)) : undefined
     };
     
-    // Validate that at least some macros are non-zero
-    if (finalMacros.calories === 0 && finalMacros.proteinG === 0 && finalMacros.carbsG === 0 && finalMacros.fatG === 0) {
-      throw new Error('Food has no macro information available');
+    // Validate macros using the new validation system
+    const validation = validateMacros(finalMacros);
+    
+    if (validation.recommendedAction === 'skip') {
+      throw new Error(
+        'This USDA food item has incomplete nutrition data. ' +
+        'Missing: ' + (validation.missingMacros.join(', ') || 'all macros') + '. ' +
+        'Please try another food or add as a manual item.'
+      );
+    }
+    
+    // If we can estimate, let's do it safely
+    let final = finalMacros;
+    if (validation.recommendedAction === 'estimate') {
+      const estimated = estimateMissingMacro({
+        calories: finalMacros.calories,
+        proteinG: finalMacros.proteinG,
+        carbsG: finalMacros.carbsG,
+        fatG: finalMacros.fatG
+      });
+      final = { ...final, ...estimated };
+      console.log('[USDA] Estimated missing macro for', foodDetail.description, ':', estimated);
     }
     
     // Canonical model: totalGrams = quantity * gramsPerUnit
@@ -516,6 +671,79 @@ class USDAService {
       console.error('Failed to get saved FDA foods:', error);
       return [];
     }
+  }
+  
+  // Ignore list for USDA foods with incomplete data
+  private static readonly IGNORED_USDA_FOODS_KEY = 'ignored-usda-foods';
+  
+  /**
+   * Get list of ignored USDA FDC IDs
+   */
+  static getIgnoredUSDAFoods(): Set<number> {
+    try {
+      const stored = localStorage.getItem(this.IGNORED_USDA_FOODS_KEY);
+      if (!stored) return new Set();
+      const ids = JSON.parse(stored) as number[];
+      return new Set(ids);
+    } catch (error) {
+      console.error('Failed to get ignored USDA foods:', error);
+      return new Set();
+    }
+  }
+  
+  /**
+   * Add an USDA food to the ignore list
+   */
+  static ignoreUSDAFood(fdcId: number): void {
+    try {
+      const ignored = this.getIgnoredUSDAFoods();
+      ignored.add(fdcId);
+      localStorage.setItem(this.IGNORED_USDA_FOODS_KEY, JSON.stringify([...ignored]));
+      console.log('[USDA] Ignored food:', fdcId);
+    } catch (error) {
+      console.error('Failed to ignore USDA food:', error);
+    }
+  }
+  
+  /**
+   * Remove an USDA food from the ignore list
+   */
+  static unignoreUSDAFood(fdcId: number): void {
+    try {
+      const ignored = this.getIgnoredUSDAFoods();
+      ignored.delete(fdcId);
+      localStorage.setItem(this.IGNORED_USDA_FOODS_KEY, JSON.stringify([...ignored]));
+    } catch (error) {
+      console.error('Failed to unignore USDA food:', error);
+    }
+  }
+  
+  /**
+   * Check if an USDA food is ignored
+   */
+  static isUSDAFoodIgnored(fdcId: number): boolean {
+    return this.getIgnoredUSDAFoods().has(fdcId);
+  }
+  
+  /**
+   * Filter search results to remove ignored foods
+   */
+  static filterIgnoredFoods(foods: USDFoodSearchResult[]): USDFoodSearchResult[] {
+    const ignored = this.getIgnoredUSDAFoods();
+    return foods.filter(food => !ignored.has(food.fdcId));
+  }
+  
+  /**
+   * Validate USDA food before import (called by UI)
+   * Returns validation result without throwing
+   */
+  static validateUSDAFoodForImport(foodDetail: USDAFoodDetail): {
+    validation: NutrientValidationResult;
+    macros: MacroNutrients;
+  } {
+    const macros = this.extractMacros(foodDetail);
+    const validation = validateMacros(macros);
+    return { validation, macros };
   }
 }
 
