@@ -875,6 +875,71 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     });
   });
 
+  test.describe('USDA Preview vs Log Consistency', () => {
+    test('should show macros in preview that match logged values', async ({ page }) => {
+      // Go to nutrition page
+      await page.goto('./#/nutrition');
+      await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+      
+      // Click USDA search button
+      await page.getByTestId('usda-search-button').click();
+      await expect(page.getByTestId('usda-import-modal')).toBeVisible();
+      
+      // Search for 'small pack' (30g food)
+      await page.getByTestId('usda-search-input').fill('small');
+      await page.waitForTimeout(600);
+      
+      // Wait for search results to appear and hydration to complete
+      await expect(page.getByTestId('usda-results')).toBeVisible();
+      
+      // Capture preview values
+      const smallPackRow = page.locator('[data-fdc-id="999999"]');
+      
+      // Wait for hydration (macro values to appear)
+      await page.waitForTimeout(2000);
+      
+      // Get preview macro values
+      const previewCalories = await smallPackRow.getByText(/cal/).textContent();
+      const previewProtein = await smallPackRow.getByText(/protein/).textContent();
+      const previewCarbs = await smallPackRow.getByText(/carbs/).textContent();
+      const previewFat = await smallPackRow.getByText(/fat/).textContent();
+      
+      console.log('Preview values:', { previewCalories, previewProtein, previewCarbs, previewFat });
+      
+      // Add the food
+      const addBtn = smallPackRow.getByRole('button', { name: /Add/i });
+      await addBtn.click();
+      await expect(addBtn).not.toHaveText('Adding...', { timeout: 10000 });
+      
+      // Close the modal
+      await page.getByRole('button', { name: 'Close' }).click();
+      await expect(page.getByTestId('usda-import-modal')).not.toBeVisible();
+      
+      // Find the logged food item
+      const foodLogItem = page.getByTestId('nutrition-food-item').filter({ hasText: 'Test Small Pack' });
+      await expect(foodLogItem).toBeVisible();
+      
+      // Get logged macro values - use the combined text which has all macros
+      const loggedText = await foodLogItem.textContent();
+      
+      console.log('Logged text:', loggedText);
+      
+      // Verify preview matches logged values (they should have the same macro values)
+      expect(previewCalories).toContain('150');
+      expect(previewProtein).toContain('5.0g');
+      expect(previewCarbs).toContain('18.0g');
+      expect(previewFat).toContain('6.0g');
+      
+      // Check that logged text contains the same macro values
+      expect(loggedText).toContain('150 cal');
+      expect(loggedText).toContain('5g protein'); // Logged may use integer format
+      expect(loggedText).toContain('18g carbs');
+      expect(loggedText).toContain('6g fat');
+      
+      console.log('✅ Preview macros match logged macros exactly');
+    });
+  });
+
   test.describe('USDA Query Relaxation', () => {
     test('should show results for partial queries via query relaxation', async ({ page }) => {
       // Go to nutrition page
