@@ -37,6 +37,8 @@ export default function Nutrition() {
   const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
   const [selectedUSDAFoods, setSelectedUSDAFoods] = useState<Set<number>>(new Set());
   const [savedFoods, setSavedFoods] = useState<FoodItem[]>([]);
+  const [savedMeals, setSavedMeals] = useState<any[]>([]);
+  const [showSavedMealsModal, setShowSavedMealsModal] = useState(false);
   const [showServingSizeEdit, setShowServingSizeEdit] = useState<string | null>(null);
   const [editingServingSize, setEditingServingSize] = useState<{
     quantity: number;
@@ -55,6 +57,7 @@ export default function Nutrition() {
     loadNutritionData();
     loadUSDAStatus();
     loadSavedFoods();
+    loadSavedMeals();
   }, [selectedDate]);
 
   const loadUSDAStatus = async () => {
@@ -73,6 +76,15 @@ export default function Nutrition() {
       setSavedFoods(foods);
     } catch (error) {
       console.error('Failed to load saved foods:', error);
+    }
+  };
+
+  const loadSavedMeals = async () => {
+    try {
+      const meals = await repositories.nutrition.getMealTemplates();
+      setSavedMeals(meals || []);
+    } catch (error) {
+      console.error('Failed to load saved meals:', error);
     }
   };
 
@@ -470,6 +482,33 @@ export default function Nutrition() {
     await saveFoodItem(foodLogItem);
   };
 
+  const addSavedMeal = async (meal: any) => {
+    // Add each food item from the meal to the log
+    for (const foodItem of meal.items) {
+      const foodLogItem: FoodLogItem = {
+        id: crypto.randomUUID(),
+        name: foodItem.name,
+        servingSize: foodItem.servingSize || '1 serving',
+        quantidade: foodItem.quantidade || 1,
+        calories: foodItem.calories,
+        proteinG: foodItem.proteinG,
+        carbsG: foodItem.carbsG,
+        fatG: foodItem.fatG,
+        fiberG: foodItem.fiberG,
+        sugarG: foodItem.sugarG,
+        sodiumMg: foodItem.sodiumMg,
+        baseUnit: foodItem.baseUnit || 'serving',
+        servingGrams: foodItem.servingGrams || 100,
+        computedTotalGrams: foodItem.computedTotalGrams || (foodItem.quantidade || 1) * (foodItem.servingGrams || 100)
+      };
+      
+      await saveFoodItem(foodLogItem);
+    }
+    
+    // Close the modal after adding
+    setShowSavedMealsModal(false);
+  };
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -626,6 +665,18 @@ export default function Nutrition() {
           </div>
         )}
         
+        {savedMeals.length > 0 && (
+          <div className="dropdown relative">
+            <button 
+              data-testid="nutrition-log-add-saved-meal-btn"
+              onClick={() => setShowSavedMealsModal(true)}
+              className="btn btn-outline-secondary"
+            >
+              Saved Meals ({savedMeals.length})
+            </button>
+          </div>
+        )}
+        
         {!isUSDAEnabled && (
           <div className="text-sm text-gray-500">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -634,6 +685,59 @@ export default function Nutrition() {
           </div>
         )}
       </div>
+      
+      {/* Saved Meals Modal */}
+      {showSavedMealsModal && (
+        <div className="card mb-6" data-testid="nutrition-log-saved-meal-modal">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              Select a Saved Meal
+            </h3>
+            <button
+              onClick={() => setShowSavedMealsModal(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          {savedMeals.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No saved meals found</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {savedMeals.map((meal) => {
+                const totalCalories = meal.items?.reduce(
+                  (sum: number, item: any) => sum + (item.calories || 0),
+                  0
+                ) || 0;
+                
+                return (
+                  <button
+                    key={meal.id}
+                    data-testid={`nutrition-log-saved-meal-row-${meal.id}`}
+                    onClick={() => addSavedMeal(meal)}
+                    className="w-full p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-left transition-colors"
+                  >
+                    <div 
+                      data-testid={`nutrition-log-saved-meal-name-${meal.id}`}
+                      className="font-medium text-gray-900 mb-1"
+                    >
+                      {meal.name}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {meal.items?.length || 0} items • {Math.round(totalCalories)} cal
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       
       {/* USDA Import Modal */}
       {showUSDAImport && (

@@ -108,6 +108,18 @@ export const testIds = {
     foodCarbs: 'food-carbs',
     foodFat: 'food-fat',
     
+    // Add saved meal
+    addSavedMealBtn: 'nutrition-log-add-saved-meal-btn',
+    savedMealModal: 'nutrition-log-saved-meal-modal',
+    savedMealRow: (id: string | number) => `nutrition-log-saved-meal-row-${id}`,
+    savedMealName: (id: string | number) => `nutrition-log-saved-meal-name-${id}`,
+    
+    // Log entry
+    logEntryRow: (id: string) => `nutrition-log-entry-row-${id}`,
+    quantityLabel: 'nutrition-log-quantity-label',
+    quantityEditorToggle: (id: string) => `nutrition-log-quantity-editor-toggle-${id}`,
+    quantityInput: 'nutrition-log-quantity-input',
+    
     // Food editing
     foodEditQuantityInput: 'nutrition-edit-quantity-input',
     foodEditUnitSelect: 'nutrition-edit-unit-select',
