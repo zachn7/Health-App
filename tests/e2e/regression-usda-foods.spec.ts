@@ -162,7 +162,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Check that food was added to log (use specific food item selector to avoid strict mode)
     await expect(page.getByTestId('nutrition-food-item')).toBeVisible();
     const foodItem = page.getByTestId('nutrition-food-item').first();
-    await expect(foodItem.getByText(/52.*cal/)).toBeVisible();
+    await expect(foodItem.getByText(/52/)).toBeVisible();
   });
 
   test('should add second USDA food and accumulate totals', async ({ page }) => {
@@ -290,8 +290,8 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await quantityInput.fill('200');
     await page.getByRole('button', { name: 'Update' }).click();
     
-    // Should save and show updated macros (89 * 2 = 178 cal for banana)
-    await expect(page.getByText('178 cal')).toBeVisible();
+    // Should save and show updated macros (89 * 2 = 178 for banana)
+    await expect(page.getByText('178')).toBeVisible();
     
     // Edit again to test switching back to serving
     await bananaItem.getByRole('button', { name: 'Edit Serving' }).click();

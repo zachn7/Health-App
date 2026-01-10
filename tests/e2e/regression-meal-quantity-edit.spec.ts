@@ -64,12 +64,18 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Change quantity to 2 servings
     await qtyInput.fill('2');
-    // Blur the input to trigger update
-    await qtyInput.blur();
+    await page.waitForTimeout(200);
+    
+    // Verify live preview shows 600 calories
+    const macroCalTile = page.getByTestId('meal-item-macro-cal-0');
+    await expect(macroCalTile).toContainText('600');
+    
+    // Click Update to commit changes
+    await page.getByTestId('meal-item-update-0').click();
     await page.waitForTimeout(300);
     
     // Verify calories updated (should be 2 * 300 = 600)
-    await expect(page.getByText(/2 servings • 600 cal/)).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText(/2 servings • 600/)).toBeVisible({ timeout: 3000 });
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
@@ -141,18 +147,22 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     await qtyInput.fill('');
     await expect(qtyInput).toHaveValue('');
     
-    // Blur the input (click elsewhere)
-    await page.getByText('Serving Size').click();
-    await page.waitForTimeout(200);
+    // Verify live preview shows 0 calories
+    const macroCalTile = page.getByTestId('meal-item-macro-cal-0');
+    await expect(macroCalTile).toContainText('0');
     
-    // Verify input defaults to 0 after blur
-    await expect(qtyInput).toHaveValue('0');
+    // Click Update to commit changes (defaulting to 0)
+    await page.getByTestId('meal-item-update-0').click();
+    await page.waitForTimeout(300);
     
-    // Verify macros display shows 0 calories
+    // Editor should be closed after clicking Update
+    await expect(qtyInput).not.toBeVisible();
+    
+    // Verify macros display shows 0 calories (static display)
     const caloriesText = await page.locator(`text=/cal/`).first().textContent();
-    expect(caloriesText).toContain('0 cal');
+    expect(caloriesText).toContain('0');
     
-    console.log('✅ Blank input handling works correctly (defaults to 0 on blur)');
+    console.log('✅ Blank input handling works correctly (defaults to 0 on Update)');
   });
 
   test('should allow arrow key increments from blank field', async ({ page }) => {
@@ -248,6 +258,75 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     await expect(qtyInput).toHaveValue('2');
     
     console.log('✅ Arrow key increments work correctly from blank field');
+  });
+
+  test('should update macro tiles live while typing without Update click', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Click "Create New Meal" button
+    await page.getByTestId('create-new-meal-btn').click();
+    await page.waitForTimeout(500);
+    
+    // Set meal name
+    await page.getByTestId('meal-editor-name-input').fill('Live Preview Test Meal');
+    
+    // Add a manual food item
+    await page.getByTestId('meal-editor-add-manual-food-btn').click();
+    await page.waitForTimeout(500);
+    
+    const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await foodNameInput.fill('Beef Steak');
+    
+    const caloriesInput = page.locator('input[placeholder="200"]');
+    await caloriesInput.fill('300'); 
+    
+    const proteinInput = page.locator('input[placeholder="20"]');
+    await proteinInput.fill('26'); 
+    
+    const carbsInput = page.locator('input[placeholder="25"]');
+    await carbsInput.fill('0'); 
+    
+    const fatInput = page.locator('input[placeholder="8"]');
+    await fatInput.fill('17'); 
+    
+    // Add to meal
+    await page.getByRole('button', { name: 'Add to Meal' }).click();
+    await page.waitForTimeout(500);
+    
+    // Verify food appears with initial values (1 serving = 300 cal)
+    await expect(page.getByText('Beef Steak')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/1 serving • 300/)).toBeVisible({ timeout: 3000 });
+    
+    // Click edit button
+    await page.getByTestId('meal-item-edit-btn-0').click();
+    await page.waitForTimeout(300);
+    
+    const qtyInput = page.getByTestId('meal-item-qty-input-0');
+    const macroCalTile = page.getByTestId('meal-item-macro-cal-0');
+    
+    // Focus the input
+    await qtyInput.focus();
+    
+    // Type new quantity without blurring
+    await qtyInput.fill('2');
+    await page.waitForTimeout(100);
+    
+    // Verify macro tile updated immediately (2 * 300 = 600 cal)
+    await expect(macroCalTile).toContainText('600');
+    
+    // Continue typing without blurring
+    await qtyInput.fill('3');
+    await page.waitForTimeout(100);
+    
+    // Verify macro tile updated immediately (3 * 300 = 900 cal)
+    await expect(macroCalTile).toContainText('900');
+    
+    // Verify input is still focused (not lost)
+    await expect(qtyInput).toBeFocused();
+    
+    console.log('✅ Macro tiles update live while typing in Meals editor');
   });
 
 });

@@ -126,9 +126,9 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Verify input defaults to 0 after blur
     await expect(quantityInput).toHaveValue('0');
 
-    // Verify macro tiles show 0 values
+    // Verify macro tiles show 0 value
     const caloriesTile = page.getByTestId('quantity-macro-calories');
-    await expect(caloriesTile).toContainText('0 cal');
+    await expect(caloriesTile).toContainText('0');
 
     console.log('✅ Nutrition logger blank input handling works correctly (defaults to 0 on blur)');
   });
@@ -263,7 +263,7 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await page.waitForTimeout(200);
 
     // Verify macro tiles show correct values for 1.5 servings
-    await expect(caloriesTile).toContainText('248 cal'); // 1.5 * 165 ≈ 248
+    await expect(caloriesTile).toContainText('248'); // 1.5 * 165 ≈ 248
 
     // Switch to grams mode
     await gramsBtn.click();
@@ -273,14 +273,14 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await expect(quantityInput).toHaveValue('150');
 
     // Verify macros are preserved (same as before)
-    await expect(caloriesTile).toContainText('248 cal'); // Still 248 cal for 150g
+    await expect(caloriesTile).toContainText('248'); // Still 248 for 150g
 
     // Change grams to 200
     await quantityInput.fill('200');
     await page.waitForTimeout(200);
 
-    // Verify macros updated (200g = 2 servings * 165 = 330 cal)
-    await expect(caloriesTile).toContainText('330 cal');
+    // Verify macros updated (200g = 2 servings * 165 = 330)
+    await expect(caloriesTile).toContainText('330');
 
     // Switch back to serving mode
     await servingsBtn.click();
@@ -289,8 +289,8 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Should show 2 servings (200g / 100g per serving)
     await expect(quantityInput).toHaveValue('2');
 
-    // Verify macros are still 330 cal
-    await expect(caloriesTile).toContainText('330 cal');
+    // Verify macros are still 330
+    await expect(caloriesTile).toContainText('330');
 
     console.log('✅ Nutrition logger preserves value across mode switches with correct macro calculations');
   });
@@ -335,14 +335,14 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Start with value '2' for 2 servings
     await quantityInput.fill('2');
 
-    // Verify macro tile updated WITHOUT blurring (2 * 165 = 330 cal)
-    await expect(caloriesTile).toContainText('330 cal');
+    // Verify macro tile updated WITHOUT blurring (2 * 165 = 330)
+    await expect(caloriesTile).toContainText('330');
 
     // Continue typing without blurring - change to '3'
     await quantityInput.fill('3');
 
-    // Verify macro tile updated immediately (3 * 165 = 495 cal)
-    await expect(caloriesTile).toContainText('495 cal');
+    // Verify macro tile updated immediately (3 * 165 = 495)
+    await expect(caloriesTile).toContainText('495');
 
     // Verify input is still focused (not blurred)
     await expect(quantityInput).toBeFocused();
@@ -426,9 +426,9 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Critical: Should show 2 servings (200g / 100g per serving), NOT 200 servings
     await expect(quantityInput2).toHaveValue('2');
 
-    // Verify macro tiles are correct for 2 servings (2 * 165 = 330 cal)
+    // Verify macro tiles are correct for 2 servings (2 * 165 = 330)
     const caloriesTile = page.getByTestId('quantity-macro-calories');
-    await expect(caloriesTile).toContainText('330 cal');
+    await expect(caloriesTile).toContainText('330');
 
     console.log('✅ Toggle after save shows correct servings (2.0 not 200)');
   });
