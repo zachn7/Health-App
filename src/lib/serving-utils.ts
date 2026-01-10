@@ -118,19 +118,20 @@ export function computeServingsChange(params: {
     // Changing to grams mode
     newBaseUnit = 'grams';
     // In grams mode, the quantity represents grams directly
-    // servingGrams = 1 (1 "unit" = 1 gram) for calculation purposes
-    // But we keep track of the original servingGrams for when we switch back
-    newServingGrams = 1;
+    // CRITICAL: We keep the original servingGrams (e.g., 100) to preserve the serving unit size
+    // when switching back to serving mode. This prevents the bug where 200g becomes 200 servings.
+    newServingGrams = originalServingGrams;
     newQuantity = editedQuantity;
   } else {
     // Changing to serving mode
     newBaseUnit = 'serving';
-    // Always preserve the original servingGrams, don't use the current value (which might be 1 from grams mode)
+    // Always preserve the original servingGrams, don't use the current value
     newServingGrams = originalServingGrams;
     newQuantity = editedQuantity;
   }
   
-  const newTotalGrams = newQuantity * newServingGrams;
+  // Calculate total grams differently based on mode
+  const newTotalGrams = isUnitGrams ? newQuantity : newQuantity * newServingGrams;
   
   // Calculate macros using the ratio of new to old total grams
   const gramRatio = newTotalGrams / oldTotalGrams;

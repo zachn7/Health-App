@@ -294,4 +294,142 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     console.log('✅ Nutrition logger preserves value across mode switches with correct macro calculations');
   });
+
+  test('should update macro tiles live while typing without blur', async ({ page }) => {
+    // Open USDA import dialog
+    await page.getByTestId('usda-search-button').click();
+
+    // Search for food
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
+    await page.getByTestId('usda-search-input').fill('chicken');
+    await searchResponse;
+    await page.waitForTimeout(600);
+
+    // Add food
+    const detailResponse = page.waitForResponse(
+      response => response.url().includes('/food/170967') && response.status() === 200
+    );
+    const addButton = page.getByTestId('usda-add-food').first();
+    await addButton.click();
+    await detailResponse;
+    await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
+
+    // Close modal
+    await page.getByTestId('usda-search-button').click();
+    await page.waitForTimeout(500);
+
+    // Get first food item and click edit
+    const firstItem = page.getByTestId('nutrition-food-item').first();
+    await firstItem.getByRole('button', { name: 'edit serving' }).click();
+    await page.waitForTimeout(300);
+
+    const quantityInput = page.getByTestId('quantity-input');
+    const caloriesTile = page.getByTestId('quantity-macro-calories');
+
+    // Focus the input
+    await quantityInput.focus();
+
+    // Type without blurring - macro tiles should update immediately
+    // Start with value '2' for 2 servings
+    await quantityInput.fill('2');
+
+    // Verify macro tile updated WITHOUT blurring (2 * 165 = 330 cal)
+    await expect(caloriesTile).toContainText('330 cal');
+
+    // Continue typing without blurring - change to '3'
+    await quantityInput.fill('3');
+
+    // Verify macro tile updated immediately (3 * 165 = 495 cal)
+    await expect(caloriesTile).toContainText('495 cal');
+
+    // Verify input is still focused (not blurred)
+    await expect(quantityInput).toBeFocused();
+
+    console.log('✅ Macro tiles update live while typing without blur');
+  });
+
+  test('should toggle after save: 200g saved -> switch to servings shows 2.0 not 200', async ({ page }) => {
+    // Open USDA import dialog
+    await page.getByTestId('usda-search-button').click();
+
+    // Search for food
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
+    await page.getByTestId('usda-search-input').fill('chicken');
+    await searchResponse;
+    await page.waitForTimeout(600);
+
+    // Add food
+    const detailResponse = page.waitForResponse(
+      response => response.url().includes('/food/170967') && response.status() === 200
+    );
+    const addButton = page.getByTestId('usda-add-food').first();
+    await addButton.click();
+    await detailResponse;
+    await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
+
+    // Close modal
+    await page.getByTestId('usda-search-button').click();
+    await page.waitForTimeout(500);
+
+    // Get first food item and edit buttons
+    const firstItem = page.getByTestId('nutrition-food-item').first();
+    const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
+
+    // First edit: open and switch to grams, set 200g
+    await editServingButton.click();
+    await page.waitForTimeout(300);
+
+    const quantityInput = page.getByTestId('quantity-input');
+    const gramsBtn = page.getByTestId('quantity-grams-btn');
+    const servingsBtn = page.getByTestId('quantity-servings-btn');
+    const saveButton = page.getByTestId('quantity-save-btn');
+
+    // Switch to grams mode
+    await gramsBtn.click();
+    await page.waitForTimeout(200);
+
+    // Set grams to 200
+    await quantityInput.fill('200');
+    await expect(quantityInput).toHaveValue('200');
+
+    // Save the changes
+    await saveButton.click();
+
+    // Wait for edit modal to close
+    await page.waitForTimeout(500);
+
+    // Second edit: reopen the food item editor
+    // Re-find the elements since the modal re-rendered
+    const firstItem2 = page.getByTestId('nutrition-food-item').first();
+    const editServingButton2 = firstItem2.getByRole('button', { name: 'edit serving' });
+    const quantityInput2 = page.getByTestId('quantity-input');
+    const servingsBtn2 = page.getByTestId('quantity-servings-btn');
+    
+    // Reopen the edit dialog
+    await editServingButton2.click();
+    await page.waitForTimeout(300);
+
+    // Wait a bit more for state to fully initialize
+    await page.waitForTimeout(300);
+
+    // Should still be in grams mode with value 200
+    await expect(quantityInput2).toHaveValue('200');
+
+    // Switch to servings mode
+    await servingsBtn2.click();
+    await page.waitForTimeout(200);
+
+    // Critical: Should show 2 servings (200g / 100g per serving), NOT 200 servings
+    await expect(quantityInput2).toHaveValue('2');
+
+    // Verify macro tiles are correct for 2 servings (2 * 165 = 330 cal)
+    const caloriesTile = page.getByTestId('quantity-macro-calories');
+    await expect(caloriesTile).toContainText('330 cal');
+
+    console.log('✅ Toggle after save shows correct servings (2.0 not 200)');
+  });
 });
