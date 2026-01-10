@@ -242,6 +242,14 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     await expect(page.getByText('Ready to Start')).not.toBeVisible({ timeout: 3000 });
     await expect(page.getByTestId(testIds.workoutLogger.saveWorkoutButton)).not.toBeVisible({ timeout: 3000 });
     
+    // Verify imported workout shows "Imported Workout" status (NOT "Workout Complete!")
+    await expect(page.getByText('Imported Workout')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Workout Complete')).not.toBeVisible({ timeout: 3000 });
+    
+    // Verify NO "workout complete" status testId is shown for imports
+    await expect(page.getByTestId(testIds.workoutLogger.workoutCompleteStatus)).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByTestId(testIds.workoutLogger.workoutInProgressStatus)).toBeVisible({ timeout: 3000 });
+    
     // Verify NO "workout complete" popup/dialog appears after import
     await expect(page.getByTestId(testIds.workoutLogger.completePopup)).not.toBeVisible({ timeout: 3000 });
     await expect(page.locator('dialog').filter({ hasText: 'workout complete' })).not.toBeVisible({ timeout: 3000 });
@@ -319,6 +327,14 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Wait for exercises to load
     await expect(page.getByTestId(testIds.workoutLogger.exerciseList)).toBeVisible({ timeout: 5000 });
+    
+    // Verify imported workout shows "Imported Workout" status (NOT "Workout Complete!")
+    await expect(page.getByText('Imported Workout')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Workout Complete')).not.toBeVisible({ timeout: 3000 });
+    
+    // Verify NO "workout complete" status testId is shown for imports
+    await expect(page.getByTestId(testIds.workoutLogger.workoutCompleteStatus)).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByTestId(testIds.workoutLogger.workoutInProgressStatus)).toBeVisible({ timeout: 3000 });
     
     // Verify NO "workout complete" popup/dialog appears after import
     await expect(page.getByTestId(testIds.workoutLogger.completePopup)).not.toBeVisible({ timeout: 3000 });

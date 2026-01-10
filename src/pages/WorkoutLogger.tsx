@@ -165,6 +165,7 @@ export default function WorkoutLogger() {
         // Don't set isLogging to true - these are already saved/imported logs
         // This prevents showing "Save Workout" button for completed logs
         setIsLogging(false);
+        setWorkoutSource('import');
       } else if (dateLog) {
         // Load existing workout log from database (already saved, not in progress)
         console.log('Loading existing workout log:', dateLog);
@@ -178,6 +179,8 @@ export default function WorkoutLogger() {
         setTimeEntries(dateLog.timeEntries || []);
         // Don't set isLogging to true - this is an already saved log, not in progress
         setIsLogging(false);
+        // Don't set workoutSource for existing logs - preserve current state or let it default
+        // In the future, we could add a 'source' field to WorkoutLog to preserve this info
       }
     } catch (error) {
       console.error('Failed to load workout data:', error);
