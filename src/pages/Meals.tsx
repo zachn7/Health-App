@@ -42,6 +42,7 @@ export default function Meals() {
   });
   const [editingMealItemIndex, setEditingMealItemIndex] = useState<number | null>(null);
   const [editingItemOriginalServingGrams, setEditingItemOriginalServingGrams] = useState<Record<number, number>>({});
+  const [editingItemDraftValue, setEditingItemDraftValue] = useState<Record<number, string>>({});
 
   useEffect(() => {
     loadMeals();
@@ -727,6 +728,11 @@ export default function Meals() {
                                   ...editingItemOriginalServingGrams,
                                   [index]: mealItems[index].servingGrams
                                 });
+                                // Initialize draft value with the current quantity
+                                setEditingItemDraftValue({
+                                  ...editingItemDraftValue,
+                                  [index]: mealItems[index].quantidade.toString()
+                                });
                               }
                             }}
                             className={`text-blue-500 hover:text-blue-700 ${editingMealItemIndex === index ? 'ring-2 ring-blue-400' : ''}`}
@@ -802,12 +808,64 @@ export default function Meals() {
                               <input
                                 type="number"
                                 step={item.baseUnit === 'grams' ? '1' : '0.1'}
-                                min="0.1"
-                                value={item.quantidade}
+                                min="0"
+                                value={editingItemDraftValue[index] !== undefined ? editingItemDraftValue[index] : item.quantidade.toString()}
                                 onChange={(e) => {
-                                  const value = parseFloat(e.target.value);
-                                  if (!isNaN(value) && value > 0) {
-                                    updateMealItemQuantity(index, value, item.baseUnit);
+                                  // Allow empty string and any partial input while typing
+                                  setEditingItemDraftValue({
+                                    ...editingItemDraftValue,
+                                    [index]: e.target.value
+                                  });
+                                }}
+                                onBlur={(e) => {
+                                  // Normalize on blur: empty or invalid -> 0, otherwise parse and round
+                                  const rawValue = e.target.value.trim();
+                                  const numericValue = parseFloat(rawValue);
+                                  
+                                  // If empty, invalid, or negative, use 0
+                                  const finalValue = (rawValue === '' || isNaN(numericValue) || numericValue < 0) 
+                                    ? 0 
+                                    : numericValue;
+                                  
+                                  // Clear draft and commit value by deleting the draft entry
+                                  const newDraft = { ...editingItemDraftValue };
+                                  delete newDraft[index];
+                                  setEditingItemDraftValue(newDraft);
+                                  
+                                  updateMealItemQuantity(index, finalValue, item.baseUnit);
+                                }}
+                                onKeyDown={(e) => {
+                                  // Handle arrow keys to increment/decrement even from blank
+                                  let currentNumericValue = parseFloat(editingItemDraftValue[index] || item.quantidade.toString());
+                                  
+                                  if (isNaN(currentNumericValue)) {
+                                    currentNumericValue = 0;
+                                  }
+                                  
+                                  const step = item.baseUnit === 'grams' ? 1 : 0.1;
+                                  
+                                  if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    const newValue = Math.max(0, currentNumericValue + step);
+                                    const roundedValue = item.baseUnit === 'grams' 
+                                      ? roundToIntGrams(newValue) 
+                                      : roundToTenthServings(newValue);
+                                    const newValueStr = roundedValue.toString();
+                                    setEditingItemDraftValue({
+                                      ...editingItemDraftValue,
+                                      [index]: newValueStr
+                                    });
+                                  } else if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    const newValue = Math.max(0, currentNumericValue - step);
+                                    const roundedValue = item.baseUnit === 'grams' 
+                                      ? roundToIntGrams(newValue) 
+                                      : roundToTenthServings(newValue);
+                                    const newValueStr = roundedValue.toString();
+                                    setEditingItemDraftValue({
+                                      ...editingItemDraftValue,
+                                      [index]: newValueStr
+                                    });
                                   }
                                 }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"

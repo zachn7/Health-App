@@ -53,6 +53,7 @@ export default function Nutrition() {
     originalItem?: FoodLogItem;
     originalServingGrams?: number;
   }>({ quantity: 1, unit: 'serving', calories: 0, proteinG: 0, carbsG: 0, fatG: 0 });
+  const [editingQtyDraftValue, setEditingQtyDraftValue] = useState<string>('');
 
   useEffect(() => {
     loadNutritionData();
@@ -429,6 +430,7 @@ export default function Nutrition() {
       originalItem: item, // Store reference for calculations
       originalServingGrams: item.servingGrams // Store original gram weight for round-trip toggles
     });
+    setEditingQtyDraftValue(quantity.toString()); // Initialize draft value
     setShowServingSizeEdit(item.id);
   };
 
@@ -1182,17 +1184,61 @@ export default function Nutrition() {
                         <label className="label text-xs">Quantity</label>
                         <input
                           type="number"
-                          value={editingServingSize.quantity}
+                          value={editingQtyDraftValue}
                           onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value) && value > 0) {
-                              const isGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
-                              const roundedValue = isGrams ? roundToIntGrams(value) : roundToTenthServings(value);
+                            // Allow empty string and any partial input while typing
+                            setEditingQtyDraftValue(e.target.value);
+                          }}
+                          onBlur={(e) => {
+                            // Normalize on blur: empty or invalid -> 0, otherwise parse and round
+                            const rawValue = e.target.value.trim();
+                            const numericValue = parseFloat(rawValue);
+                            
+                            // If empty, invalid, or negative, use 0
+                            const finalValue = (rawValue === '' || isNaN(numericValue) || numericValue < 0) 
+                              ? 0 
+                              : numericValue;
+                            
+                            // Round according to current unit
+                            const isGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
+                            const roundedValue = isGrams ? roundToIntGrams(finalValue) : roundToTenthServings(finalValue);
+                            
+                            // Clear draft and update committed value
+                            setEditingQtyDraftValue(roundedValue.toString());
+                            setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
+                          }}
+                          onKeyDown={(e) => {
+                            // Handle arrow keys to increment/decrement even from blank
+                            let currentNumericValue = parseFloat(editingQtyDraftValue);
+                            
+                            if (isNaN(currentNumericValue)) {
+                              currentNumericValue = 0;
+                            }
+                            
+                            const step = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 1 : 0.1;
+                            
+                            if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              const newValue = Math.max(0, currentNumericValue + step);
+                              const roundedValue = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g'
+                                ? roundToIntGrams(newValue)
+                                : roundToTenthServings(newValue);
+                              const newValueStr = roundedValue.toString();
+                              setEditingQtyDraftValue(newValueStr);
+                              setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
+                            } else if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              const newValue = Math.max(0, currentNumericValue - step);
+                              const roundedValue = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g'
+                                ? roundToIntGrams(newValue)
+                                : roundToTenthServings(newValue);
+                              const newValueStr = roundedValue.toString();
+                              setEditingQtyDraftValue(newValueStr);
                               setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
                             }
                           }}
                           className="input text-sm"
-                          min="0.1"
+                          min="0"
                           step={editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? '1' : '0.1'}
                           aria-label="quantity"
                         />
