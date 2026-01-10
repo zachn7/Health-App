@@ -111,24 +111,24 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await editServingButton.click();
     await page.waitForTimeout(300);
 
-    // Get the quantity input
-    const quantityInput = page.locator('input[type="number"]').first();
+    // Get the quantity input using testId
+    const quantityInput = page.getByTestId('quantity-input');
     await expect(quantityInput).toHaveValue('1');
 
     // Clear the input entirely
     await quantityInput.fill('');
     await expect(quantityInput).toHaveValue('');
 
-    // Blur the input (click elsewhere)
-    await page.getByText('Unit').click();
+    // Blur the input (click toggle button)
+    await page.getByTestId('quantity-servings-btn').click();
     await page.waitForTimeout(200);
 
     // Verify input defaults to 0 after blur
     await expect(quantityInput).toHaveValue('0');
 
-    // Verify preview shows 0 macros
-    const previewMacros = await page.getByText(/Preview Macros:/).textContent();
-    expect(previewMacros).toContain('0 cal');
+    // Verify macro tiles show 0 values
+    const caloriesTile = page.getByTestId('quantity-macro-calories');
+    await expect(caloriesTile).toContainText('0 cal');
 
     console.log('✅ Nutrition logger blank input handling works correctly (defaults to 0 on blur)');
   });
@@ -167,7 +167,8 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await editServingButton.click();
     await page.waitForTimeout(300);
 
-    const quantityInput = page.locator('input[type="number"]').first();
+    // Get the quantity input using testId
+    const quantityInput = page.getByTestId('quantity-input');
     await expect(quantityInput).toHaveValue('1');
 
     // Test 1: Arrow key increments in serving mode
@@ -188,9 +189,8 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await expect(quantityInput).toHaveValue('0.1');
 
     // Test 2: Arrow key increments in grams mode
-    // Switch to grams unit
-    const unitSelect = page.locator('select').first();
-    await unitSelect.selectOption('grams');
+    // Switch to grams using toggle button
+    await page.getByTestId('quantity-grams-btn').click();
     await page.waitForTimeout(300);
 
     // Verify current value in grams (should be integer) - just check it's not empty
@@ -218,57 +218,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     console.log('✅ Nutrition logger arrow key increments work correctly from blank field');
   });
 
-  // Skip partial decimal test for now - it's complex to test reliably
-  // test('should handle partial decimal input (1.) correctly', async ({ page }) => {
-    // Open USDA import dialog
-    await page.getByTestId('usda-search-button').click();
-
-    // Search for food
-    const searchResponse = page.waitForResponse(
-      response => response.url().includes('/foods/search') && response.status() === 200
-    );
-    await page.getByTestId('usda-search-input').fill('chicken');
-    await searchResponse;
-    await page.waitForTimeout(600);
-
-    // Add food
-    const detailResponse = page.waitForResponse(
-      response => response.url().includes('/food/170967') && response.status() === 200
-    );
-    const addButton = page.getByTestId('usda-add-food').first();
-    await addButton.click();
-    await detailResponse;
-    await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
-
-    // Close modal
-    await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
-
-    // Get first food item
-    const firstItem = page.getByTestId('nutrition-food-item').first();
-
-    // Click edit serving on the first food item
-    const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
-    await editServingButton.click();
-    await page.waitForTimeout(300);
-
-    const quantityInput = page.locator('input[type="number"]').first();
-
-    // Type a partial decimal "1."
-    await quantityInput.fill('1.');
-    await expect(quantityInput).toHaveValue('1.');
-
-    // Complete the decimal
-    await quantityInput.fill('1.5');
-    await page.waitForTimeout(200);
-
-    // Verify preview macros are calculated with 1.5 servings
-    const previewMacros = await page.getByText(/Preview Macros:/).textContent();
-    // 1.5 * 165 = 248 calories (approximately)
-    expect(previewMacros).toContain('248 cal');
-
-    // console.log('✅ Nutrition logger partial decimal input handling works correctly');
-  // });
 
   test('should preserve value when switching between serving and grams modes', async ({ page }) => {
     // Open USDA import dialog
@@ -303,46 +252,45 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await editServingButton.click();
     await page.waitForTimeout(300);
 
-    const quantityInput = page.locator('input[type="number"]').first();
-    const unitSelect = page.locator('select').first();
+    // Get the quantity input using testId
+    const quantityInput = page.getByTestId('quantity-input');
+    const servingsBtn = page.getByTestId('quantity-servings-btn');
+    const gramsBtn = page.getByTestId('quantity-grams-btn');
+    const caloriesTile = page.getByTestId('quantity-macro-calories');
 
     // Set value to 1.5 servings
     await quantityInput.fill('1.5');
     await page.waitForTimeout(200);
 
-    // Verify preview macros for 1.5 servings
-    const previewServings = await page.getByText(/Preview Macros:/).textContent();
-    expect(previewServings).toContain('248 cal'); // 1.5 * 165 ≈ 248
+    // Verify macro tiles show correct values for 1.5 servings
+    await expect(caloriesTile).toContainText('248 cal'); // 1.5 * 165 ≈ 248
 
     // Switch to grams mode
-    await unitSelect.selectOption('grams');
+    await gramsBtn.click();
     await page.waitForTimeout(200);
 
     // Should show the equivalent grams (1.5 * 100 = 150g)
     await expect(quantityInput).toHaveValue('150');
 
     // Verify macros are preserved (same as before)
-    const previewGrams = await page.getByText(/Preview Macros:/).textContent();
-    expect(previewGrams).toContain('248 cal'); // Still 248 cal for 150g
+    await expect(caloriesTile).toContainText('248 cal'); // Still 248 cal for 150g
 
     // Change grams to 200
     await quantityInput.fill('200');
     await page.waitForTimeout(200);
 
     // Verify macros updated (200g = 2 servings * 165 = 330 cal)
-    const previewGramsUpdated = await page.getByText(/Preview Macros:/).textContent();
-    expect(previewGramsUpdated).toContain('330 cal');
+    await expect(caloriesTile).toContainText('330 cal');
 
     // Switch back to serving mode
-    await unitSelect.selectOption('serving');
+    await servingsBtn.click();
     await page.waitForTimeout(200);
 
     // Should show 2 servings (200g / 100g per serving)
     await expect(quantityInput).toHaveValue('2');
 
     // Verify macros are still 330 cal
-    const previewBackToServings = await page.getByText(/Preview Macros:/).textContent();
-    expect(previewBackToServings).toContain('330 cal');
+    await expect(caloriesTile).toContainText('330 cal');
 
     console.log('✅ Nutrition logger preserves value across mode switches with correct macro calculations');
   });

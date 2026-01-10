@@ -268,18 +268,20 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await expect(page.getByText('Edit: Test Banana')).toBeVisible();
     
     // Check initial quantity (should be 1 serving)
-    const quantityInput = page.locator('input[type="number"]').first();
+    const quantityInput = page.getByTestId('quantity-input');
     await expect(quantityInput).toHaveValue('1');
     
-    const unitSelect = page.locator('select').first();
-    await expect(unitSelect).toHaveValue('serving');
+    // Verify servings button is active (in serving mode)
+    const servingsBtn = page.getByTestId('quantity-servings-btn');
+    await expect(servingsBtn).toHaveAttribute('class', /bg-blue-600 text-white/);
     
     // Note: Initial value may vary due to test state sharing
     // Focus on unit switching behavior
     const initialQuantity = await quantityInput.inputValue();
     
     // Switch to grams - quantity should show grams value
-    await unitSelect.selectOption('grams');
+    const gramsBtn = page.getByTestId('quantity-grams-btn');
+    await gramsBtn.click();
     // Input value should be different (converted to grams)
     const gramsValue = await quantityInput.inputValue();
     expect(gramsValue).not.toBe(initialQuantity);
@@ -296,12 +298,12 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await expect(page.getByText('Edit: Test Banana')).toBeVisible();
     
     // Get input elements again (they're fresh after re-entering edit mode)
-    const quantityInput2 = page.locator('input[type="number"]').first();
-    const unitSelect2 = page.locator('select').first();
-    await expect(quantityInput).toHaveValue('200'); // Still shows 200g when in grams mode
+    const quantityInput2 = page.getByTestId('quantity-input');
+    const servingsBtn2 = page.getByTestId('quantity-servings-btn');
+    await expect(quantityInput2).toHaveValue('200'); // Still shows 200g when in grams mode
     
     // Switch back to serving
-    await unitSelect.selectOption('serving');
+    await servingsBtn2.click();
     // Should show serving value (may not be 1 due to previous edits in serial tests)
     const servingValue = await quantityInput2.inputValue();
     expect(quantityInput2).toBeVisible();

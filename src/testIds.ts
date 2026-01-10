@@ -53,6 +53,21 @@ export const testIds = {
     profileTitle: 'dashboard-profile-title',
   },
 
+  // Quantity Editor (shared between Meals and Nutrition)
+  quantity: {
+    amountTypeToggle: 'quantity-amount-type-toggle',
+    servingsBtn: 'quantity-servings-btn',
+    gramsBtn: 'quantity-grams-btn',
+    quantityInput: 'quantity-input',
+    totalGramsField: 'quantity-total-grams',
+    macroTileCalories: 'quantity-macro-calories',
+    macroTileProtein: 'quantity-macro-protein',
+    macroTileCarbs: 'quantity-macro-carbs',
+    macroTileFat: 'quantity-macro-fat',
+    saveBtn: 'quantity-save-btn',
+    cancelBtn: 'quantity-cancel-btn',
+  },
+
   // Meals
   meals: {
     createNewMealButton: 'create-new-meal-btn',

@@ -352,17 +352,14 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await editServingButton.click();
     await page.waitForTimeout(300);
 
-    // Switch to grams unit
-    const unitSelect = page.locator('select').first();
-    await unitSelect.selectOption('grams');
+    // Switch to grams using toggle button
+    const gramsBtn = page.getByTestId('quantity-grams-btn');
+    await gramsBtn.click();
     await page.waitForTimeout(300);
 
     // Enter grams value (200g)
     await quantityInput.fill('200');
     await page.waitForTimeout(300);
-
-    // Verify preview shows grams
-    const previewMacros = await page.getByText(/Preview Macros:|Updated Macros:/).textContent();
 
     // Save
     await updateButton.click();

@@ -3,8 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult } from '../lib/usda-service';
-import { formatServingSize, computeServingsChange, calculateTotalGrams, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
+import { formatServingSize, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
+import { testIds } from '../testIds';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
 
 export default function Nutrition() {
@@ -1175,154 +1176,212 @@ export default function Nutrition() {
             {currentLog.items.map((item) => (
               <div key={item.id} data-testid="nutrition-food-item" className="p-3 bg-gray-50 rounded-lg">
                 {showServingSizeEdit === item.id ? (
-                  // Edit mode
+                  // Edit mode - Meals-style UI with toggle + macro tiles
                   <div className="space-y-3">
                     <div className="font-medium text-gray-900">Edit: {item.name}</div>
                     
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label text-xs">Quantity</label>
-                        <input
-                          type="number"
-                          value={editingQtyDraftValue}
-                          onChange={(e) => {
-                            // Allow empty string and any partial input while typing
-                            setEditingQtyDraftValue(e.target.value);
-                          }}
-                          onBlur={(e) => {
-                            // Normalize on blur: empty or invalid -> 0, otherwise parse and round
-                            const rawValue = e.target.value.trim();
-                            const numericValue = parseFloat(rawValue);
-                            
-                            // If empty, invalid, or negative, use 0
-                            const finalValue = (rawValue === '' || isNaN(numericValue) || numericValue < 0) 
-                              ? 0 
-                              : numericValue;
-                            
-                            // Round according to current unit
-                            const isGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
-                            const roundedValue = isGrams ? roundToIntGrams(finalValue) : roundToTenthServings(finalValue);
-                            
-                            // Clear draft and update committed value
-                            setEditingQtyDraftValue(roundedValue.toString());
-                            setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
-                          }}
-                          onKeyDown={(e) => {
-                            // Handle arrow keys to increment/decrement even from blank
-                            let currentNumericValue = parseFloat(editingQtyDraftValue);
-                            
-                            if (isNaN(currentNumericValue)) {
-                              currentNumericValue = 0;
-                            }
-                            
-                            const step = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 1 : 0.1;
-                            
-                            if (e.key === 'ArrowUp') {
-                              e.preventDefault();
-                              const newValue = Math.max(0, currentNumericValue + step);
-                              const roundedValue = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g'
-                                ? roundToIntGrams(newValue)
-                                : roundToTenthServings(newValue);
-                              const newValueStr = roundedValue.toString();
-                              setEditingQtyDraftValue(newValueStr);
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex gap-3">
+                        {/* Quantity Type Toggle - Segmented control */}
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Amount Type</label>
+                          <div className="flex rounded-md shadow-sm" role="group">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const isGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
+                                if (editingServingSize.originalItem && isGrams) {
+                                  // Use draft value if exists (user typing), otherwise use committed value
+                                  const currentGrams = editingQtyDraftValue !== '' 
+                                    ? parseFloat(editingQtyDraftValue) || 0
+                                    : editingServingSize.quantity;
+                                  const originalServingGrams = editingServingSize.originalServingGrams || editingServingSize.originalItem.servingGrams || 100;
+                                  const newQuantity = gramsToServings(currentGrams, originalServingGrams);
+                                  setEditingServingSize({ 
+                                    ...editingServingSize, 
+                                    unit: 'serving',
+                                    quantity: newQuantity
+                                  });
+                                  setEditingQtyDraftValue(newQuantity.toString());
+                                } else {
+                                  setEditingServingSize({ ...editingServingSize, unit: 'serving' });
+                                }
+                              }}
+                              className={`px-3 py-2 text-sm font-medium rounded-l-lg border ${
+                                editingServingSize.unit === 'serving'
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                              }`}
+                              data-testid={testIds.quantity.servingsBtn}
+                            >
+                              Servings
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentUnit = editingServingSize.unit;
+                                const isServing = currentUnit === 'serving';
+                                if (editingServingSize.originalItem && isServing) {
+                                  // Use draft value if exists (user typing), otherwise use committed value
+                                  const currentQuantity = editingQtyDraftValue !== '' 
+                                    ? parseFloat(editingQtyDraftValue) || 0
+                                    : editingServingSize.quantity;
+                                  
+                                  // Calculate total grams based on current servings quantity
+                                  const currentTotalGrams = currentQuantity * (editingServingSize.originalItem.servingGrams || 100);
+                                  const newQuantity = roundToIntGrams(currentTotalGrams);
+                                  setEditingServingSize({ 
+                                    ...editingServingSize, 
+                                    unit: 'grams',
+                                    quantity: newQuantity
+                                  });
+                                  setEditingQtyDraftValue(newQuantity.toString());
+                                } else {
+                                  setEditingServingSize({ ...editingServingSize, unit: 'grams' });
+                                }
+                              }}
+                              className={`px-3 py-2 text-sm font-medium rounded-r-lg border ${
+                                editingServingSize.unit === 'grams' || editingServingSize.unit === 'g'
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                              }`}
+                              data-testid={testIds.quantity.gramsBtn}
+                            >
+                              Grams
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Quantity Input */}
+                        <div className="w-32">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            step={editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? '1' : '0.1'}
+                            min="0"
+                            value={editingQtyDraftValue}
+                            onChange={(e) => {
+                              setEditingQtyDraftValue(e.target.value);
+                            }}
+                            onBlur={(e) => {
+                              const rawValue = e.target.value.trim();
+                              const numericValue = parseFloat(rawValue);
+                              const finalValue = (rawValue === '' || isNaN(numericValue) || numericValue < 0) 
+                                ? 0 
+                                : numericValue;
+                              const isGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
+                              const roundedValue = isGrams ? roundToIntGrams(finalValue) : roundToTenthServings(finalValue);
+                              setEditingQtyDraftValue(roundedValue.toString());
                               setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
-                            } else if (e.key === 'ArrowDown') {
-                              e.preventDefault();
-                              const newValue = Math.max(0, currentNumericValue - step);
-                              const roundedValue = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g'
-                                ? roundToIntGrams(newValue)
-                                : roundToTenthServings(newValue);
-                              const newValueStr = roundedValue.toString();
-                              setEditingQtyDraftValue(newValueStr);
-                              setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
-                            }
-                          }}
-                          className="input text-sm"
-                          min="0"
-                          step={editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? '1' : '0.1'}
-                          aria-label="quantity"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="label text-xs">Unit</label>
-                        <select
-                          value={editingServingSize.unit}
-                          onChange={(e) => {
-                            const newUnit = e.target.value as 'serving' | 'grams' | 'g';
-                            const isGrams = newUnit === 'grams' || newUnit === 'g';
-                            
-                            if (editingServingSize.originalItem) {
-                              const originalItem = editingServingSize.originalItem;
-                              const currentTotalGrams = originalItem.computedTotalGrams || 
-                                                         (originalItem.quantidade * originalItem.servingGrams);
+                            }}
+                            onKeyDown={(e) => {
+                              let currentNumericValue = parseFloat(editingQtyDraftValue);
+                              if (isNaN(currentNumericValue)) {
+                                currentNumericValue = 0;
+                              }
+                              const step = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 1 : 0.1;
+                              if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                const newValue = Math.max(0, currentNumericValue + step);
+                                const roundedValue = (editingServingSize.unit === 'grams' || editingServingSize.unit === 'g')
+                                  ? roundToIntGrams(newValue)
+                                  : roundToTenthServings(newValue);
+                                setEditingQtyDraftValue(roundedValue.toString());
+                                setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
+                              } else if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                const newValue = Math.max(0, currentNumericValue - step);
+                                const roundedValue = (editingServingSize.unit === 'grams' || editingServingSize.unit === 'g')
+                                  ? roundToIntGrams(newValue)
+                                  : roundToTenthServings(newValue);
+                                setEditingQtyDraftValue(roundedValue.toString());
+                                setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            data-testid={testIds.quantity.quantityInput}
+                          />
+                        </div>
+
+                        {/* Total Grams / Serving Size Display */}
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            {editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 'Total Grams' : 'Serving Size'}
+                          </label>
+                          <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700">
+                            {editingServingSize.originalItem && (() => {
+                              // Use draft value if exists (user typing), otherwise use committed value
+                              const currentQuantity = editingQtyDraftValue !== '' 
+                                ? parseFloat(editingQtyDraftValue) || 0
+                                : editingServingSize.quantity;
                               
-                              // When switching to grams, convert to whole grams
-                              // When switching to serving, convert to servings with 0.1 precision
-                              // Use the original servingGrams, not the current one (which might be 1 from grams mode)
-                              const gramWeight = editingServingSize.originalServingGrams || originalItem.servingGrams || 100;
-                              const newQuantity = isGrams 
-                                ? roundToIntGrams(currentTotalGrams)
-                                : gramsToServings(currentTotalGrams, gramWeight);
-                              
-                              setEditingServingSize({ 
-                                ...editingServingSize, 
-                                unit: newUnit as 'serving' | 'grams',
-                                quantity: newQuantity
-                              });
-                            } else {
-                              setEditingServingSize({ 
-                                ...editingServingSize, 
-                                unit: newUnit as 'serving' | 'grams'
-                              });
-                            }
-                          }}
-                          className="input text-sm"
-                          aria-label="unit"
-                        >
-                          <option value="serving">serving</option>
-                          <option value="grams">grams</option>
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <div className="text-sm text-gray-600" data-testid="total-grams-display">
-                      <span className="font-medium">Total:</span>
-                      <span className="ml-2">
-                        {editingServingSize.originalItem && (
-                          <>
-                            {Math.round(calculateTotalGrams(editingServingSize.originalItem))} g
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium">Preview Macros:</span>
-                      {editingServingSize.originalItem && (
-                        <span className="ml-2">
-                          {(() => {
-                            const result = computeServingsChange({
-                              originalItem: editingServingSize.originalItem,
-                              editedQuantity: editingServingSize.quantity,
-                              editedUnit: editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 'grams' : 'serving'
-                            });
-                            return `• ${result.newCalories.toFixed(0)} cal • ${result.newProteinG.toFixed(1)}g protein • ${result.newCarbsG.toFixed(1)}g carbs • ${result.newFatG.toFixed(1)}g fat`;
+                              if (editingServingSize.unit === 'grams' || editingServingSize.unit === 'g') {
+                                return `${Math.round(currentQuantity)} g`;
+                              } else {
+                                // In serving mode, show the original serving size
+                                return editingServingSize.originalItem.servingSize;
+                              }
+                            })()}
+                          </div>
+                          {editingServingSize.unit === 'serving' && editingServingSize.originalItem && (() => {
+                            // Calculate total grams based on current quantity
+                            const currentQuantity = editingQtyDraftValue !== '' 
+                              ? parseFloat(editingQtyDraftValue) || 0
+                              : editingServingSize.quantity;
+                            const totalGrams = currentQuantity * (editingServingSize.originalItem.servingGrams || 100);
+                            return (
+                              <div className="mt-1 text-xs text-gray-600" data-testid={testIds.quantity.totalGramsField}>
+                                1 serving = {Math.round(editingServingSize.originalItem.servingGrams || 100)} g (total: {Math.round(totalGrams)} g)
+                              </div>
+                            );
                           })()}
-                        </span>
-                      )}
+                        </div>
+                      </div>
                     </div>
-                    
+
+                    {/* Macro Tiles - Colored boxes matching Meals UI */}
+                    {editingServingSize.originalItem && (() => {
+                      // Use draft value if exists (user typing), otherwise use committed value
+                      const currentQuantity = editingQtyDraftValue !== '' 
+                        ? parseFloat(editingQtyDraftValue) || 0
+                        : editingServingSize.quantity;
+                      
+                      const result = computeServingsChange({
+                        originalItem: editingServingSize.originalItem,
+                        editedQuantity: currentQuantity,
+                        editedUnit: editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? 'grams' : 'serving'
+                      });
+                      return (
+                        <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                          <div className="text-center p-2 bg-blue-50 rounded" data-testid={testIds.quantity.macroTileCalories}>
+                            <div className="font-medium text-blue-800">{Math.round(result.newCalories)} cal</div>
+                          </div>
+                          <div className="text-center p-2 bg-purple-50 rounded" data-testid={testIds.quantity.macroTileProtein}>
+                            <div className="font-medium text-purple-800">{Math.round(result.newProteinG)}g</div>
+                          </div>
+                          <div className="text-center p-2 bg-orange-50 rounded" data-testid={testIds.quantity.macroTileCarbs}>
+                            <div className="font-medium text-orange-800">{Math.round(result.newCarbsG)}g</div>
+                          </div>
+                          <div className="text-center p-2 bg-yellow-50 rounded" data-testid={testIds.quantity.macroTileFat}>
+                            <div className="font-medium text-yellow-800">{Math.round(result.newFatG)}g</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Action Buttons */}
                     <div className="flex space-x-2">
                       <button
                         onClick={() => setShowServingSizeEdit(null)}
                         className="btn btn-secondary btn-sm"
+                        data-testid={testIds.quantity.cancelBtn}
                       >
                         Cancel
                       </button>
                       <button
                         onClick={() => updateFoodServingSize(item.id)}
                         className="btn btn-primary btn-sm"
+                        data-testid={testIds.quantity.saveBtn}
                       >
                         Update
                       </button>

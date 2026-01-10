@@ -836,7 +836,9 @@ export default function Meals() {
                                 }}
                                 onKeyDown={(e) => {
                                   // Handle arrow keys to increment/decrement even from blank
-                                  let currentNumericValue = parseFloat(editingItemDraftValue[index] || item.quantidade.toString());
+                                  // Read from current input value directly (React state might not be updated yet)
+                                  const inputValue = (e.target as HTMLInputElement).value;
+                                  let currentNumericValue = inputValue !== '' ? parseFloat(inputValue) : 0;
                                   
                                   if (isNaN(currentNumericValue)) {
                                     currentNumericValue = 0;
