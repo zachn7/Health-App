@@ -121,6 +121,7 @@ export const testIds = {
     // Generator
     generateEmptyPlanButton: 'generate-empty-workout-plan-btn',
     generatePlanButton: 'generate-workout-plan-btn',
+    modalGenerateButton: 'workout-program-generate-btn',
     generatorError: 'workout-generator-error',
     generatorRetryButton: 'workout-generator-retry-btn',
     

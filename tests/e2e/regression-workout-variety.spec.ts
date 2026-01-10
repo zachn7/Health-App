@@ -26,6 +26,18 @@ test.describe('Regression: Workout Program Variety (R11)', () => {
     
     // Generate plan and verify it contains exercises
     await generateButton.click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     const plans = page.locator('[data-testid^="workout-plan-"]');
     await expect(plans.first()).toBeVisible({ timeout: 10000 });
     
@@ -64,6 +76,18 @@ test.describe('Regression: Workout Program Variety (R11)', () => {
     
     page.on('dialog', dialog => dialog.accept());
     await generateButton.click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     
     const plans = page.locator('[data-testid^="workout-plan-"]');
     await expect(plans.first()).toBeVisible({ timeout: 10000 });

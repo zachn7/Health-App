@@ -33,7 +33,7 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await page.waitForTimeout(300); // Wait for state update
     
     // Click the generate button in the modal
-    const modalGenerateButton = page.getByTestId(testIds.workouts.generatePlanButton);
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
     await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
     await modalGenerateButton.click();
     
@@ -249,9 +249,18 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await page.reload();
     await page.waitForLoadState('networkidle');
     
-    // Click generate button
+    // Click generate button to open modal
     const generateButton = page.getByTestId('generate-empty-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
+    
+    await generateButton.click();
+    await page.waitForTimeout(500);
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300);
     
     // Handle dialog - should show "Please create a profile first!"
     let dialogMessage = '';
@@ -261,7 +270,10 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
       await dialog.accept();
     });
     
-    await generateButton.click();
+    // Click the generate button in the modal (should fail with profile missing error)
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     await page.waitForTimeout(500);
     
     // Verify dialog shows appropriate error message
