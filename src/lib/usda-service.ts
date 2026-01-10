@@ -162,6 +162,254 @@ export function estimateMissingMacro(
   return { calories, proteinG, carbsG, fatG };
 }
 
+/**
+ * Normalized nutrition data with metadata
+ */
+export interface NormalizedNutrition {
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  fiberG: number | null;
+  sugarG: number | null;
+  sodiumMg: number | null;
+  completeness: 'complete' | 'incomplete' | 'empty';
+  usedInference: boolean;
+  basis: 'per_serving' | 'per_100g';
+  estimatedFields: string[];
+}
+
+/**
+ * Unified function to normalize nutrition data from USDA food details
+ * Handles both labelNutrients and foodNutrients with robust matching
+ * Returns null for missing values (never 0 as default)
+ */
+export function normalizeFdcNutrition(foodDetail: USDAFoodDetail): NormalizedNutrition {
+  // Initialize with all null values (missing, not zero)
+  let calories: number | null = null;
+  let proteinG: number | null = null;
+  let carbsG: number | null = null;
+  let fatG: number | null = null;
+  let fiberG: number | null = null;
+  let sugarG: number | null = null;
+  let sodiumMg: number | null = null;
+  let basis: 'per_serving' | 'per_100g' = 'per_serving';
+  
+  // Try labelNutrients first (Branded foods - per serving)
+  if (foodDetail.labelNutrients) {
+    const ln = foodDetail.labelNutrients;
+    
+    if (ln.calories?.value !== undefined) {
+      calories = Math.round(ln.calories.value);
+    }
+    if (ln.protein?.value !== undefined) {
+      proteinG = Math.round(ln.protein.value * 10) / 10;
+    }
+    if (ln.carbohydrates?.value !== undefined) {
+      carbsG = Math.round(ln.carbohydrates.value * 10) / 10;
+    }
+    if (ln.fat?.value !== undefined) {
+      fatG = Math.round(ln.fat.value * 10) / 10;
+    }
+    if (ln.fiber?.value !== undefined) {
+      fiberG = Math.round(ln.fiber.value * 10) / 10;
+    }
+    if (ln.sugars?.value !== undefined) {
+      sugarG = Math.round(ln.sugars.value * 10) / 10;
+    }
+    if (ln.sodium?.value !== undefined) {
+      sodiumMg = Math.round(ln.sodium.value);
+    }
+    
+    basis = 'per_serving';
+  } else if (foodDetail.foodNutrients && foodDetail.foodNutrients.length > 0) {
+    // Fallback to foodNutrients (Foundation/SR foods - typically per 100g)
+    // Match by both nutrientNumber AND nutrient name for robustness
+    const getNutrientValue = (
+      nutrientNumber: number, 
+      nutrientName: string
+    ): number | null => {
+      // Try exact number match first
+      let nutrient = foodDetail.foodNutrients!.find(n => 
+        (n as any).nutrientNumber === nutrientNumber || n.nutrientId === nutrientNumber
+      );
+      
+      // Fallback to name match
+      if (!nutrient) {
+        nutrient = foodDetail.foodNutrients!.find(n => {
+          const name = n.nutrientName?.toLowerCase() || '';
+          return name.includes(nutrientName) || name === nutrientName;
+        });
+      }
+      
+      return nutrient?.value !== undefined ? nutrient.value : null;
+    };
+    
+    // Energy (1008 or 208)
+    calories = getNutrientValue(1008, 'energy');
+    if (calories === null) {
+      calories = getNutrientValue(208, 'energy');
+    }
+    
+    // Protein (1003 or 203)
+    proteinG = getNutrientValue(1003, 'protein');
+    if (proteinG === null) {
+      proteinG = getNutrientValue(203, 'protein');
+    }
+    
+    // Total Lipid / Fat (1004 or 204)
+    fatG = getNutrientValue(1004, 'total lipid');
+    if (fatG === null) {
+      fatG = getNutrientValue(204, 'total fat');
+      if (fatG === null) {
+        fatG = getNutrientValue(204, 'fat');
+      }
+    }
+    
+    // Carbohydrate (1005 or 205)
+    carbsG = getNutrientValue(1005, 'carbohydrate');
+    if (carbsG === null) {
+      carbsG = getNutrientValue(205, 'carbohydrate');
+    }
+    
+    // Fiber (1079)
+    fiberG = getNutrientValue(1079, 'fiber');
+    
+    // Sugars (2000)
+    sugarG = getNutrientValue(2000, 'sugars');
+    
+    // Sodium (1093 or 307)
+    sodiumMg = getNutrientValue(1093, 'sodium');
+    if (sodiumMg === null) {
+      sodiumMg = getNutrientValue(307, 'sodium');
+    }
+    
+    // Round values
+    if (calories !== null) calories = Math.round(calories);
+    if (proteinG !== null) proteinG = Math.round(proteinG * 10) / 10;
+    if (carbsG !== null) carbsG = Math.round(carbsG * 10) / 10;
+    if (fatG !== null) fatG = Math.round(fatG * 10) / 10;
+    if (fiberG !== null) fiberG = Math.round(fiberG * 10) / 10;
+    if (sugarG !== null) sugarG = Math.round(sugarG * 10) / 10;
+    if (sodiumMg !== null) sodiumMg = Math.round(sodiumMg);
+    
+    basis = 'per_100g';
+  }
+  
+  // Determine completeness
+  const hasCalories = calories !== null;
+  const hasProtein = proteinG !== null;
+  const hasCarbs = carbsG !== null;
+  const hasFat = fatG !== null;
+  
+  const hasAnyData = hasCalories || hasProtein || hasCarbs || hasFat;
+  
+  let completeness: 'complete' | 'incomplete' | 'empty';
+  if (!hasAnyData) {
+    completeness = 'empty';
+  } else if (hasCalories && hasProtein && hasCarbs && hasFat) {
+    completeness = 'complete';
+  } else {
+    completeness = 'incomplete';
+  }
+  
+  return {
+    calories,
+    proteinG,
+    carbsG,
+    fatG,
+    fiberG,
+    sugarG,
+    sodiumMg,
+    completeness,
+    usedInference: false,
+    basis,
+    estimatedFields: []
+  };
+}
+
+/**
+ * Validate and attempt to infer missing macros
+ * Returns normalized nutrition with inference applied, or null if validation fails
+ */
+export function validateAndInferMacros(nutrition: NormalizedNutrition): NormalizedNutrition | null {
+  // Convert to format expected by validateMacros
+  const macros = {
+    calories: nutrition.calories ?? undefined,
+    proteinG: nutrition.proteinG ?? undefined,
+    carbsG: nutrition.carbsG ?? undefined,
+    fatG: nutrition.fatG ?? undefined
+  };
+  
+  // Validate
+  const validation = validateMacros(macros);
+  
+  // If completely empty or too incomplete, reject
+  if (validation.recommendedAction === 'skip' || nutrition.completeness === 'empty') {
+    console.warn('[USDA] Skipping food with insufficient nutrition data');
+    return null;
+  } else if (validation.recommendedAction === 'import') {
+    // All complete, return as-is
+    return nutrition;
+  }
+  
+  // Try to estimate missing values
+  let result = { ...nutrition };
+  const estimatedFields: string[] = [];
+  
+  if (validation.recommendedAction === 'estimate') {
+    const estimated = estimateMissingMacro(macros);
+    
+    // Apply estimates, tracking which fields were estimated
+    if (estimated.calories !== undefined && macros.calories === undefined) {
+      result.calories = estimated.calories;
+      estimatedFields.push('calories');
+    }
+    if (estimated.proteinG !== undefined && macros.proteinG === undefined) {
+      result.proteinG = estimated.proteinG;
+      estimatedFields.push('protein');
+    }
+    if (estimated.carbsG !== undefined && macros.carbsG === undefined) {
+      result.carbsG = estimated.carbsG;
+      estimatedFields.push('carbs');
+    }
+    if (estimated.fatG !== undefined && macros.fatG === undefined) {
+      result.fatG = estimated.fatG;
+      estimatedFields.push('fat');
+    }
+    
+    result.usedInference = true;
+    result.estimatedFields = estimatedFields;
+    result.completeness = 'complete';
+  } else {
+    // Too incomplete to estimate
+    console.warn('[USDA] Skipping food - too incomplete to estimate');
+    return null;
+  }
+  
+  // Validation: re-compute calories from final macros and check tolerance
+  if (result.calories !== null && result.proteinG !== null && result.carbsG !== null && result.fatG !== null) {
+    const recomputedCalories = Math.round(
+      (result.proteinG * ATWATER_FACTORS.protein) +
+      (result.carbsG * ATWATER_FACTORS.carbs) +
+      (result.fatG * ATWATER_FACTORS.fat)
+    );
+    
+    const diff = Math.abs(recomputedCalories - result.calories);
+    const tolerance = Math.max(20, Math.round(result.calories * 0.10)); // max(20 kcal, 10%)
+    
+    if (diff > tolerance) {
+      console.warn(
+        `[USDA] Calories validation failed: computed=${recomputedCalories}, provided=${result.calories}, ` +
+        `diff=${diff}, tolerance=${tolerance}. Rejecting food.`
+      );
+      return null; // Validation failed - block this food
+    }
+  }
+  
+  return result;
+}
+
 export interface SearchDiagnostics {
   query: string;
   url: string;
@@ -614,77 +862,23 @@ class USDAService {
   /**
    * Extract macronutrients from USDA food data, supporting both foodNutrients and labelNutrients
    * Returns macros with basis indicating whether values are per serving or per 100g
+   * ** IMPORTANT ** - This is now just a wrapper around normalizeFdcNutrition for backward compatibility
    */
   private static extractMacros(foodDetail: USDAFoodDetail): MacroNutrients {
-    const emptyResult: MacroNutrients = {
-      calories: 0,
-      proteinG: 0,
-      carbsG: 0,
-      fatG: 0,
-      fiberG: undefined,
-      sugarG: undefined,
-      sodiumMg: undefined,
-      basis: 'per_serving'
+    // Use the unified normalization function
+    const normalized = normalizeFdcNutrition(foodDetail);
+    
+    // Convert to MacroNutrients format (null -> undefined for missing values)
+    return {
+      calories: normalized.calories ?? undefined,
+      proteinG: normalized.proteinG ?? undefined,
+      carbsG: normalized.carbsG ?? undefined,
+      fatG: normalized.fatG ?? undefined,
+      fiberG: normalized.fiberG ?? undefined,
+      sugarG: normalized.sugarG ?? undefined,
+      sodiumMg: normalized.sodiumMg ?? undefined,
+      basis: normalized.basis
     };
-
-    // Try labelNutrients first (Branded foods - per serving)
-    if (foodDetail.labelNutrients) {
-      const ln = foodDetail.labelNutrients;
-      // Check if we have ANY nutrition data - 0 is VALID!
-      const hasData = ln.calories?.value !== undefined || 
-                      ln.protein?.value !== undefined || 
-                      ln.fat?.value !== undefined || 
-                      ln.carbohydrates?.value !== undefined;
-      
-      if (hasData) {
-        return {
-          calories: ln.calories?.value !== undefined ? Math.round(ln.calories.value) : undefined,
-          proteinG: ln.protein?.value !== undefined ? Math.round(ln.protein.value * 10) / 10 : undefined,
-          carbsG: ln.carbohydrates?.value !== undefined ? Math.round(ln.carbohydrates.value * 10) / 10 : undefined,
-          fatG: ln.fat?.value !== undefined ? Math.round(ln.fat.value * 10) / 10 : undefined,
-          fiberG: ln.fiber?.value !== undefined ? Math.round(ln.fiber.value * 10) / 10 : undefined,
-          sugarG: ln.sugars?.value !== undefined ? Math.round(ln.sugars.value * 10) / 10 : undefined,
-          sodiumMg: ln.sodium?.value !== undefined ? Math.round(ln.sodium.value) : undefined,
-          basis: 'per_serving'
-        };
-      }
-    }
-
-    // Fallback to foodNutrients (Foundation/SR foods - typically per 100g)
-    if (foodDetail.foodNutrients && foodDetail.foodNutrients.length > 0) {
-      const getNutrientValue = (nutrientNumber: number): number | undefined => {
-        const nutrient = foodDetail.foodNutrients!.find(n => 
-          (n as any).nutrientNumber === nutrientNumber || n.nutrientId === nutrientNumber
-        );
-        return nutrient?.value;
-      };
-
-      const calories = getNutrientValue(1008); // Energy
-      const proteinG = getNutrientValue(1003); // Protein
-      const fatG = getNutrientValue(1004); // Total lipid (fat)
-      const carbsG = getNutrientValue(1005); // Carbohydrate
-      const fiberG = getNutrientValue(1079); // Fiber, total dietary
-      const sugarG = getNutrientValue(2000); // Sugars, total
-      const sodiumMg = getNutrientValue(1093); // Sodium
-
-      const hasAnyMacro = calories !== undefined || proteinG !== undefined || 
-                          fatG !== undefined || carbsG !== undefined;
-
-      if (hasAnyMacro) {
-        return {
-          calories: calories !== undefined ? Math.round(calories) : undefined,
-          proteinG: proteinG !== undefined ? Math.round(proteinG * 10) / 10 : undefined,
-          carbsG: carbsG !== undefined ? Math.round(carbsG * 10) / 10 : undefined,
-          fatG: fatG !== undefined ? Math.round(fatG * 10) / 10 : undefined,
-          fiberG: fiberG !== undefined ? Math.round(fiberG * 10) / 10 : undefined,
-          sugarG: sugarG !== undefined ? Math.round(sugarG * 10) / 10 : undefined,
-          sodiumMg: sodiumMg !== undefined ? Math.round(sodiumMg) : undefined,
-          basis: 'per_100g' // Foundation/SR foods are typically per 100g
-        };
-      }
-    }
-
-    return emptyResult;
   }
 
   private static parseServingInfo(foodDetail: USDAFoodDetail): {
@@ -749,48 +943,41 @@ class USDAService {
   static async importFoodItem(fdcId: number): Promise<FoodItem> {
     const foodDetail = await this.getFoodDetails(fdcId);
     
-    // Extract macros using the robust method
-    const macroNutrients = this.extractMacros(foodDetail);
+    // Use unified normalization + validation + inference
+    const nutrition = normalizeFdcNutrition(foodDetail);
+    const validated = validateAndInferMacros(nutrition);
     
-    // Validate macros BEFORE importing
-    const validation = validateMacros(macroNutrients);
-    
-    if (validation.recommendedAction === 'skip') {
+    // If validation failed, block the food
+    if (!validated) {
+      const missingFields: string[] = [];
+      if (nutrition.calories === null) missingFields.push('calories');
+      if (nutrition.proteinG === null) missingFields.push('protein');
+      if (nutrition.carbsG === null) missingFields.push('carbs');
+      if (nutrition.fatG === null) missingFields.push('fat');
+      
       throw new Error(
         'This USDA food item has incomplete nutrition data and cannot be imported. ' +
-        'Missing: ' + (validation.missingMacros.join(', ') || 'all macros') + '. ' +
+        'Missing: ' + (missingFields.length > 0 ? missingFields.join(', ') : 'required macro data') + '. ' +
         'Please try another food.'
       );
     }
     
-    // If we can estimate, do it
-    let macrosToUse = { ...macroNutrients };
-    if (validation.recommendedAction === 'estimate') {
-      const estimated = estimateMissingMacro({
-        calories: macroNutrients.calories,
-        proteinG: macroNutrients.proteinG,
-        carbsG: macroNutrients.carbsG,
-        fatG: macroNutrients.fatG
-      });
-      macrosToUse = { ...macroNutrients, ...estimated };
-      console.log('[USDA] Estimated missing macro for import of', foodDetail.description, ':', estimated);
-    }
     
     // Extract serving size information
     const servingInfo = this.parseServingInfo(foodDetail);
     
-    // After validation/estimation, all required values should be defined
+    // After validation/estimation, all required values should be non-null
     const foodItem: FoodItem = {
       id: `usda-${fdcId}`,
       name: foodDetail.description,
       servingSize: servingInfo.displaySize,
-      calories: macrosToUse.calories!,
-      proteinG: macrosToUse.proteinG!,
-      carbsG: macrosToUse.carbsG!,
-      fatG: macrosToUse.fatG!,
-      fiberG: macrosToUse.fiberG,
-      sugarG: macrosToUse.sugarG,
-      sodiumMg: macrosToUse.sodiumMg,
+      calories: validated.calories!,
+      proteinG: validated.proteinG!,
+      carbsG: validated.carbsG!,
+      fatG: validated.fatG!,
+      fiberG: validated.fiberG ?? undefined,
+      sugarG: validated.sugarG ?? undefined,
+      sodiumMg: validated.sodiumMg ?? undefined,
       source: 'bundled',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -808,34 +995,29 @@ class USDAService {
    */
   static async createFoodLogItem(fdcId: number, customQuantity: number = 1, customUnit: string = 'serving'): Promise<FoodLogItem> {
     const foodDetail = await this.getFoodDetails(fdcId);
-    const macroNutrients = this.extractMacros(foodDetail);
-    const servingInfo = this.parseServingInfo(foodDetail);
     
-    // Validate macros BEFORE any processing - ensure we don't zero out missing values
-    const validation = validateMacros(macroNutrients);
+    // Use unified normalization + validation + inference
+    const nutrition = normalizeFdcNutrition(foodDetail);
+    const validated = validateAndInferMacros(nutrition);
     
-    if (validation.recommendedAction === 'skip') {
+    // If validation failed, block the food
+    if (!validated) {
+      const missingFields: string[] = [];
+      if (nutrition.calories === null) missingFields.push('calories');
+      if (nutrition.proteinG === null) missingFields.push('protein');
+      if (nutrition.carbsG === null) missingFields.push('carbs');
+      if (nutrition.fatG === null) missingFields.push('fat');
+      
       throw new Error(
         'This USDA food item has incomplete nutrition data. ' +
-        'Missing: ' + (validation.missingMacros.join(', ') || 'all macros') + '. ' +
+        'Missing: ' + (missingFields.length > 0 ? missingFields.join(', ') : 'required macro data') + '. ' +
         'Please try another food or add as a manual item.'
       );
     }
     
-    // If we can estimate, do it early before applying scaling
-    let macrosToUse = { ...macroNutrients };
-    if (validation.recommendedAction === 'estimate') {
-      const estimated = estimateMissingMacro({
-        calories: macroNutrients.calories,
-        proteinG: macroNutrients.proteinG,
-        carbsG: macroNutrients.carbsG,
-        fatG: macroNutrients.fatG
-      });
-      macrosToUse = { ...macroNutrients, ...estimated };
-      console.log('[USDA] Estimated missing macro for', foodDetail.description, ':', estimated);
-    }
+    const servingInfo = this.parseServingInfo(foodDetail);
     
-    // Normalize customUnit to 'serving' or 'grams'
+    //    // Normalize customUnit to 'serving' or 'grams'
     const isGramsUnit = customUnit === 'grams' || customUnit === 'g';
     
     // Default to 'serving' if not specified
@@ -850,7 +1032,7 @@ class USDAService {
     
     if (isGramsUnit) {
       // User wants specific grams
-      if (macroNutrients.basis === 'per_100g') {
+      if (validated.basis === 'per_100g') {
         // Foundation/SR foods are per 100g
         scaleFactor = customQuantity / 100;
       } else {
@@ -871,7 +1053,7 @@ class USDAService {
       finalBaseUnit = 'serving';
       
       // For Foundation/SR foods (per_100g), treat 1 serving = 100g
-      if (macroNutrients.basis === 'per_100g') {
+      if (validated.basis === 'per_100g') {
         finalServingGrams = 100; // 1 serving = 100g for Foundation foods
       } else {
         // For branded foods (per_serving), use the actual serving grams
@@ -880,15 +1062,15 @@ class USDAService {
     }
     
     // Apply scaling to get the final macro values
-    // After validation/estimation, macrosToUse should have all required values defined
+    // After validation/estimation, validated should have all required values defined
     const finalMacros = {
-      calories: Math.round(macrosToUse.calories! * scaleFactor),
-      proteinG: Math.round((macrosToUse.proteinG! * scaleFactor) * 10) / 10,
-      carbsG: Math.round((macrosToUse.carbsG! * scaleFactor) * 10) / 10,
-      fatG: Math.round((macrosToUse.fatG! * scaleFactor) * 10) / 10,
-      fiberG: macrosToUse.fiberG !== undefined ? Math.round((macrosToUse.fiberG * scaleFactor) * 10) / 10 : undefined,
-      sugarG: macrosToUse.sugarG !== undefined ? Math.round((macrosToUse.sugarG * scaleFactor) * 10) / 10 : undefined,
-      sodiumMg: macrosToUse.sodiumMg !== undefined ? Math.round((macrosToUse.sodiumMg * scaleFactor)) : undefined
+      calories: Math.round(validated.calories! * scaleFactor),
+      proteinG: Math.round((validated.proteinG! * scaleFactor) * 10) / 10,
+      carbsG: Math.round((validated.carbsG! * scaleFactor) * 10) / 10,
+      fatG: Math.round((validated.fatG! * scaleFactor) * 10) / 10,
+      fiberG: validated.fiberG !== null ? Math.round((validated.fiberG * scaleFactor) * 10) / 10 : undefined,
+      sugarG: validated.sugarG !== null ? Math.round((validated.sugarG * scaleFactor) * 10) / 10 : undefined,
+      sodiumMg: validated.sodiumMg !== null ? Math.round((validated.sodiumMg * scaleFactor)) : undefined
     };
     
     // Canonical model: totalGrams = quantity * gramsPerUnit

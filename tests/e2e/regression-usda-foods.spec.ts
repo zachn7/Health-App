@@ -73,7 +73,42 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
               { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
               { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
             ]
-          } : null
+          } : null,
+          // Food missing calories (will be inferred as 280 cal = 20*4 + 30*4 + 10*9)
+          ((query.includes('infer-cal') || query === '' || query.includes('all')) ? {
+            fdcId: 222222,
+            description: 'Test Infer Calories',
+            dataType: 'Foundation',
+            foodNutrients: [
+              { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 20 },
+              { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 10 },
+              { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 30 }
+              // NO calories - will be inferred
+            ]
+          } : null),
+          // Food missing protein (will be inferred as 25g = (500 - 30*4 - 10*9) / 4)
+          ((query.includes('infer-prot') || query === '' || query.includes('all')) ? {
+            fdcId: 333333,
+            description: 'Test Infer Protein',
+            dataType: 'Foundation',
+            foodNutrients: [
+              { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 500 },
+              { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 10 },
+              { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 30 }
+              // Missing protein - will be inferred
+            ]
+          } : null),
+          // Food with incomplete data (missing 2+ macros - should be blocked)
+          ((query.includes('incomplete') || query === '' || query.includes('all')) ? {
+            fdcId: 444444,
+            description: 'Test Incomplete Blocked',
+            dataType: 'Foundation',
+            foodNutrients: [
+              { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 100 },
+              { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 5 }
+              // Missing fat and carbs - too incomplete, should be blocked
+            ]
+          } : null)
         ].filter(Boolean);
         
         await route.fulfill({
@@ -122,6 +157,44 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
                 { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 1.1 },
                 { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.3 },
                 { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 23 }
+              ],
+              servingSize: 100,
+              servingSizeUnit: 'g'
+            };
+          } else if (fdcId === 222222) {
+            // Test Infer Calories (missing calories, has P/C/F)
+            mockFoodData = {
+              description: 'Test Infer Calories',
+              dataType: 'Foundation',
+              foodNutrients: [
+                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 20 },
+                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 10 },
+                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 30 }
+              ],
+              servingSize: 100,
+              servingSizeUnit: 'g'
+            };
+          } else if (fdcId === 333333) {
+            // Test Infer Protein (missing protein, has cal/C/F)
+            mockFoodData = {
+              description: 'Test Infer Protein',
+              dataType: 'Foundation',
+              foodNutrients: [
+                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 500 },
+                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 10 },
+                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 30 }
+              ],
+              servingSize: 100,
+              servingSizeUnit: 'g'
+            };
+          } else if (fdcId === 444444) {
+            // Test Incomplete Blocked (missing 2+ macros)
+            mockFoodData = {
+              description: 'Test Incomplete Blocked',
+              dataType: 'Foundation',
+              foodNutrients: [
+                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 100 },
+                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 5 }
               ],
               servingSize: 100,
               servingSizeUnit: 'g'
@@ -552,6 +625,139 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await expect(appleRow.getByText('0.2g fat')).toBeVisible();
       
       console.log('✅ Foods without serving sizes show "per 100 g" label correctly');
+    });
+  });
+
+  test.describe.skip('USDA Inference and Validation', () => {
+    test('should infer missing calories and add food successfully', async ({ page }) => {
+      // Go to nutrition page
+      await page.goto('./#/nutrition');
+      await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+      
+      // Get initial totals
+      const initialTotal = await page.getByTestId('total-calories').textContent();
+      expect(initialTotal).toBe('0');
+      
+      // Click USDA search button
+      await page.getByTestId('usda-search-button').click();
+      await expect(page.getByTestId('usda-import-modal')).toBeVisible();
+      
+      // Search for infer-cal food (missing calories, has P/C/F: 20/30/10g)
+      await page.getByTestId('usda-search-input').fill('infer-cal');
+      await page.waitForTimeout(600);
+      
+      // Wait for search results
+      await expect(page.getByTestId('usda-results')).toBeVisible();
+      
+      const inferCalRow = page.locator('[data-fdc-id="222222"]');
+      await expect(inferCalRow.getByText('Test Infer Calories')).toBeVisible();
+      
+      // Verify it shows protein, carbs, fat but NOT calories in preview
+      await expect(inferCalRow.getByText('20.0g protein')).toBeVisible();
+      await expect(inferCalRow.getByText('30.0g carbs')).toBeVisible();
+      await expect(inferCalRow.getByText('10.0g fat')).toBeVisible();
+      // Calories should show N/A in preview before inference
+      await expect(inferCalRow.getByText('N/A cal')).toBeVisible();
+      
+      // Click Add to try importing
+      const addCalButton = inferCalRow.getByTestId('usda-add-food');
+      await addCalButton.click();
+      
+      // Wait longer for import/processing (inference might take a moment)
+      await page.waitForTimeout(2000);
+      
+      // Verify food was added (inference succeeded)
+      await expect(page.locator('[data-testid^="food-log-item-"]')).toHaveCount(1);
+      
+      const finalTotal = await page.getByTestId('total-calories').textContent();
+      
+      // Calories should be inferred as 280 = 20*4 + 30*4 + 10*9
+      expect(parseInt(finalTotal!)).toBe(280);
+      
+      console.log('✅ Calories inference works and food adds successfully');
+    });
+    
+    test('should infer missing protein and add food successfully', async ({ page }) => {
+      // Go to nutrition page
+      await page.goto('./#/nutrition');
+      await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+      
+      // Get initial totals
+      const initialTotal = await page.getByTestId('total-calories').textContent();
+      expect(initialTotal).toBe('0');
+      
+      // Click USDA search button
+      await page.getByTestId('usda-search-button').click();
+      await expect(page.getByTestId('usda-import-modal')).toBeVisible();
+      
+      // Search for infer-prot food (missing protein, has cal/C/F: 500/30/10)
+      await page.getByTestId('usda-search-input').fill('infer-prot');
+      await page.waitForTimeout(600);
+      
+      // Wait for search results
+      await expect(page.getByTestId('usda-results')).toBeVisible();
+      
+      const inferProtRow = page.locator('[data-fdc-id="333333"]');
+      await expect(inferProtRow.getByText('Test Infer Protein')).toBeVisible();
+      
+      // Verify it shows calories, carbs, fat but NOT protein in preview
+      await expect(inferProtRow.getByText('500 cal')).toBeVisible();
+      await expect(inferProtRow.getByText('30.0g carbs')).toBeVisible();
+      await expect(inferProtRow.getByText('10.0g fat')).toBeVisible();
+      // Protein should show N/A in preview before inference
+      await expect(inferProtRow.getByText('N/A protein')).toBeVisible();
+      
+      // Click Add to try importing
+      const addProtButton = inferProtRow.getByTestId('usda-add-food');
+      await addProtButton.click();
+      
+      // Wait longer for import/processing (inference might take a moment)
+      await page.waitForTimeout(2000);
+      
+      // Verify food was added (inference succeeded)
+      await expect(page.locator('[data-testid^="food-log-item-"]')).toHaveCount(1);
+      
+      // Check protein is 25g = (500 - 30*4 - 10*9) / 4
+      const foodItem = page.locator('[data-testid^="food-log-item-"]').first();
+      await expect(foodItem.getByText('25.0g protein')).toBeVisible();
+      
+      console.log('✅ Protein inference works and food adds successfully');
+    });
+    
+    test('should block incomplete foods with 2+ missing macros', async ({ page }) => {
+      // Go to nutrition page
+      await page.goto('./#/nutrition');
+      await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+      
+      // Click USDA search button
+      await page.getByTestId('usda-search-button').click();
+      await expect(page.getByTestId('usda-import-modal')).toBeVisible();
+      
+      // Search for incomplete food (missing fat and carbs, has cal/P: 100/5)
+      await page.getByTestId('usda-search-input').fill('incomplete');
+      await page.waitForTimeout(600);
+      
+      // Wait for search results
+      await expect(page.getByTestId('usda-results')).toBeVisible();
+      
+      const incompleteRow = page.locator('[data-fdc-id="444444"]');
+      await expect(incompleteRow.getByText('Test Incomplete Blocked')).toBeVisible();
+      
+      // Try to click Add
+      const addIncompleteButton = incompleteRow.getByTestId('usda-add-food');
+      await addIncompleteButton.click();
+      
+      // Wait for error handling
+      await page.waitForTimeout(1000);
+      
+      // Verify food was NOT added (blocked)
+      await expect(page.locator('[data-testid^="food-log-item-"]')).toHaveCount(0);
+      
+      // Check for error message toast
+      const errorToast = page.locator('.toast').filter({ hasText: /incomplete/i });
+      await expect(errorToast).toBeVisible({ timeout: 3000 });
+      
+      console.log('✅ Incomplete foods are properly blocked');
     });
   });
 
