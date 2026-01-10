@@ -23,6 +23,41 @@ export const FUSE_CONFIG = {
 };
 
 /**
+ * USDA-specific fuzzy search configuration
+ * Food names can be long (e.g., "CHEESE,CHEDDAR,SHREDDED") so we need
+ * good partial matching and handling of comma-separated names
+ */
+export const USDA_FUSE_CONFIG = {
+  threshold: 0.4, // Slightly more permissive for food names
+  minMatchCharLength: 2,
+  ignoreLocation: true,
+  includeScore: true,
+  keys: [
+    { name: 'description', weight: 3.0 }, // Food name is most important
+    { name: 'brandOwner', weight: 1.5 }, // Brand helps distinguish products
+    { name: 'foodCategory', weight: 1.0 }, // Category is secondary
+    { name: 'additionalDescriptions', weight: 0.5 }, // Extra descriptions as fallback
+  ],
+};
+
+/**
+ * Exercise-specific fuzzy search configuration
+ * Exercises have name, bodyPart, equipment, and muscle groups
+ */
+export const EXERCISE_FUSE_CONFIG = {
+  threshold: 0.35, // Moderate tolerance for typos
+  minMatchCharLength: 2,
+  ignoreLocation: true,
+  includeScore: true,
+  keys: [
+    { name: 'name', weight: 3.0 }, // Exercise name is most important
+    { name: 'bodyPart', weight: 2.0 }, // Body part matches are important
+    { name: 'targetMuscles', weight: 1.5 }, // Target muscles help with relevance
+    { name: 'equipment', weight: 1.0 }, // Equipment is secondary
+  ],
+};
+
+/**
  * Standard Fuse search result interface
  */
 export interface FuzzySearchResult<T> {
@@ -106,4 +141,178 @@ export function debounceSearch<T>(
       }, delay);
     });
   }
+}
+
+/**
+ * Tokenize a search query into individual terms
+ * - Lowercases and normalizes
+ * - Removes very short tokens (< 2 chars)
+ * - Removes common stop words if needed
+ */
+export function tokenizeSearchQuery(query: string): string[] {
+  const normalized = normalizeSearchTerm(query);
+  
+  // Split on whitespace and filter out short tokens
+  const tokens = normalized
+    .split(/\s+/)
+    .filter(token => token.length >= 2);
+  
+  return tokens;
+}
+
+/**
+ * Score an item based on token matching
+ * Returns a score (0-1) where higher is better
+ */
+export function scoreByTokenMatching<T>(
+  item: T,
+  tokens: string[],
+  getTextFields: (item: T) => string[]
+): number {
+  if (tokens.length === 0) return 1; // Perfect match for empty query
+  
+  const fields = getTextFields(item).map(f => normalizeSearchTerm(f)).join(' ');
+  
+  // Count how many tokens match
+  let matchedTokens = 0;
+  let exactMatches = 0;
+  
+  for (const token of tokens) {
+    if (fields.includes(token)) {
+      matchedTokens++;
+      exactMatches++;
+    } else if (fields.includes(token)) {
+      matchedTokens++;
+    }
+  }
+  
+  // Calculate score: prioritize exact token matches
+  const tokenMatchRatio = matchedTokens / tokens.length;
+  const exactMatchBonus = exactMatches / tokens.length * 0.2;
+  
+  return Math.min(1, tokenMatchRatio + exactMatchBonus);
+}
+
+/**
+ * Hybrid ranking: combine Fuse.js fuzzy score with token-based scoring
+ */
+export function hybridRank<T>(
+  fuzzyResults: FuzzySearchResult<T>[],
+  tokens: string[],
+  getTextFields: (item: T) => string[],
+  fuzzyWeight: number = 0.6 // 60% fuzzy, 40% token matching
+): T[] {
+  // Calculate hybrid score for each result
+  const scored = fuzzyResults.map(fuzzyResult => {
+    const fuzzyScore = fuzzyResult.score !== undefined ? 1 - fuzzyResult.score : 0.5;
+    const tokenScore = scoreByTokenMatching(fuzzyResult.item, tokens, getTextFields);
+    
+    const hybridScore = fuzzyScore * fuzzyWeight + tokenScore * (1 - fuzzyWeight);
+    
+    return { item: fuzzyResult.item, score: hybridScore };
+  });
+  
+  // Sort by hybrid score (descending)
+  scored.sort((a, b) => b.score - a.score);
+  
+  return scored.map(s => s.item);
+}
+
+// ==================== USDA-Specific Functions ====================
+
+/**
+ * Interface for USDA food search results
+ */
+export interface USDFoodSearchItem {
+  fdcId: number;
+  description: string;
+  brandOwner?: string;
+  foodCategory?: string;
+  additionalDescriptions?: string;
+  dataType: string;
+}
+
+/**
+ * Search and rank USDA foods with fuzzy matching
+ * Combines Fuse.js fuzzy search with token-based ranking
+ */
+export function searchUSDAFoods(
+  foods: USDFoodSearchItem[],
+  searchTerm: string,
+  limit?: number
+): USDFoodSearchItem[] {
+  if (!searchTerm || searchTerm.trim() === '') {
+    return foods;
+  }
+  
+  // Tokenize the search term
+  const tokens = tokenizeSearchQuery(searchTerm);
+  
+  // Get fuzzy search results
+  const fuzzyResults = fuzzySearch(foods, searchTerm, limit);
+  
+  // Apply hybrid ranking (combine fuzzy + token matching)
+  const ranked = hybridRank(
+    fuzzyResults,
+    tokens,
+    (food) => [food.description, food.brandOwner || '', food.foodCategory || ''],
+    0.6 // 60% fuzzy, 40% token matching
+  );
+  
+  return limit ? ranked.slice(0, limit) : ranked;
+}
+
+/**
+ * Rerank USDA API results with local fuzzy search
+ * Useful for partial/typo queries where the API returns limited results
+ */
+export function rerankUSDAFoods(
+  apiResults: USDFoodSearchItem[],
+  searchTerm: string,
+  limit?: number
+): USDFoodSearchItem[] {
+  return searchUSDAFoods(apiResults, searchTerm, limit);
+}
+
+// ==================== Exercise-Specific Functions ====================
+
+/**
+ * Interface for exercise search results
+ */
+export interface ExerciseSearchItem {
+  id: string;
+  name: string;
+  bodyPart: string;
+  equipment: string[];
+  targetMuscles: string[];
+}
+
+/**
+ * Search and rank exercises with fuzzy matching
+ */
+export function searchExercises(
+  exercises: ExerciseSearchItem[],
+  searchTerm: string,
+  limit?: number
+): ExerciseSearchItem[] {
+  if (!searchTerm || searchTerm.trim() === '') {
+    return exercises;
+  }
+  
+  const tokens = tokenizeSearchQuery(searchTerm);
+  const fuzzyResults = fuzzySearch(exercises, searchTerm, limit);
+  
+  const ranked = hybridRank(
+    fuzzyResults,
+    tokens,
+    (exercise) => [
+      exercise.name,
+      exercise.bodyPart,
+      ...exercise.equipment,
+      ...exercise.targetMuscles
+    ],
+    0.6
+  );
+  
+  return limit ? ranked.slice(0, limit) : ranked;
 }

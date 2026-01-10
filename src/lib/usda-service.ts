@@ -1,8 +1,7 @@
 import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
 import { FoodItem, FoodLogItem } from '@/types';
-import Fuse from 'fuse.js';
-import { normalizeSearchTerm } from '@/lib/search/normalize';
+import { rerankUSDAFoods } from '@/lib/search/fuzzy';
 
 /**
  * Atwater general factors for estimating missing macros
@@ -370,26 +369,9 @@ class USDAService {
       
       // Client-side reranking with fuzzy search for better partial matches
       if (query && query.trim() && foods.length > 0) {
-        const normalizedQuery = normalizeSearchTerm(query);
-        console.log('[USDA] Reranking', foods.length, 'results for query:', normalizedQuery);
-        
-        const fuseOptions = {
-          keys: [
-            { name: 'description', weight: 2.0 },  // Food name is most important
-            { name: 'brandOwner', weight: 1.0 },   // Brand is secondary
-            { name: 'foodCategory', weight: 0.5 }  // Category is tertiary
-          ],
-          threshold: 0.4,  // Permissive for partial matches
-          minMatchCharLength: 2,
-          ignoreLocation: true,
-          includeScore: true
-        };
-        
-        const fuse = new Fuse(foods, fuseOptions);
-        const reranked = fuse.search(normalizedQuery);
-        
-        console.log('[USDA] Reranked to', reranked.length, 'results');
-        foods = reranked.map(r => r.item);
+        console.log('[USDA] Reranking', foods.length, 'results for query:', query);
+        foods = rerankUSDAFoods(foods, query);
+        console.log('[USDA] Reranked to', foods.length, 'results');
       }
       
       return { results: foods, diagnostics };

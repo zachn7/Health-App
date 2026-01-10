@@ -261,7 +261,7 @@ export default function Nutrition() {
       if (isUSDAEnabled && showUSDAImport) {
         searchUSDAFoods();
       }
-    }, 500); // 500ms debounce
+    }, 300); // 300ms debounce for responsive typeahead
 
     return () => clearTimeout(timer);
   }, [usdaSearchQuery, isUSDAEnabled, showUSDAImport, searchUSDAFoods]);
