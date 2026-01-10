@@ -756,7 +756,7 @@ class USDAService {
   static async searchFoods(
     query: string, 
     pageSize: number = 100
-  ): Promise<{ results: USDFoodSearchResult[]; diagnostics: SearchDiagnostics }> {
+  ): Promise<{ results: USDFoodSearchResult[]; diagnostics: SearchDiagnostics; queryUsed: string; wasRelaxed: boolean }> {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error('USDA API key not configured');
@@ -770,30 +770,21 @@ class USDAService {
     // Request specific nutrients to get macro data in search results
     const nutrientNumbers = ['1008', '1003', '1004', '1005', '1079', '2000', '1093'].join(',');
     
-    const searchParams = new URLSearchParams({
-      query: query,
-      pageSize: pageSize.toString(),
-      pageNumber: '1',
-      sortBy: 'score',
-      sortOrder: 'desc',
-      api_key: apiKey,
-      nutrients: nutrientNumbers,
-      dataType: 'Foundation,SR Legacy,Branded'
-    });
-    
-    const url = `${BASE_URL}/foods/search?${searchParams.toString()}`;
-    const diagnostics: SearchDiagnostics = {
-      query,
-      url,
-      timestamp: new Date().toISOString(),
-      status: null,
-      errorMessage: null,
-      resultCount: 0
-    };
-    
-    try {
+    // Define the actual USDA API query function
+    const performQuery = async (searchQuery: string): Promise<{ results: USDFoodSearchResult[] }> => {
+      const searchParams = new URLSearchParams({
+        query: searchQuery,
+        pageSize: pageSize.toString(),
+        pageNumber: '1',
+        sortBy: 'score',
+        sortOrder: 'desc',
+        api_key: apiKey,
+        nutrients: nutrientNumbers,
+        dataType: 'Foundation,SR Legacy,Branded'
+      });
+      
+      const url = `${BASE_URL}/foods/search?${searchParams.toString()}`;
       const response = await fetch(url);
-      diagnostics.status = response.status;
       
       if (!response.ok) {
         let errorMessage = `USDA API error: ${response.statusText}`;
@@ -802,25 +793,56 @@ class USDAService {
         } else if (response.status === 429) {
           errorMessage = 'USDA API rate limit exceeded';
         }
-        diagnostics.errorMessage = errorMessage;
         throw new Error(errorMessage);
       }
       
       const data = await response.json();
       let foods = data.foods || [];
-      diagnostics.resultCount = foods.length;
       
       // Filter out ignored foods
       foods = this.filterIgnoredFoods(foods);
       
+      return { results: foods };
+    };
+    
+    const diagnostics: SearchDiagnostics = {
+      query,
+      url: '', // Will be set after we know which query was used
+      timestamp: new Date().toISOString(),
+      status: null,
+      errorMessage: null,
+      resultCount: 0
+    };
+    
+    try {
+      // Import and use searchWithRelaxation for query relaxation
+      const { searchWithRelaxation } = await import('./search/fuzzy');
+      
+      const relaxedResult = await searchWithRelaxation(performQuery, query, {
+        maxAttempts: 3,
+        minQueryLength: 4
+      });
+      
+      // Update diagnostics with the query that actually worked
+      diagnostics.url = `${BASE_URL}/foods/search?query=${encodeURIComponent(relaxedResult.queryUsed)}`;
+      
+      let foods = relaxedResult.results as USDFoodSearchResult[];
+      diagnostics.resultCount = foods.length;
+      
       // Client-side reranking with fuzzy search for better partial matches
+      // Always rerank with the ORIGINAL query, even if we used a relaxed query
       if (query && query.trim() && foods.length > 0) {
-        console.log('[USDA] Reranking', foods.length, 'results for query:', query);
+        console.log('[USDA] Reranking', foods.length, 'results queryUsed:', relaxedResult.queryUsed, 'for original:', query);
         foods = rerankUSDAFoods(foods, query);
         console.log('[USDA] Reranked to', foods.length, 'results');
       }
       
-      return { results: foods, diagnostics };
+      return { 
+        results: foods, 
+        diagnostics,
+        queryUsed: relaxedResult.queryUsed,
+        wasRelaxed: relaxedResult.wasRelaxed
+      };
     } catch (error) {
       if (error instanceof Error) {
         diagnostics.errorMessage = error.message;
