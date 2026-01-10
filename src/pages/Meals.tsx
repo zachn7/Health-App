@@ -4,6 +4,7 @@ import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 import { extractMacrosFromSearchResult } from '../lib/usda-service';
+import { computeServingsChange } from '../lib/serving-utils';
 
 export default function Meals() {
   const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans'>('meals');
@@ -93,44 +94,36 @@ export default function Meals() {
     );
   };
 
-  const updateMealItemQuantity = (index: number, updates: {
-    quantidade?: number;
-    baseUnit?: 'serving' | 'grams';
-    servingGrams?: number;
-    servingSize?: string;
-  }) => {
+  const updateMealItemQuantity = (index: number, newQuantity: number, newUnit: 'serving' | 'grams') => {
     const newItems = [...mealItems];
     const item = newItems[index];
     
-    // Calculate macros per gram based on original values
-    const macrosPerGram = {
-      calories: item.calories / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
-      proteinG: item.proteinG / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
-      carbsG: item.carbsG / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
-      fatG: item.fatG / (item.baseUnit === 'grams' ? item.quantidade : item.servingGrams),
+    // Create a temporary item with an ID for computeServingsChange
+    const tempItem: FoodLogItem = {
+      ...item,
+      id: 'temp-edit-id'
     };
     
-    // Apply updates
-    if (updates.quantidade !== undefined) {
-      item.quantidade = updates.quantidade;
-    }
-    if (updates.baseUnit !== undefined) {
-      item.baseUnit = updates.baseUnit;
-    }
-    if (updates.servingGrams !== undefined) {
-      item.servingGrams = updates.servingGrams;
-    }
-    if (updates.servingSize !== undefined) {
-      item.servingSize = updates.servingSize;
-    }
+    // Use the shared computeServingsChange function
+    const result = computeServingsChange({
+      originalItem: tempItem,
+      editedQuantity: newQuantity,
+      editedUnit: newUnit
+    });
     
-    // Recalculate macros based on new quantity
-    const totalGrams = item.baseUnit === 'grams' ? item.quantidade : (item.quantidade * item.servingGrams);
-    item.computedTotalGrams = totalGrams;
-    item.calories = Math.round(macrosPerGram.calories * totalGrams * 10) / 10;
-    item.proteinG = Math.round(macrosPerGram.proteinG * totalGrams * 10) / 10;
-    item.carbsG = Math.round(macrosPerGram.carbsG * totalGrams * 10) / 10;
-    item.fatG = Math.round(macrosPerGram.fatG * totalGrams * 10) / 10;
+    // Apply the computed values
+    item.quantidade = result.newQuantity;
+    item.servingGrams = result.newServingGrams;
+    item.baseUnit = result.newBaseUnit;
+    item.servingSize = result.newDisplayServingSize;
+    item.computedTotalGrams = result.newTotalGrams;
+    item.calories = result.newCalories;
+    item.proteinG = result.newProteinG;
+    item.carbsG = result.newCarbsG;
+    item.fatG = result.newFatG;
+    item.fiberG = result.newFiberG;
+    item.sugarG = result.newSugarG;
+    item.sodiumMg = result.newSodiumMg;
     
     setMealItems(newItems);
   };
@@ -750,7 +743,7 @@ export default function Meals() {
                               <div className="flex rounded-md shadow-sm" role="group">
                                 <button
                                   type="button"
-                                  onClick={() => updateMealItemQuantity(index, { baseUnit: 'serving' })}
+                                  onClick={() => updateMealItemQuantity(index, item.quantidade, 'serving')}
                                   className={`px-3 py-2 text-sm font-medium rounded-l-lg border ${
                                     item.baseUnit === 'serving' 
                                       ? 'bg-blue-600 text-white border-blue-600' 
@@ -762,7 +755,7 @@ export default function Meals() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => updateMealItemQuantity(index, { baseUnit: 'grams' })}
+                                  onClick={() => updateMealItemQuantity(index, item.quantidade, 'grams')}
                                   className={`px-3 py-2 text-sm font-medium rounded-r-lg border ${
                                     item.baseUnit === 'grams' 
                                       ? 'bg-blue-600 text-white border-blue-600' 
@@ -785,7 +778,7 @@ export default function Meals() {
                                 onChange={(e) => {
                                   const value = parseFloat(e.target.value);
                                   if (!isNaN(value) && value > 0) {
-                                    updateMealItemQuantity(index, { quantidade: value });
+                                    updateMealItemQuantity(index, value, item.baseUnit);
                                   }
                                 }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
