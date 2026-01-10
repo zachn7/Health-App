@@ -35,6 +35,8 @@ export default function Nutrition() {
   const [usdaSearchLoading, setUSDASearching] = useState(false);
   const [usdaSearchError, setUSDASearchError] = useState<string | null>(null);
   const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
+  const [usdaQueryUsed, setUSDAQueryUsed] = useState<string>(''); // The actual query that got results
+  const [usdaWasRelaxed, setUSDAWasRelaxed] = useState(false); // Whether query relaxation was used
   // State for hydrated food details (serving sizes, etc.)
   const [hydratedFoodDetails, setHydratedFoodDetails] = useState<Map<number, USDAFoodDetail>>(new Map());
   const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
@@ -237,6 +239,8 @@ export default function Nutrition() {
       setUSDAReplies([]);
       setUSDASearchError(null);
       setUSDASearchDiagnostics(null);
+      setUSDAQueryUsed('');
+      setUSDAWasRelaxed(false);
       return;
     }
     
@@ -244,14 +248,18 @@ export default function Nutrition() {
     setUSDASearchError(null);
     
     try {
-      const { results, diagnostics } = await usdaService.searchFoods(usdaSearchQuery);
+      const { results, diagnostics, queryUsed, wasRelaxed } = await usdaService.searchFoods(usdaSearchQuery);
       setUSDAReplies(results);
       setUSDASearchDiagnostics(diagnostics);
+      setUSDAQueryUsed(queryUsed);
+      setUSDAWasRelaxed(wasRelaxed);
     } catch (error) {
       console.error('USDA search failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to search USDA foods';
       setUSDASearchError(errorMessage);
       setUSDAReplies([]);
+      setUSDAQueryUsed('');
+      setUSDAWasRelaxed(false);
     } finally {
       setUSDASearching(false);
     }
@@ -822,8 +830,15 @@ export default function Nutrition() {
           {usdaSearchResults.length > 0 && (
             <div data-testid="usda-results" className="space-y-2 max-h-80 overflow-y-auto">
               {usdaSearchResults.length > 0 && (
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
+                    {usdaWasRelaxed && usdaQueryUsed !== usdaSearchQuery && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Showing results for "{usdaQueryUsed}" instead of "{usdaSearchQuery}"
+                      </p>
+                    )}
+                  </div>
                   {selectedUSDAFoods.size > 0 && (
                     <button
                       onClick={importSelectedUSDAFoods}
