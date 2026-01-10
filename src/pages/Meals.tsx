@@ -962,27 +962,7 @@ export default function Meals() {
                         </div>
                       )}
 
-                      {/* Macros for this item (static display) - only show when NOT editing */}
-                      {editingMealItemIndex !== index && (
-                        <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-                          <div className="text-center p-2 bg-blue-50 rounded">
-                            <div className="text-xs text-blue-600 mb-0.5" title="Calories">Cal</div>
-                            <div className="font-bold text-blue-800">{Math.round(item.calories)}</div>
-                          </div>
-                          <div className="text-center p-2 bg-purple-50 rounded">
-                            <div className="text-xs text-purple-600 mb-0.5" title="Protein">P</div>
-                            <div className="font-bold text-purple-800">{Math.round(item.proteinG)}g</div>
-                          </div>
-                          <div className="text-center p-2 bg-orange-50 rounded">
-                            <div className="text-xs text-orange-600 mb-0.5" title="Carbs">C</div>
-                            <div className="font-bold text-orange-800">{Math.round(item.carbsG)}g</div>
-                          </div>
-                          <div className="text-center p-2 bg-yellow-50 rounded">
-                            <div className="text-xs text-yellow-600 mb-0.5" title="Fat">F</div>
-                            <div className="font-bold text-yellow-800">{Math.round(item.fatG)}g</div>
-                          </div>
-                        </div>
-                      )}
+
                     </div>
                   ))}
                 </div>
