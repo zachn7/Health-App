@@ -1105,13 +1105,20 @@ export default function Meals() {
                 <div className="space-y-2">
                   {foodSearchResults.slice(0, 10).map((result, index) => {
                     const macros = extractMacrosFromSearchResult(result);
-                    const hasMacros = macros && (macros.calories > 0 || macros.proteinG > 0 || macros.carbsG > 0 || macros.fatG > 0);
+                    
+                    // Check if we have any nutrition data at all
+                    const hasAnyNutrition = macros && (macros.calories !== undefined || macros.proteinG !== undefined || macros.carbsG !== undefined || macros.fatG !== undefined);
+                    
+                    // Check if all required fields are present
+                    const isComplete = macros && macros.calories !== undefined && macros.proteinG !== undefined && macros.carbsG !== undefined && macros.fatG !== undefined;
                     
                     return (
                       <button
                         key={index}
                         onClick={() => addFoodToMeal(result)}
-                        className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!isComplete}
+                        title={!isComplete ? 'Incomplete nutrition data - cannot add' : ''}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -1119,23 +1126,30 @@ export default function Meals() {
                             <p className="text-xs text-gray-600 mt-1">
                               {result.brandOwner ? `Brand: ${result.brandOwner}` : 'Generic'}
                             </p>
-                            {hasMacros && (
+                            {hasAnyNutrition && (
                               <div className="mt-2 flex flex-wrap gap-3 text-xs font-medium">
-                                <span className={macros.calories > 0 ? 'text-gray-900' : 'text-gray-400'}>
-                                  {macros.calories} cal
+                                <span className={macros.calories !== undefined && macros.calories > 0 ? 'text-gray-900' : 'text-gray-400'}>
+                                  {macros.calories !== undefined ? `${macros.calories} cal` : 'N/A cal'}
                                 </span>
-                                <span className={macros.proteinG > 0 ? 'text-blue-600' : 'text-gray-400'}>
-                                  {macros.proteinG.toFixed(1)}g protein
+                                <span className={macros.proteinG !== undefined && macros.proteinG > 0 ? 'text-blue-600' : 'text-gray-400'}>
+                                  {macros.proteinG !== undefined ? `${macros.proteinG.toFixed(1)}g protein` : 'N/A protein'}
                                 </span>
-                                <span className={macros.carbsG > 0 ? 'text-yellow-600' : 'text-gray-400'}>
-                                  {macros.carbsG.toFixed(1)}g carbs
+                                <span className={macros.carbsG !== undefined && macros.carbsG > 0 ? 'text-yellow-600' : 'text-gray-400'}>
+                                  {macros.carbsG !== undefined ? `${macros.carbsG.toFixed(1)}g carbs` : 'N/A carbs'}
                                 </span>
-                                <span className={macros.fatG > 0 ? 'text-red-600' : 'text-gray-400'}>
-                                  {macros.fatG.toFixed(1)}g fat
+                                <span className={macros.fatG !== undefined && macros.fatG > 0 ? 'text-red-600' : 'text-gray-400'}>
+                                  {macros.fatG !== undefined ? `${macros.fatG.toFixed(1)}g fat` : 'N/A fat'}
                                 </span>
-                                <span className="text-gray-500 font">
-                                  {macros.basis === 'per_100g' ? '1 serving (100g)' : '1 serving'}
-                                </span>
+                                {!isComplete && (
+                                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                                    ⚠️ Incomplete data
+                                  </span>
+                                )}
+                                {macros.basis === 'per_100g' && (
+                                  <span className="text-gray-500 font">
+                                    1 serving (100g)
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
