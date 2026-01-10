@@ -187,6 +187,12 @@ export interface USDFoodSearchResult {
   servingSize?: number;
   servingSizeUnit?: string;
   householdServingFullText?: string;
+  foodPortions?: {
+    amount: number;
+    description: string;
+    gramWeight: number;
+    modifier: string;
+  }[];
 }
 
 export interface USDAFoodDetail {
@@ -218,6 +224,12 @@ export interface USDAFoodDetail {
   servingSize?: number;
   servingSizeUnit?: string;
   householdServingFullText?: string;
+  foodPortions?: {
+    amount: number;
+    description: string;
+    gramWeight: number;
+    modifier: string;
+  }[];
 }
 
 export interface MacroNutrients {
@@ -286,8 +298,194 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
   return null;
 }
 
+/**
+ * Batch fetch food details for multiple fdcIds
+ * Returns a map of fdcId -> foodDetail
+ */
+export async function batchFetchFoodDetails(
+  fdcIds: number[]
+): Promise<Map<number, USDAFoodDetail>> {
+  const results = new Map<number, USDAFoodDetail>();
+  const apiKey = await getApiKeyStatic();
+  
+  if (!apiKey) {
+    return results;
+  }
+  
+  // Process in batches of 20 to avoid overwhelming the API
+  const batchSize = 20;
+  
+  for (let i = 0; i < fdcIds.length; i += batchSize) {
+    const batch = fdcIds.slice(i, i + batchSize);
+    const detailPromises = batch.map(async (fdcId) => {
+      try {
+        const url = new URL(`${BASE_URL}/food/${fdcId}`);
+        url.searchParams.set('api_key', apiKey);
+        
+        const response = await fetch(url.toString());
+        if (!response.ok) {
+          console.warn(`Failed to fetch details for fdcId ${fdcId}: ${response.statusText}`);
+          return null;
+        }
+        
+        const foodDetail: USDAFoodDetail = await response.json();
+        return foodDetail;
+      } catch (error) {
+        console.error(`Error fetching details for fdcId ${fdcId}:`, error);
+        return null;
+      }
+    });
+    
+    const batchResults = await Promise.all(detailPromises);
+    
+    for (let j = 0; j < batch.length; j++) {
+      if (batchResults[j]) {
+        results.set(batch[j], batchResults[j]!);
+      }
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * Get the default serving grams from food details
+ * Returns null if no serving information is available
+ */
+export function getDefaultServingGrams(foodDetail: USDAFoodDetail): number | null {
+  // Check for labeled serving size (Branded foods)
+  if (foodDetail.servingSize && foodDetail.servingSizeUnit) {
+    const unit = foodDetail.servingSizeUnit.toLowerCase();
+    
+    // If the unit is grams, use it directly
+    if (unit.includes('g') || unit === 'grams' || unit === 'gram') {
+      return foodDetail.servingSize;
+    }
+    
+    // Check foodPortions for gramWeight of the first portion
+    if (foodDetail.foodPortions && foodDetail.foodPortions.length > 0) {
+      // Prefer portion with amount=1
+      const portion = foodDetail.foodPortions.find(p => p.amount === 1) || foodDetail.foodPortions[0];
+      if (portion.gramWeight) {
+        return portion.gramWeight;
+      }
+    }
+  }
+  
+  // Check foodPortions directly
+  if (foodDetail.foodPortions && foodDetail.foodPortions.length > 0) {
+    // Prefer portion with amount=1
+    const portion = foodDetail.foodPortions.find(p => p.amount === 1) || foodDetail.foodPortions[0];
+    if (portion.gramWeight) {
+      return portion.gramWeight;
+    }
+  }
+  
+  // No serving info available
+  return null;
+}
+
+/**
+ * Compute per-serving macros from detailed food data
+ * If servingGrams is provided, converts from per-100g to per-serving
+ */
+export function computePerServingMacros(
+  foodDetail: USDAFoodDetail
+): { macros: MacroNutrients; servingGrams: number | null; displaySize: string } {
+  const macros = extractMacrosFromSearchResult(foodDetail as any);
+  
+  if (!macros) {
+    return {
+      macros: {
+        calories: undefined,
+        proteinG: undefined,
+        carbsG: undefined,
+        fatG: undefined,
+        fiberG: undefined,
+        sugarG: undefined,
+        sodiumMg: undefined,
+        basis: 'per_100g'
+      },
+      servingGrams: null,
+      displaySize: 'per 100 g'
+    };
+  }
+  
+  // Check if this is a Foundation food with per-100g macros
+  const isFoundation = foodDetail.dataType === 'Foundation' || foodDetail.dataType === 'SR Legacy';
+  
+  // Foundation foods with per-100g macros have no real serving - show "per 100 g"
+  if (isFoundation && macros.basis === 'per_100g') {
+    return {
+      macros,
+      servingGrams: 100,
+      displaySize: 'per 100 g'
+    };
+  }
+  
+  const servingGrams = getDefaultServingGrams(foodDetail);
+  
+  if (servingGrams && macros.basis === 'per_100g') {
+    // Foundation foods have per-100g macros but no real serving - show "per 100 g"
+    // Branded foods with per-100g might need conversion if they have a different serving
+    if (isFoundation) {
+      // Foundation food - show as per 100g
+      return {
+        macros,
+        servingGrams,
+        displaySize: 'per 100 g'
+      };
+    }
+    
+    // Branded food with per-100g macros but different serving size - convert
+    const scaleFactor = servingGrams / 100;
+    
+    return {
+      macros: {
+        calories: macros.calories !== undefined ? Math.round(macros.calories * scaleFactor) : undefined,
+        proteinG: macros.proteinG !== undefined ? Math.round(macros.proteinG * scaleFactor * 10) / 10 : undefined,
+        carbsG: macros.carbsG !== undefined ? Math.round(macros.carbsG * scaleFactor * 10) / 10 : undefined,
+        fatG: macros.fatG !== undefined ? Math.round(macros.fatG * scaleFactor * 10) / 10 : undefined,
+        fiberG: macros.fiberG !== undefined ? Math.round(macros.fiberG * scaleFactor * 10) / 10 : undefined,
+        sugarG: macros.sugarG !== undefined ? Math.round(macros.sugarG * scaleFactor * 10) / 10 : undefined,
+        sodiumMg: macros.sodiumMg !== undefined ? Math.round(macros.sodiumMg * scaleFactor) : undefined,
+        basis: 'per_serving'
+      },
+      servingGrams,
+      displaySize: `1 serving (${servingGrams}g)`
+    };
+  }
+  
+  // Either no serving info or already per-serving
+  if (servingGrams) {
+    return {
+      macros,
+      servingGrams,
+      displaySize: `1 serving (${servingGrams}g)`
+    };
+  }
+  
+  // No serving info available - show as per 100g
+  return {
+    macros,
+    servingGrams: null,
+    displaySize: 'per 100 g'
+  };
+}
+
+// Helper function to get API key without needing a class instance
+async function getApiKeyStatic(): Promise<string | null> {
+  try {
+    return await settingsRepository.getFdcApiKey() || null;
+  } catch (error) {
+    console.error('Error getting API key:', error);
+    return null;
+  }
+}
+
+const BASE_URL = 'https://api.nal.usda.gov/fdc/v1';
+
 class USDAService {
-  private static readonly BASE_URL = 'https://api.nal.usda.gov/fdc/v1';
   
   static async getApiKey(): Promise<string | null> {
     try {
@@ -335,7 +533,7 @@ class USDAService {
       dataType: 'Foundation,SR Legacy,Branded'
     });
     
-    const url = `${this.BASE_URL}/foods/search?${searchParams.toString()}`;
+    const url = `${BASE_URL}/foods/search?${searchParams.toString()}`;
     const diagnostics: SearchDiagnostics = {
       query,
       url,
@@ -399,7 +597,7 @@ class USDAService {
       });
       
       const response = await fetch(
-        `${this.BASE_URL}/food/${fdcId}?${searchParams.toString()}`
+        `${BASE_URL}/food/${fdcId}?${searchParams.toString()}`
       );
       
       if (!response.ok) {

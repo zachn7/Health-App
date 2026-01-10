@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
-import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult } from '../lib/usda-service';
+import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, computePerServingMacros, type USDAFoodDetail } from '../lib/usda-service';
 import { formatServingSize, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
@@ -35,6 +35,8 @@ export default function Nutrition() {
   const [usdaSearchLoading, setUSDASearching] = useState(false);
   const [usdaSearchError, setUSDASearchError] = useState<string | null>(null);
   const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
+  // State for hydrated food details (serving sizes, etc.)
+  const [hydratedFoodDetails, setHydratedFoodDetails] = useState<Map<number, USDAFoodDetail>>(new Map());
   const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
   const [selectedUSDAFoods, setSelectedUSDAFoods] = useState<Set<number>>(new Set());
   const [savedFoods, setSavedFoods] = useState<FoodItem[]>([]);
@@ -265,6 +267,43 @@ export default function Nutrition() {
 
     return () => clearTimeout(timer);
   }, [usdaSearchQuery, isUSDAEnabled, showUSDAImport, searchUSDAFoods]);
+
+  // Hydrate search results with detailed food data
+  useEffect(() => {
+    if (usdaSearchResults.length === 0) {
+      setHydratedFoodDetails(new Map());
+      return;
+    }
+    
+    const fdcIds = usdaSearchResults.map((food: any) => food.fdcId);
+    
+    // Don't refetch if we already have the details
+    const missingFdcIds = fdcIds.filter((id: number) => !hydratedFoodDetails.has(id));
+    
+    if (missingFdcIds.length === 0) {
+      // We already have all the details
+      return;
+    }
+    
+    const hydrateDetails = async () => {
+      try {
+        const details = await batchFetchFoodDetails(missingFdcIds);
+        
+        setHydratedFoodDetails(prev => {
+          const updated = new Map(prev);
+          for (const [fdcId, detail] of details) {
+            updated.set(fdcId, detail);
+          }
+          return updated;
+        });
+      } catch (error) {
+        console.error('Failed to hydrate food details:', error);
+        // Don't block the UI if hydration fails - use search results as-is
+      }
+    };
+    
+    hydrateDetails();
+  }, [usdaSearchResults]);
 
   const importUSDAFood = async (fdcId: number, description: string) => {
     // Mark as importing
@@ -797,7 +836,22 @@ export default function Nutrition() {
                 </div>
               )}
               {usdaSearchResults.map((food) => {
-                const macros = extractMacrosFromSearchResult(food);
+                // Get hydrated details if available, otherwise use search result
+                const foodDetail = hydratedFoodDetails.get(food.fdcId);
+                
+                let macros, displaySize;
+                
+                if (foodDetail) {
+                  // Use hydrated data with correct serving size
+                  const result = computePerServingMacros(foodDetail);
+                  macros = result.macros;
+                  displaySize = result.displaySize;
+                } else {
+                  // Fallback to search result (shows per-100g as is)
+                  macros = extractMacrosFromSearchResult(food);
+                  displaySize = macros?.basis === 'per_100g' ? 'per 100 g' : '1 serving';
+                }
+                
                 const isImporting = usdaImporting.has(food.fdcId);
                 const isSelected = selectedUSDAFoods.has(food.fdcId);
                 
@@ -828,7 +882,7 @@ export default function Nutrition() {
                               <div className="text-sm text-gray-500">{food.foodCategory}</div>
                             )}
                             
-                            {hasAnyNutrition && (
+                            {hasAnyNutrition && macros && (
                               <div className="mt-2 flex flex-wrap gap-3 text-xs font-medium">
                                 <span className={macros.calories !== undefined && macros.calories > 0 ? 'text-gray-900' : 'text-gray-400'}>
                                   {macros.calories !== undefined ? `${macros.calories} cal` : 'N/A cal'}
@@ -848,7 +902,7 @@ export default function Nutrition() {
                                   </span>
                                 )}
                                 <span className="text-gray-500 font">
-                                  {macros.basis === 'per_100g' ? '1 serving (100g)' : '1 serving'}
+                                  {displaySize}
                                 </span>
                               </div>
                             )}
