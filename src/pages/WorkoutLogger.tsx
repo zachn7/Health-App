@@ -45,6 +45,7 @@ export default function WorkoutLogger() {
   const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
   const [showImportFromProgram, setShowImportFromProgram] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+  const [workoutSource, setWorkoutSource] = useState<'import' | 'manual' | 'started' | null>(null);
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -188,6 +189,7 @@ export default function WorkoutLogger() {
   const startWorkout = () => {
     setIsLogging(true);
     setStartTime(new Date());
+    setWorkoutSource('started');
   };
 
   // Timer functions
@@ -474,6 +476,7 @@ export default function WorkoutLogger() {
       // Don't set isLogging to true for imported workouts - they're already saved
       // This prevents showing a "Save Workout" button or starting a timer
       setIsLogging(false);
+      setWorkoutSource('import');
       
     } catch (error) {
       console.error('Failed to import exercises:', error);
@@ -529,6 +532,7 @@ export default function WorkoutLogger() {
       // Ensure logging mode is active so we can save
       setIsLogging(true);
       setManualWorkoutMode(true);
+      setWorkoutSource('manual');
     } else {
       // Add mode: append new exercise
       const newEntry: ExerciseLogEntry = {
@@ -539,6 +543,7 @@ export default function WorkoutLogger() {
       
       setExerciseEntries(prev => [...prev, newEntry]);
       setManualWorkoutMode(true);
+      setWorkoutSource('manual');
     }
   };
 
@@ -652,6 +657,7 @@ export default function WorkoutLogger() {
             setManualWorkoutMode(true);
             setCurrentWorkout(null);
             setExerciseEntries([]);
+            setWorkoutSource('manual');
           }}
           className="btn btn-outline-secondary"
         >
@@ -805,21 +811,28 @@ export default function WorkoutLogger() {
       {/* Today's Workout Status - Always Show Editable Interface */}
       {(workoutLog || isLogging || manualWorkoutMode) && (
         <div 
-          className={`card mb-6 ${workoutLog && !(isLogging || manualWorkoutMode) ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}
-          data-testid={workoutLog && !(isLogging || manualWorkoutMode) ? 'workout-logger-complete-status' : 'workout-logger-in-progress-status'}
+          className={`card mb-6 ${workoutLog && !(isLogging || manualWorkoutMode) && workoutSource !== 'import' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}
+          data-testid={workoutLog && !(isLogging || manualWorkoutMode) && workoutSource !== 'import' ? 'workout-logger-complete-status' : 'workout-logger-in-progress-status'}
         >
           <div className="flex justify-between items-center" data-testid="workout-logger-workout-status">
             <div>
-              <h2 className={`text-lg font-medium ${workoutLog && !(isLogging || manualWorkoutMode) ? 'text-green-900' : 'text-blue-900'}`}>
-                {workoutLog && !(isLogging || manualWorkoutMode) ? 'Workout Complete! ✅' :
+              <h2 className={`text-lg font-medium ${workoutLog && !(isLogging || manualWorkoutMode) && workoutSource !== 'import' ? 'text-green-900' : 'text-blue-900'}`}>
+                {workoutLog && !(isLogging || manualWorkoutMode) && workoutSource !== 'import' ? 'Workout Complete! ✅' :
+                 workoutSource === 'import' ? 'Imported Workout' :
                  manualWorkoutMode ? 'Manual Workout' : 'Workout in Progress'}
               </h2>
-              <div className={workoutLog && !(isLogging || manualWorkoutMode) ? 'text-green-700' : 'text-blue-700'}>
-                {workoutLog && !(isLogging || manualWorkoutMode) ? (
+              <div className={workoutLog && !(isLogging || manualWorkoutMode) && workoutSource !== 'import' ? 'text-green-700' : 'text-blue-700'}>
+                {workoutLog && !(isLogging || manualWorkoutMode) && workoutSource !== 'import' ? (
                   <>
                     <p>Duration: {workoutLog.duration} minutes</p>
                     <p>Exercises: {exerciseEntries.length}</p>
                     <p>Total Sets: {exerciseEntries.reduce((sum, entry) => sum + entry.sets.length, 0)}</p>
+                  </>
+                ) : workoutSource === 'import' ? (
+                  <>
+                    <p>Exercises: {exerciseEntries.length}</p>
+                    <p>Total Sets: {exerciseEntries.reduce((sum, entry) => sum + entry.sets.length, 0)}</p>
+                    <p className="text-sm text-blue-600 mt-2">Edit as needed and your changes will be saved automatically</p>
                   </>
                 ) : manualWorkoutMode ? (
                   <p>{exerciseEntries.length} exercises added</p>
