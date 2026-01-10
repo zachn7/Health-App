@@ -56,13 +56,18 @@ export const testIds = {
   // Meals
   meals: {
     createNewMealButton: 'create-new-meal-btn',
+    mealList: 'meals-list',
     mealCard: (id: string | number) => `meal-card-${id}`,
+    foodSearchResults: 'meals-food-search-results',
+    addFoodToMealBtn: 'add-food-to-meal-btn',
     editor: {
       nameInput: 'meal-editor-name-input',
       searchUsdaButton: 'meal-editor-search-usda-btn',
       addManualFoodButton: 'meal-editor-add-manual-food-btn',
       cancelButton: 'meal-editor-cancel-btn',
       saveButton: 'meal-editor-save-btn',
+      saveError: 'meal-editor-save-error',
+      saveSuccess: 'meal-editor-save-success',
     },
   },
 

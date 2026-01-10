@@ -18,6 +18,7 @@ export default function Meals() {
   const [importDate, setImportDate] = useState(getTodayLocalDateKey());
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [showDatePicker, setShowDatePicker] = useState<string | null>(null);
   const [showFoodPicker, setShowFoodPicker] = useState(false);
   const [foodSearchQuery, setFoodSearchQuery] = useState('');
@@ -106,13 +107,18 @@ export default function Meals() {
   };
 
   const saveMeal = async () => {
+    // Clear previous status
+    setSaveStatus(null);
+
+    // Validate meal name
     if (!mealName.trim()) {
-      alert('Please enter a meal name');
+      setSaveStatus({ success: false, message: 'Please enter a meal name' });
       return;
     }
 
+    // Validate meal has at least one food item
     if (mealItems.length === 0) {
-      alert('Please add at least one food item to the meal');
+      setSaveStatus({ success: false, message: 'Please add at least one food item to the meal' });
       return;
     }
 
@@ -134,9 +140,10 @@ export default function Meals() {
       await loadMeals();
       setShowMealEditor(false);
       setEditingMeal(null);
+      setSaveStatus({ success: true, message: 'Meal saved successfully!' });
     } catch (error) {
       console.error('Failed to save meal:', error);
-      alert('Failed to save meal. Please try again.');
+      setSaveStatus({ success: false, message: 'Failed to save meal. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -147,9 +154,10 @@ export default function Meals() {
       await repositories.nutrition.deleteMealTemplate(meal.id);
       await loadMeals();
       setDeleteConfirmMeal(null);
+      setSaveStatus({ success: true, message: 'Meal deleted successfully!' });
     } catch (error) {
       console.error('Failed to delete meal:', error);
-      alert('Failed to delete meal. Please try again.');
+      setSaveStatus({ success: false, message: 'Failed to delete meal. Please try again.' });
     }
   };
 
@@ -410,6 +418,25 @@ export default function Meals() {
         </div>
       )}
 
+      {/* Save Status Message (outside editor) */}
+      {saveStatus && !showMealEditor && (
+        <div className={`mb-4 p-4 rounded-lg ${
+          saveStatus.success ? 'bg-green-50 text-green-900 border border-green-200' : 'bg-red-50 text-red-900 border border-red-200'
+        }`} data-testid="meal-editor-save-status">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="font-medium">{saveStatus.success ? '✓' : '✗'} {saveStatus.message}</p>
+            </div>
+            <button
+              onClick={() => setSaveStatus(null)}
+              className="text-sm underline hover:opacity-75"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Meals Tab Content */}
       {activeTab === 'meals' && (
         <>
@@ -599,12 +626,24 @@ export default function Meals() {
                 <input
                   type="text"
                   value={mealName}
-                  onChange={(e) => setMealName(e.target.value)}
+                  onChange={(e) => {
+                    setMealName(e.target.value);
+                    setSaveStatus(null); // Clear status when user edits
+                  }}
                   className="input"
                   placeholder="e.g., Post-Workout Shake"
                   data-testid="meal-editor-name-input"
                 />
               </div>
+              
+              {/* Save Status Messages */}
+              {saveStatus && (
+                <div className={`p-3 rounded-lg ${
+                  saveStatus.success ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
+                }`}>
+                  <p className="text-sm font-medium">{saveStatus.message}</p>
+                </div>
+              )}
             </div>
 
             {/* Food Items */}
