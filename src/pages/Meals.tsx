@@ -41,6 +41,7 @@ export default function Meals() {
     grams: ''
   });
   const [editingMealItemIndex, setEditingMealItemIndex] = useState<number | null>(null);
+  const [editingItemOriginalServingGrams, setEditingItemOriginalServingGrams] = useState<Record<number, number>>({});
 
   useEffect(() => {
     loadMeals();
@@ -717,7 +718,17 @@ export default function Meals() {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => setEditingMealItemIndex(editingMealItemIndex === index ? null : index)}
+                            onClick={() => {
+                              const newIndex = editingMealItemIndex === index ? null : index;
+                              setEditingMealItemIndex(newIndex);
+                              // Store original servingGrams when opening editor
+                              if (newIndex !== null) {
+                                setEditingItemOriginalServingGrams({
+                                  ...editingItemOriginalServingGrams,
+                                  [index]: mealItems[index].servingGrams
+                                });
+                              }
+                            }}
                             className={`text-blue-500 hover:text-blue-700 ${editingMealItemIndex === index ? 'ring-2 ring-blue-400' : ''}`}
                             title="Edit quantity"
                             data-testid={`meal-item-edit-btn-${index}`}
@@ -748,7 +759,13 @@ export default function Meals() {
                                   onClick={() => {
                                     // Convert current value to servings when switching modes
                                     const currentGrams = item.computedTotalGrams || (item.quantidade * item.servingGrams);
-                                    const newQuantity = gramsToServings(currentGrams, item.servingGrams);
+                                    // Use the original servingGrams, not the current one (which might be 1 from grams mode)
+                                    const originalServingGrams = editingItemOriginalServingGrams[index] || item.servingGrams || 100;
+                                    const newQuantity = gramsToServings(currentGrams, originalServingGrams);
+                                    // Also update the item's servingGrams to the original value
+                                    const newItems = [...mealItems];
+                                    newItems[index].servingGrams = originalServingGrams;
+                                    setMealItems(newItems);
                                     updateMealItemQuantity(index, newQuantity, 'serving');
                                   }}
                                   className={`px-3 py-2 text-sm font-medium rounded-l-lg border ${

@@ -105,7 +105,9 @@ export function computeServingsChange(params: {
   const { originalItem, editedQuantity, editedUnit } = params;
   
   const oldTotalGrams = calculateTotalGrams(originalItem);
-  const oldServingGrams = originalItem.servingGrams || 100;
+  // Preserve the original servingGrams if available, otherwise use current or default
+  // This prevents losing the USDA portion gramWeight when toggling modes
+  const originalServingGrams = originalItem.servingGrams || 100;
   const isUnitGrams = editedUnit === 'grams';
   
   let newServingGrams: number;
@@ -116,14 +118,15 @@ export function computeServingsChange(params: {
     // Changing to grams mode
     newBaseUnit = 'grams';
     // In grams mode, the quantity represents grams directly
-    // servingGrams = 1 (1 "unit" = 1 gram)
+    // servingGrams = 1 (1 "unit" = 1 gram) for calculation purposes
+    // But we keep track of the original servingGrams for when we switch back
     newServingGrams = 1;
     newQuantity = editedQuantity;
   } else {
     // Changing to serving mode
     newBaseUnit = 'serving';
-    // Preserve the serving weight from original item
-    newServingGrams = oldServingGrams;
+    // Always preserve the original servingGrams, don't use the current value (which might be 1 from grams mode)
+    newServingGrams = originalServingGrams;
     newQuantity = editedQuantity;
   }
   
@@ -138,7 +141,7 @@ export function computeServingsChange(params: {
   if (isUnitGrams) {
     return {
       newQuantity: Math.round(newQuantity * 100) / 100,
-      newServingGrams,
+      newServingGrams, // This will be 1 in grams mode
       newBaseUnit,
       newDisplayServingSize: `${Math.round(newQuantity)}g`,
       newTotalGrams,
@@ -155,7 +158,7 @@ export function computeServingsChange(params: {
   // In serving mode, use ratio for consistency
   return {
     newQuantity: Math.round(newQuantity * 100) / 100,
-    newServingGrams,
+    newServingGrams, // Always use the original servingGrams
     newBaseUnit,
     newDisplayServingSize: `${newQuantity} serving${newQuantity !== 1 ? 's' : ''}`,
     newTotalGrams,

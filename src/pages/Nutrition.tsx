@@ -51,6 +51,7 @@ export default function Nutrition() {
     sugarG?: number;
     sodiumMg?: number;
     originalItem?: FoodLogItem;
+    originalServingGrams?: number;
   }>({ quantity: 1, unit: 'serving', calories: 0, proteinG: 0, carbsG: 0, fatG: 0 });
 
   useEffect(() => {
@@ -425,7 +426,8 @@ export default function Nutrition() {
       fiberG: item.fiberG,
       sugarG: item.sugarG,
       sodiumMg: item.sodiumMg,
-      originalItem: item // Store reference for calculations
+      originalItem: item, // Store reference for calculations
+      originalServingGrams: item.servingGrams // Store original gram weight for round-trip toggles
     });
     setShowServingSizeEdit(item.id);
   };
@@ -1211,9 +1213,11 @@ export default function Nutrition() {
                               
                               // When switching to grams, convert to whole grams
                               // When switching to serving, convert to servings with 0.1 precision
+                              // Use the original servingGrams, not the current one (which might be 1 from grams mode)
+                              const gramWeight = editingServingSize.originalServingGrams || originalItem.servingGrams || 100;
                               const newQuantity = isGrams 
                                 ? roundToIntGrams(currentTotalGrams)
-                                : gramsToServings(currentTotalGrams, originalItem.servingGrams || 100);
+                                : gramsToServings(currentTotalGrams, gramWeight);
                               
                               setEditingServingSize({ 
                                 ...editingServingSize, 
