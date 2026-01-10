@@ -46,7 +46,8 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Verify food appears in meal with initial values
     await expect(page.getByText('Test Chicken Breast')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('1 serving • 300 cal')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('1 serving')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText(/1 serving • 300 cal/)).toBeVisible({ timeout: 3000 });
     
     // Click edit button on the food item
     await page.getByTestId('meal-item-edit-btn-0').click();
@@ -65,8 +66,8 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     await qtyInput.fill('2');
     await page.waitForTimeout(200);
     
-    // Verify calories updated in the meal item row (use exact match to avoid total calories)
-    await expect(page.getByText('2 1 serving • 600 cal')).toBeVisible({ timeout: 3000 });
+    // Verify calories updated (should be 2 * 300 = 600)
+    await expect(page.getByText(/2 servings • 600 cal/)).toBeVisible({ timeout: 3000 });
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
@@ -83,7 +84,7 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     await page.waitForTimeout(500);
     
     // Verify quantity persisted (should still show 2 servings)
-    await expect(page.getByText('2 1 serving • 600 cal')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText(/2 servings • 600 cal/)).toBeVisible({ timeout: 3000 });
     
     console.log('✅ Meal item quantity editing and persistence working correctly');
   });

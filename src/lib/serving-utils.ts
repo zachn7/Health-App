@@ -31,7 +31,7 @@ export function calculateMacrosPerGram(item: FoodLogItem) {
  * Format serving size for display
  * Returns human-friendly strings like "1 serving" or "200 g"
  */
-export function formatServingSize(item: FoodLogItem): string {
+export function formatServingSize(item: FoodLogItem | Omit<FoodLogItem, 'id'>): string {
   const base = item.baseUnit || 'serving';
   const qty = item.quantidade;
   
