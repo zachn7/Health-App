@@ -223,46 +223,23 @@ export default function Meals() {
     }
   };
 
-  const addFoodToMeal = (food: any) => {
-    const macros = extractMacrosFromSearchResult(food);
-    
-    if (!macros || (macros.calories === 0 && macros.proteinG === 0 && macros.carbsG === 0 && macros.fatG === 0)) {
+  const addFoodToMeal = async (food: any) => {
+    try {
+      // Use the same logic as Nutrition Logger: createFoodLogItem with default 1 serving
+      const { usdaService } = await import('../lib/usda-service');
+      const foodLogItem = await usdaService.createFoodLogItem(food.fdcId, 1, 'serving');
+      
+      // Remove the ID so we don't duplicate when saving
+      const { id, ...foodItemWithoutId } = foodLogItem;
+      
+      setMealItems([...mealItems, foodItemWithoutId]);
+      setShowFoodPicker(false);
+      setFoodSearchQuery('');
+      setFoodSearchResults([]);
+    } catch (error) {
+      console.error('Failed to add food to meal:', error);
       alert('This food does not have nutrition data available. Cannot add to meal.');
-      return;
     }
-
-    // Determine serving size and grams based on macro basis
-    let servingSize = '100 g';
-    let servingGrams = 100;
-    let baseUnit: 'serving' | 'grams' = 'grams';
-
-    if (macros.basis === 'per_serving') {
-      // Branded food - use serving data
-      servingSize = '1 serving';
-      servingGrams = 100; // Will be updated if serving data available
-      baseUnit = 'serving';
-    }
-
-    const newFoodItem: Omit<FoodLogItem, 'id'> = {
-      name: food.description,
-      servingSize,
-      quantidade: 1,
-      calories: macros.calories || 0,
-      proteinG: macros.proteinG || 0,
-      carbsG: macros.carbsG || 0,
-      fatG: macros.fatG || 0,
-      fiberG: macros.fiberG,
-      sugarG: macros.sugarG,
-      sodiumMg: macros.sodiumMg,
-      baseUnit,
-      servingGrams,
-      computedTotalGrams: servingGrams,
-      fdcId: food.fdcId
-    };
-    setMealItems([...mealItems, newFoodItem]);
-    setShowFoodPicker(false);
-    setFoodSearchQuery('');
-    setFoodSearchResults([]);
   };
 
   const addManualFoodToMeal = () => {
