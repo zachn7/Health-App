@@ -9,6 +9,81 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     });
   });
 
+  test('should show macros on meal rows without needing to click Edit', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Click "Create New Meal" button
+    await page.getByTestId('create-new-meal-btn').click();
+    await page.waitForTimeout(500);
+    
+    // Set meal name
+    await page.getByTestId('meal-editor-name-input').fill('Macro Display Test Meal');
+    
+    // Open manual food form
+    await page.getByTestId('meal-editor-add-manual-food-btn').click();
+    await page.waitForTimeout(500);
+    
+    // Fill in manual food form with all macros
+    const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await foodNameInput.fill('Chicken Breast');
+    
+    const caloriesInput = page.locator('input[placeholder="200"]');
+    await caloriesInput.fill('165');
+    
+    const proteinInput = page.locator('input[placeholder="20"]');
+    await proteinInput.fill('31');
+    
+    const carbsInput = page.locator('input[placeholder="25"]');
+    await carbsInput.fill('0');
+    
+    const fatInput = page.locator('input[placeholder="8"]');
+    await fatInput.fill('3.6');
+    
+    // Add to meal
+    await page.getByRole('button', { name: 'Add to Meal' }).click();
+    await page.waitForTimeout(500);
+    
+    // Save the meal
+    await page.getByRole('button', { name: 'Save Meal' }).click();
+    await page.waitForTimeout(1000);
+    
+    // Navigate back to meals list
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Find the meal and click Edit to view items
+    const mealCard = page.locator('[data-testid^="meal-card-"]').filter({ hasText: 'Macro Display Test Meal' });
+    await expect(mealCard).toBeVisible({ timeout: 5000 });
+    
+    // Click Edit button - it's a button with an SVG icon
+    const editButton = mealCard.locator('button').nth(0); // First button is Edit
+    await editButton.click();
+    
+    // Wait for editor to load
+    await page.waitForTimeout(500);
+    
+    // Find the meal item row (should be index 0)
+    const mealItemRow = page.getByTestId('meal-item-row-0');
+    await expect(mealItemRow).toBeVisible();
+    
+    // Verify macros are visible WITHOUT needing to click Edit
+    // Use testId selectors to avoid strict mode violations
+    await expect(page.getByTestId('meal-item-cal-0')).toBeVisible();
+    await expect(page.getByTestId('meal-item-protein-0')).toBeVisible();
+    await expect(page.getByTestId('meal-item-carbs-0')).toBeVisible();
+    await expect(page.getByTestId('meal-item-fat-0')).toBeVisible();
+    
+    // Verify the actual values
+    await expect(page.getByTestId('meal-item-cal-0')).toContainText('165 cal');
+    await expect(page.getByTestId('meal-item-protein-0')).toContainText('31.0g protein');
+    await expect(page.getByTestId('meal-item-carbs-0')).toContainText('0.0g carbs');
+    await expect(page.getByTestId('meal-item-fat-0')).toContainText('3.6g fat');
+    
+    console.log('✅ Macros shown on meal row without Edit click');
+  });
+
   test('should create meal, add manual food, save and persist', async ({ page }) => {
     // Navigate to Meals page
     await page.goto('./#/meals');
