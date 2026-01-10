@@ -222,6 +222,7 @@ export function hybridRank<T>(
 
 /**
  * Interface for USDA food search results
+ * Aligned with USDFoodSearchResult from usda-service
  */
 export interface USDFoodSearchItem {
   fdcId: number;
@@ -230,7 +231,15 @@ export interface USDFoodSearchItem {
   foodCategory?: string;
   additionalDescriptions?: string;
   dataType: string;
+  publishedDate: string; // Required in USDFoodSearchResult
 }
+
+// Type for items that can be cached with relaxation info
+export type CachedSearchResult<T> = {
+  results: T[]; 
+  queryUsed: string;
+  wasRelaxed: boolean;
+};
 
 /**
  * Search and rank USDA foods with fuzzy matching
@@ -260,6 +269,220 @@ export function searchUSDAFoods(
   );
   
   return limit ? ranked.slice(0, limit) : ranked;
+}
+
+/**
+ * Generate relaxed/fallback queries for better typeahead matching
+ * Progressively shortens the last token or takes a root token
+ * 
+ * Examples:
+ *   'cheeseca' -> ['cheesec', 'cheese']
+ *   'chick' -> ['chic', 'chi']
+ *   'greek yogurt' -> ['gree', 'gre']
+ * 
+ * @param query - Original search query
+ * @param maxAttempts - Maximum number of fallback queries to generate (default: 3)
+ * @returns Array of fallback queries (ordered from closest to furthest from original)
+ */
+export function generateRelaxedQueries(query: string, maxAttempts: number = 3): string[] {
+  const trimmed = query.trim();
+  const fallbacks: string[] = [];
+  
+  if (trimmed.length < 4) {
+    // Too short to generate meaningful fallbacks
+    return fallbacks;
+  }
+  
+  // Split into tokens
+  const tokens = trimmed.split(/\s+/);
+  const lastToken = tokens[tokens.length - 1];
+  
+  // Strategy 1: Progressively shorten the last token
+  let shortened = lastToken;
+  for (let i = 0; i < Math.min(maxAttempts - 1, lastToken.length - 2); i++) {
+    shortened = shortened.slice(0, -1); // Remove last char
+    const newQuery = tokens.slice(0, -1).concat(shortened).join(' ');
+    if (newQuery !== trimmed) {
+      fallbacks.push(newQuery);
+    }
+  }
+  
+  // Strategy 2: If still empty, try root word of last token (e.g., 'cheesecake' -> 'cheese')
+  if (fallbacks.length < maxAttempts) {
+    // Check for common suffixes to strip
+    const suffixesToRemove = ['cake', 'berry', 'fruit', 'bread', 'roll', 'pie', 'bar'];
+    for (const suffix of suffixesToRemove) {
+      if (lastToken.toLowerCase().endsWith(suffix) && lastToken.length > suffix.length + 2) {
+        const rootWithoutSuffix = lastToken.slice(0, -suffix.length);
+        const rootQuery = tokens.slice(0, -1).concat(rootWithoutSuffix).join(' ');
+        if (rootQuery !== trimmed && !fallbacks.includes(rootQuery)) {
+          fallbacks.push(rootQuery);
+          break;
+        }
+      }
+    }
+  }
+  
+  // Strategy 3: If still empty and multiple tokens, drop the last token
+  if (fallbacks.length === 0 && tokens.length > 1) {
+    const withoutLast = tokens.slice(0, -1).join(' ');
+    fallbacks.push(withoutLast);
+  }
+  
+  // Remove duplicates and return limited results
+  return Array.from(new Set(fallbacks)).slice(0, maxAttempts);
+}
+
+/**
+ * Simple in-memory cache for search results
+ * Helps avoid refetching when backspacing or retyping
+ */
+export class SearchCache<T> {
+  private cache: Map<string, { results: T; timestamp: number }> = new Map();
+  private maxAge: number; // Cache entries expire after this many ms
+  
+  constructor(maxAge: number = 5000) {
+    this.maxAge = maxAge;
+  }
+  
+  /**
+   * Get cached results if available and fresh
+   */
+  get(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    
+    const age = Date.now() - entry.timestamp;
+    if (age > this.maxAge) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return entry.results;
+  }
+  
+  /**
+   * Store results in cache
+   */
+  set(key: string, results: T): void {
+    this.cache.set(key, { results, timestamp: Date.now() });
+  }
+  
+  /**
+   * Clear all cache entries
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+  
+  /**
+   * Remove expired entries
+   */
+  prune(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > this.maxAge) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+/**
+ * Global USDA search result cache instance
+ */
+const globalUSDACache = new SearchCache<any>(5000); // 5 second cache
+
+/**
+ * Perform USDA search with query relaxation
+ * 
+ * @param searchFn - Function to call USDA API
+ * @param originalQuery - User's exact input
+ * @param options - Configuration options
+ * @returns Search results with metadata about which query was used
+ */
+export async function searchWithRelaxation<T>(
+  searchFn: (query: string) => Promise<{ results: T[] }>,
+  originalQuery: string,
+  options: {
+    maxAttempts?: number;
+    minQueryLength?: number;
+    cache?: SearchCache<any>;
+  } = {}
+): Promise<{ 
+  results: T[];
+  queryUsed: string;
+  wasRelaxed: boolean;
+}> {
+  const { 
+    maxAttempts = 3, 
+    minQueryLength = 4,
+    cache = globalUSDACache
+  } = options;
+  
+  const trimmedQuery = originalQuery.trim();
+  
+  // Check cache first
+  const cached = cache?.get(trimmedQuery);
+  if (cached) {
+    console.log('[Search] Cache hit for:', trimmedQuery, 'used query:', cached.queryUsed);
+    return cached;
+  }
+  
+  // Try exact query first
+  try {
+    const exactResult = await searchFn(trimmedQuery);
+    
+    if (exactResult.results.length > 0) {
+      const result = {
+        results: exactResult.results,
+        queryUsed: trimmedQuery,
+        wasRelaxed: false
+      };
+      cache?.set(trimmedQuery, result);
+      return result;
+    }
+    
+    // No results from exact query, try relaxation if query is long enough
+    if (trimmedQuery.length >= minQueryLength) {
+      const fallbacks = generateRelaxedQueries(trimmedQuery, maxAttempts);
+      
+      console.log('[Search] Exact query returned 0 results. Trying fallbacks:', fallbacks);
+      
+      for (const fallbackQuery of fallbacks) {
+        try {
+          const fallbackResult = await searchFn(fallbackQuery);
+          
+          if (fallbackResult.results.length > 0) {
+            const result = {
+              results: fallbackResult.results,
+              queryUsed: fallbackQuery,
+              wasRelaxed: true
+            };
+            cache?.set(trimmedQuery, result);
+            console.log('[Search] Found results using relaxed query:', fallbackQuery);
+            return result;
+          }
+        } catch (error) {
+          console.warn('[Search] Failed to search with fallback query:', fallbackQuery, error);
+          // Continue to next fallback
+        }
+      }
+    }
+    
+    // Nothing found
+    const result = {
+      results: [],
+      queryUsed: trimmedQuery,
+      wasRelaxed: false
+    };
+    cache?.set(trimmedQuery, result);
+    return result;
+    
+  } catch (error) {
+    console.error('[Search] Search failed:', error);
+    throw error;
+  }
 }
 
 /**
