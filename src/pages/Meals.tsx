@@ -716,6 +716,21 @@ export default function Meals() {
                           <p className="text-sm text-gray-600">
                             {formatServingSize(item)} • {Math.round(item.calories)} cal
                           </p>
+                          {/* Show macros without needing to click Edit */}
+                          <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+                            <span className="text-blue-600" data-testid={`meal-item-cal-${index}`}>
+                              {Math.round(item.calories)} cal
+                            </span>
+                            <span className="text-purple-600" data-testid={`meal-item-protein-${index}`}>
+                              {item.proteinG !== undefined && item.proteinG !== null ? `${item.proteinG.toFixed(1)}g protein` : 'N/A protein'}
+                            </span>
+                            <span className="text-orange-600" data-testid={`meal-item-carbs-${index}`}>
+                              {item.carbsG !== undefined && item.carbsG !== null ? `${item.carbsG.toFixed(1)}g carbs` : 'N/A carbs'}
+                            </span>
+                            <span className="text-yellow-600" data-testid={`meal-item-fat-${index}`}>
+                              {item.fatG !== undefined && item.fatG !== null ? `${item.fatG.toFixed(1)}g fat` : 'N/A fat'}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           <button
