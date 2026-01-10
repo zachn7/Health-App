@@ -817,23 +817,6 @@ export default function Meals() {
                                     [index]: e.target.value
                                   });
                                 }}
-                                onBlur={(e) => {
-                                  // Normalize on blur: empty or invalid -> 0, otherwise parse and round
-                                  const rawValue = e.target.value.trim();
-                                  const numericValue = parseFloat(rawValue);
-                                  
-                                  // If empty, invalid, or negative, use 0
-                                  const finalValue = (rawValue === '' || isNaN(numericValue) || numericValue < 0) 
-                                    ? 0 
-                                    : numericValue;
-                                  
-                                  // Clear draft and commit value by deleting the draft entry
-                                  const newDraft = { ...editingItemDraftValue };
-                                  delete newDraft[index];
-                                  setEditingItemDraftValue(newDraft);
-                                  
-                                  updateMealItemQuantity(index, finalValue, item.baseUnit);
-                                }}
                                 onKeyDown={(e) => {
                                   // Handle arrow keys to increment/decrement even from blank
                                   // Read from current input value directly (React state might not be updated yet)
@@ -889,28 +872,113 @@ export default function Meals() {
                             </div>
                           </div>
 
-                          {/* Portion Grams Display */}
-                          {item.baseUnit === 'serving' && (
-                            <div className="mt-2 text-xs text-gray-600">
-                              1 serving = {Math.round(item.servingGrams)} g
-                            </div>
-                          )}
+                          {/* Live Macro Preview Tiles */}
+                          {(() => {
+                            // Use draft value if exists (user typing), otherwise use committed value
+                            const currentQuantity = editingItemDraftValue[index] !== undefined ? editingItemDraftValue[index] : item.quantidade.toString();
+                            const numericQuantity = parseFloat(currentQuantity) || 0;
+                            
+                            // Create a temporary item for computation
+                            const tempItem: FoodLogItem = {
+                              ...item,
+                              id: 'temp-preview-id'
+                            };
+                            
+                            const result = computeServingsChange({
+                              originalItem: tempItem,
+                              editedQuantity: numericQuantity,
+                              editedUnit: item.baseUnit
+                            });
+                            
+                            return (
+                              <>
+                                {/* Portion Grams Display (updates with draft) */}
+                                {item.baseUnit === 'serving' && (
+                                  <div className="mt-2 text-xs text-gray-600">
+                                    1 serving = {Math.round(item.servingGrams)} g (total: {Math.round(result.newTotalGrams)} g)
+                                  </div>
+                                )}
+                                
+                                {/* Macro Tiles with live preview */}
+                                <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                                  <div className="text-center p-2 bg-blue-50 rounded" data-testid={`meal-item-macro-cal-${index}`}>
+                                    <div className="text-xs text-blue-600 mb-0.5" title="Calories">Cal</div>
+                                    <div className="font-bold text-blue-800">{Math.round(result.newCalories)}</div>
+                                  </div>
+                                  <div className="text-center p-2 bg-purple-50 rounded" data-testid={`meal-item-macro-protein-${index}`}>
+                                    <div className="text-xs text-purple-600 mb-0.5" title="Protein">P</div>
+                                    <div className="font-bold text-purple-800">{Math.round(result.newProteinG)}g</div>
+                                  </div>
+                                  <div className="text-center p-2 bg-orange-50 rounded" data-testid={`meal-item-macro-carbs-${index}`}>
+                                    <div className="text-xs text-orange-600 mb-0.5" title="Carbs">C</div>
+                                    <div className="font-bold text-orange-800">{Math.round(result.newCarbsG)}g</div>
+                                  </div>
+                                  <div className="text-center p-2 bg-yellow-50 rounded" data-testid={`meal-item-macro-fat-${index}`}>
+                                    <div className="text-xs text-yellow-600 mb-0.5" title="Fat">F</div>
+                                    <div className="font-bold text-yellow-800">{Math.round(result.newFatG)}g</div>
+                                  </div>
+                                </div>
+                                
+                                {/* Action Buttons */}
+                                <div className="flex space-x-2 mt-3">
+                                  <button
+                                    onClick={() => {
+                                      // Clear draft without committing
+                                      const newDraft = { ...editingItemDraftValue };
+                                      delete newDraft[index];
+                                      setEditingItemDraftValue(newDraft);
+                                      setEditingMealItemIndex(null);
+                                    }}
+                                    className="btn btn-secondary btn-sm flex-1"
+                                    data-testid={`meal-item-cancel-${index}`}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      // Commit the draft value
+                                      const draftValue = editingItemDraftValue[index];
+                                      const numericValue = draftValue !== '' && draftValue !== undefined ? parseFloat(draftValue) : 0;
+                                      const finalValue = isNaN(numericValue) || numericValue < 0 ? 0 : numericValue;
+                                      
+                                      // Clear draft
+                                      const newDraft = { ...editingItemDraftValue };
+                                      delete newDraft[index];
+                                      setEditingItemDraftValue(newDraft);
+                                      
+                                      // Update the meal item
+                                      updateMealItemQuantity(index, finalValue, item.baseUnit);
+                                      setEditingMealItemIndex(null);
+                                    }}
+                                    className="btn btn-primary btn-sm flex-1"
+                                    data-testid={`meal-item-update-${index}`}
+                                  >
+                                    Update
+                                  </button>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
 
-                      {/* Macros for this item */}
+                      {/* Macros for this item (static display) */}
                       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
                         <div className="text-center p-2 bg-blue-50 rounded">
-                          <div className="font-medium text-blue-800">{Math.round(item.calories)} cal</div>
+                          <div className="text-xs text-blue-600 mb-0.5" title="Calories">Cal</div>
+                          <div className="font-bold text-blue-800">{Math.round(item.calories)}</div>
                         </div>
                         <div className="text-center p-2 bg-purple-50 rounded">
-                          <div className="font-medium text-purple-800">{Math.round(item.proteinG)}g</div>
+                          <div className="text-xs text-purple-600 mb-0.5" title="Protein">P</div>
+                          <div className="font-bold text-purple-800">{Math.round(item.proteinG)}g</div>
                         </div>
                         <div className="text-center p-2 bg-orange-50 rounded">
-                          <div className="font-medium text-orange-800">{Math.round(item.carbsG)}g</div>
+                          <div className="text-xs text-orange-600 mb-0.5" title="Carbs">C</div>
+                          <div className="font-bold text-orange-800">{Math.round(item.carbsG)}g</div>
                         </div>
                         <div className="text-center p-2 bg-yellow-50 rounded">
-                          <div className="font-medium text-yellow-800">{Math.round(item.fatG)}g</div>
+                          <div className="text-xs text-yellow-600 mb-0.5" title="Fat">F</div>
+                          <div className="font-bold text-yellow-800">{Math.round(item.fatG)}g</div>
                         </div>
                       </div>
                     </div>
