@@ -80,6 +80,18 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     const generateButton = page.getByTestId('generate-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     await generateButton.click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     
     // Wait for plan to appear
     const plans = page.locator('[data-testid^="workout-plan-"]');
@@ -151,6 +163,18 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     const generateButton = page.getByTestId('generate-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     await generateButton.click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    
+    // Select "Based on Profile" mode
+    const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await profileModeButton.click();
+    await page.waitForTimeout(300); // Wait for state update
+    
+    // Click the generate button in the modal
+    const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await modalGenerateButton.click();
     
     // Wait for plan to appear and view it
     const plans = page.locator('[data-testid^="workout-plan-"]');
@@ -417,7 +441,7 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
       await page.waitForTimeout(300); // Wait for state update
       
       // Click the generate button in the modal
-      const modalGenerateButton = page.getByTestId(testIds.workouts.generatePlanButton);
+      const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
       await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
       await modalGenerateButton.click();
 
