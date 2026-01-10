@@ -1,6 +1,35 @@
 import type { FoodLogItem } from '../types';
 
 /**
+ * Round grams to integer (whole number)
+ */
+export function roundToIntGrams(x: number): number {
+  return Math.round(x);
+}
+
+/**
+ * Round servings to nearest tenth (0.1 precision)
+ */
+export function roundToTenthServings(x: number): number {
+  return Math.round(x * 10) / 10;
+}
+
+/**
+ * Convert servings to grams with rounding
+ */
+export function servingsToGrams(servings: number, gramWeight: number): number {
+  return roundToIntGrams(servings * gramWeight);
+}
+
+/**
+ * Convert grams to servings with rounding
+ */
+export function gramsToServings(grams: number, gramWeight: number): number {
+  if (gramWeight <= 0) return 1; // Guard against division by zero
+  return roundToTenthServings(grams / gramWeight);
+}
+
+/**
  * Calculate macros per gram from a food item
  */
 export function calculateMacrosPerGram(item: FoodLogItem) {

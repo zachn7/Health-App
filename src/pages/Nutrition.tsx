@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult } from '../lib/usda-service';
-import { formatServingSize, computeServingsChange, calculateTotalGrams } from '../lib/serving-utils';
+import { formatServingSize, computeServingsChange, calculateTotalGrams, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
 
@@ -1181,10 +1181,17 @@ export default function Nutrition() {
                         <input
                           type="number"
                           value={editingServingSize.quantity}
-                          onChange={(e) => setEditingServingSize({ ...editingServingSize, quantity: parseFloat(e.target.value) || 1 })}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value) && value > 0) {
+                              const isGrams = editingServingSize.unit === 'grams' || editingServingSize.unit === 'g';
+                              const roundedValue = isGrams ? roundToIntGrams(value) : roundToTenthServings(value);
+                              setEditingServingSize({ ...editingServingSize, quantity: roundedValue });
+                            }
+                          }}
                           className="input text-sm"
                           min="0.1"
-                          step="0.1"
+                          step={editingServingSize.unit === 'grams' || editingServingSize.unit === 'g' ? '1' : '0.1'}
                           aria-label="quantity"
                         />
                       </div>
@@ -1202,10 +1209,11 @@ export default function Nutrition() {
                               const currentTotalGrams = originalItem.computedTotalGrams || 
                                                          (originalItem.quantidade * originalItem.servingGrams);
                               
-                              // When switching to grams, set quantity to the total grams
-                              // When switching to serving, calculate the serving equivalent
-                              const newQuantity = isGrams ? currentTotalGrams : 
-                                                   Math.round(currentTotalGrams / (originalItem.servingGrams || 100) * 100) / 100;
+                              // When switching to grams, convert to whole grams
+                              // When switching to serving, convert to servings with 0.1 precision
+                              const newQuantity = isGrams 
+                                ? roundToIntGrams(currentTotalGrams)
+                                : gramsToServings(currentTotalGrams, originalItem.servingGrams || 100);
                               
                               setEditingServingSize({ 
                                 ...editingServingSize, 

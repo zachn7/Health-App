@@ -4,7 +4,7 @@ import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 import { extractMacrosFromSearchResult } from '../lib/usda-service';
-import { computeServingsChange, formatServingSize } from '../lib/serving-utils';
+import { computeServingsChange, formatServingSize, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 
 export default function Meals() {
   const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans'>('meals');
@@ -98,6 +98,11 @@ export default function Meals() {
     const newItems = [...mealItems];
     const item = newItems[index];
     
+    // Apply rounding based on unit
+    const roundedQuantity = newUnit === 'grams' 
+      ? roundToIntGrams(newQuantity)  // Grams are whole numbers
+      : roundToTenthServings(newQuantity);  // Servings have 0.1 precision
+    
     // Create a temporary item with an ID for computeServingsChange
     const tempItem: FoodLogItem = {
       ...item,
@@ -107,7 +112,7 @@ export default function Meals() {
     // Use the shared computeServingsChange function
     const result = computeServingsChange({
       originalItem: tempItem,
-      editedQuantity: newQuantity,
+      editedQuantity: roundedQuantity,
       editedUnit: newUnit
     });
     
@@ -740,7 +745,12 @@ export default function Meals() {
                               <div className="flex rounded-md shadow-sm" role="group">
                                 <button
                                   type="button"
-                                  onClick={() => updateMealItemQuantity(index, item.quantidade, 'serving')}
+                                  onClick={() => {
+                                    // Convert current value to servings when switching modes
+                                    const currentGrams = item.computedTotalGrams || (item.quantidade * item.servingGrams);
+                                    const newQuantity = gramsToServings(currentGrams, item.servingGrams);
+                                    updateMealItemQuantity(index, newQuantity, 'serving');
+                                  }}
                                   className={`px-3 py-2 text-sm font-medium rounded-l-lg border ${
                                     item.baseUnit === 'serving' 
                                       ? 'bg-blue-600 text-white border-blue-600' 
@@ -752,7 +762,12 @@ export default function Meals() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => updateMealItemQuantity(index, item.quantidade, 'grams')}
+                                  onClick={() => {
+                                    // Convert current value to grams when switching modes
+                                    const currentGrams = item.computedTotalGrams || (item.quantidade * item.servingGrams);
+                                    const newQuantity = roundToIntGrams(currentGrams);
+                                    updateMealItemQuantity(index, newQuantity, 'grams');
+                                  }}
                                   className={`px-3 py-2 text-sm font-medium rounded-r-lg border ${
                                     item.baseUnit === 'grams' 
                                       ? 'bg-blue-600 text-white border-blue-600' 
@@ -769,7 +784,7 @@ export default function Meals() {
                               <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
                               <input
                                 type="number"
-                                step="0.1"
+                                step={item.baseUnit === 'grams' ? '1' : '0.1'}
                                 min="0.1"
                                 value={item.quantidade}
                                 onChange={(e) => {

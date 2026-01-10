@@ -4,10 +4,47 @@ import {
   calculateMacrosPerGram, 
   calculateTotalGrams,
   computeServingsChange,
-  formatServingSize
+  formatServingSize,
+  roundToIntGrams,
+  roundToTenthServings,
+  gramsToServings
 } from '../../src/lib/serving-utils';
 
 describe('serving-utils', () => {
+  describe('roundToIntGrams', () => {
+    it('should round to nearest whole number', () => {
+      expect(roundToIntGrams(1.4)).toBe(1);
+      expect(roundToIntGrams(1.5)).toBe(2); // Rounds up at .5
+      expect(roundToIntGrams(1.6)).toBe(2);
+      expect(roundToIntGrams(0.1)).toBe(0);
+      expect(roundToIntGrams(0.9)).toBe(1);
+    });
+  });
+
+  describe('roundToTenthServings', () => {
+    it('should round to nearest tenth (0.1 precision)', () => {
+      expect(roundToTenthServings(1.45)).toBe(1.5);
+      expect(roundToTenthServings(1.44)).toBe(1.4);
+      expect(roundToTenthServings(1.55)).toBe(1.6);
+      expect(roundToTenthServings(0.15)).toBe(0.2);
+      expect(roundToTenthServings(2.0)).toBe(2.0);
+    });
+  });
+
+  describe('gramsToServings', () => {
+    it('should convert grams to servings with 0.1 precision', () => {
+      expect(gramsToServings(60, 40)).toBe(1.5);  // 60g / 40g = 1.5
+      expect(gramsToServings(40, 40)).toBe(1.0);
+      expect(gramsToServings(80, 40)).toBe(2.0);
+      expect(gramsToServings(61, 40)).toBe(1.5);  // 61/40 = 1.525 -> rounds to 1.5
+      expect(gramsToServings(59, 40)).toBe(1.5);  // 59/40 = 1.475 -> rounds to 1.5
+    });
+
+    it('should guard against zero gramWeight', () => {
+      expect(gramsToServings(100, 0)).toBe(1); // Returns 1 as fallback
+    });
+  });
+
   describe('calculateMacrosPerGram', () => {
     it('should calculate macros per gram correctly', () => {
       const item: FoodLogItem = {
@@ -190,17 +227,17 @@ describe('serving-utils', () => {
       expect(result.newCalories).toBe(120); // 80 * 1.5
     });
     
-    it('grams 80 -> servings 2.0', () => {
+    it('whole number grams input (60g)', () => {
       const result = computeServingsChange({
         originalItem: mockFoodLogItem,
-        editedQuantity: 80,
+        editedQuantity: 60, // Whole number grams
         editedUnit: 'grams'
       });
       
-      expect(result.newTotalGrams).toBe(80);
-      expect(result.newQuantity).toBe(80); // In grams mode, quantity = grams
+      expect(result.newTotalGrams).toBe(60);
+      expect(result.newQuantity).toBe(60); // In grams mode, quantity = grams
       expect(result.newBaseUnit).toBe('grams');
-      expect(result.newCalories).toBe(160); // 2 * 80
+      expect(result.newCalories).toBe(160); // 80 * (60/40) = 120
     });
   });
   
@@ -253,7 +290,7 @@ describe('serving-utils', () => {
     });
   });
   
-  describe('round-trip mode switching', () => {
+  describe('round-trip mode switching with rounding', () => {
     const mockFoodLogItem: FoodLogItem = {
       id: '1',
       name: 'Test Food',
@@ -268,19 +305,20 @@ describe('serving-utils', () => {
       computedTotalGrams: 60
     };
     
-    it('servings -> grams keeps grams constant', () => {
+    it('servings (1.5) -> grams (60) keeps integer grams', () => {
       const result = computeServingsChange({
         originalItem: mockFoodLogItem,
-        editedQuantity: 60, // Keep current grams
+        editedQuantity: 60, // Current grams rounded to integer
         editedUnit: 'grams'
       });
       
-      expect(result.newTotalGrams).toBe(60); // Grams preserved
+      expect(result.newTotalGrams).toBe(60); // Integer grams preserved
       expect(result.newBaseUnit).toBe('grams');
+      expect(result.newQuantity).toBe(60); // Integer value
       expect(result.newCalories).toBe(120); // Macros preserved
     });
     
-    it('grams -> servings keeps meaning preserved', () => {
+    it('grams (60) -> servings (1.5) has 0.1 precision', () => {
       const inGramsMode: FoodLogItem = {
         ...mockFoodLogItem,
         baseUnit: 'grams',
@@ -291,13 +329,14 @@ describe('serving-utils', () => {
       
       const result = computeServingsChange({
         originalItem: inGramsMode,
-        editedQuantity: 1.5,
+        editedQuantity: 1.5, // Rounded to 0.1
         editedUnit: 'serving'
       });
       
       expect(result.newBaseUnit).toBe('serving');
       expect(result.newServingGrams).toBe(40); // Uses original serving weight
-      expect(result.newTotalGrams).toBe(60); // 1.5 * 40
+           expect(result.newTotalGrams).toBe(60); // 1.5 * 40
+      expect(result.newQuantity).toBe(1.5); // 0.1 precision
       expect(result.newCalories).toBe(120);
     });
   });
