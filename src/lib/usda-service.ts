@@ -28,7 +28,8 @@ export interface NutrientValidationResult {
 
 /**
  * Validate that essential macros are present
- * At minimum: calories + at least one of protein/carbs/fat
+ * A nutrient is 'missing' ONLY if it is undefined/null
+ * A value of 0 is VALID and must NOT be treated as missing
  */
 export function validateMacros(macros: Partial<{
   calories: number;
@@ -36,10 +37,11 @@ export function validateMacros(macros: Partial<{
   carbsG: number;
   fatG: number;
 }>): NutrientValidationResult {
-  const hasCalories = macros.calories != null && macros.calories > 0;
-  const hasProtein = macros.proteinG != null && macros.proteinG >= 0;
-  const hasCarbs = macros.carbsG != null && macros.carbsG >= 0;
-  const hasFat = macros.fatG != null && macros.fatG >= 0;
+  // Check for presence (not missing) - undefined/null only
+  const hasCalories = macros.calories != null;
+  const hasProtein = macros.proteinG != null;
+  const hasCarbs = macros.carbsG != null;
+  const hasFat = macros.fatG != null;
   
   const missingMacros: string[] = [];
   if (!hasCalories) missingMacros.push('calories');
@@ -47,26 +49,34 @@ export function validateMacros(macros: Partial<{
   if (!hasCarbs) missingMacros.push('carbs');
   if (!hasFat) missingMacros.push('fat');
   
-  // Must have calories (or can estimate) and at least 2 other macros
-  const hasBasicMacros = [hasProtein, hasCarbs, hasFat].filter(Boolean).length >= 2;
+  // Count present macros
+  const presentMacrosCount = [hasProtein, hasCarbs, hasFat].filter(Boolean).length;
+  const totalPresentCount = presentMacrosCount + (hasCalories ? 1 : 0);
   
   // Can we estimate the missing macro?
-  // Only if we have calories and exactly 2 macros (protein/carbs/fat)
-  const presentMacrosCount = [hasProtein, hasCarbs, hasFat].filter(Boolean).length;
-  const canEstimate = hasCalories && presentMacrosCount >= 2 && presentMacrosCount < 3;
+  // Case A: If calories missing and P/C/F all present => CAN estimate calories
+  const canEstimateCalories = !hasCalories && presentMacrosCount === 3;
+  
+  // Case B: If one macro missing but calories and other macros present => CAN estimate macro
+  const canEstimateMacro = hasCalories && presentMacrosCount === 2;
+  
+  const canEstimate = canEstimateCalories || canEstimateMacro;
   
   // Determine recommended action
   let recommendedAction: 'import' | 'manual' | 'estimate' | 'skip' = 'import';
   
-  if (!hasCalories && !hasBasicMacros) {
-    // No usable data at all
+  if (totalPresentCount === 0) {
+    // No data at all
     recommendedAction = 'skip';
-  } else if (!hasCalories) {
-    // No calories - can't estimate, need manual
+  } else if (totalPresentCount >= 4) {
+    // All 4 fields present - can import directly
+    recommendedAction = 'import';
+  } else if (totalPresentCount >= 2 && canEstimate) {
+    // Exactly one field missing and can estimate
+    recommendedAction = 'estimate';
+  } else {
+    // Too many missing or can't estimate
     recommendedAction = 'manual';
-  } else if (!hasBasicMacros) {
-    // Has calories but missing macros - can we estimate?
-    recommendedAction = canEstimate ? 'estimate' : 'manual';
   }
   
   const isValid = recommendedAction === 'import' || recommendedAction === 'estimate';
@@ -84,58 +94,71 @@ export function validateMacros(macros: Partial<{
 }
 
 /**
- * Estimate missing macro using Atwater factors
- * Should only be called when we have calories + 2 of protein/carbs/fat
+ * Estimate missing macro or calories using Atwater factors
+ * Should only be called when exactly ONE field is missing
+ * Rule A: If calories missing & P/C/F all present -> calories = 4*P + 4*C + 9*F
+ * Rule B: If one macro missing & calories + other macros present -> macro = (cal - 4*x - 9*y) / factor
  */
 export function estimateMissingMacro(
   macros: {
-    calories: number;
+    calories?: number;
     proteinG?: number;
     carbsG?: number;
     fatG?: number;
   }
-): { proteinG?: number; carbsG?: number; fatG?: number } {
+): { calories?: number; proteinG?: number; carbsG?: number; fatG?: number } {
   const { calories, proteinG, carbsG, fatG } = macros;
   
-  if (!calories || calories <= 0) {
-    // Can't estimate without calories
-    return { proteinG, carbsG, fatG };
+  // Case A: Missing calories, but all P/C/F present
+  if (calories === undefined && proteinG !== undefined && carbsG !== undefined && fatG !== undefined) {
+    const estimatedCalories = Math.round(
+      (proteinG * ATWATER_FACTORS.protein) +
+      (carbsG * ATWATER_FACTORS.carbs) +
+      (fatG * ATWATER_FACTORS.fat)
+    );
+    return { calories: estimatedCalories, proteinG, carbsG, fatG };
   }
   
-  // Calculate known calories from present macros
-  let knownCalories = 0;
-  if (proteinG) knownCalories += proteinG * ATWATER_FACTORS.protein;
-  if (carbsG) knownCalories += carbsG * ATWATER_FACTORS.carbs;
-  if (fatG) knownCalories += fatG * ATWATER_FACTORS.fat;
-  
-  const remainingCalories = calories - knownCalories;
-  
-  // Determine which macro is missing and estimate it
-  if (proteinG === undefined && carbsG !== undefined && fatG !== undefined) {
-    // Missing protein
-    return {
-      proteinG: Math.round(Math.max(0, remainingCalories / ATWATER_FACTORS.protein) * 10) / 10,
-      carbsG,
-      fatG
-    };
-  } else if (carbsG === undefined && proteinG !== undefined && fatG !== undefined) {
-    // Missing carbs
-    return {
-      proteinG,
-      carbsG: Math.round(Math.max(0, remainingCalories / ATWATER_FACTORS.carbs) * 10) / 10,
-      fatG
-    };
-  } else if (fatG === undefined && proteinG !== undefined && carbsG !== undefined) {
-    // Missing fat
-    return {
-      proteinG,
-      carbsG,
-      fatG: Math.round(Math.max(0, remainingCalories / ATWATER_FACTORS.fat) * 10) / 10
-    };
+  // Case B: Missing one macro, but calories and other macros present
+  if (calories !== undefined) {
+    // Calculate known calories from present macros
+    let knownCalories = 0;
+    if (proteinG !== undefined) knownCalories += proteinG * ATWATER_FACTORS.protein;
+    if (carbsG !== undefined) knownCalories += carbsG * ATWATER_FACTORS.carbs;
+    if (fatG !== undefined) knownCalories += fatG * ATWATER_FACTORS.fat;
+    
+    const remainingCalories = calories - knownCalories;
+    
+    // Determine which macro is missing and estimate it
+    if (proteinG === undefined && carbsG !== undefined && fatG !== undefined) {
+      // Missing protein
+      return {
+        calories,
+        proteinG: Math.max(0, Math.round((remainingCalories / ATWATER_FACTORS.protein) * 10) / 10),
+        carbsG,
+        fatG
+      };
+    } else if (carbsG === undefined && proteinG !== undefined && fatG !== undefined) {
+      // Missing carbs
+      return {
+        calories,
+        proteinG,
+        carbsG: Math.max(0, Math.round((remainingCalories / ATWATER_FACTORS.carbs) * 10) / 10),
+        fatG
+      };
+    } else if (fatG === undefined && proteinG !== undefined && carbsG !== undefined) {
+      // Missing fat
+      return {
+        calories,
+        proteinG,
+        carbsG,
+        fatG: Math.max(0, Math.round((remainingCalories / ATWATER_FACTORS.fat) * 10) / 10)
+      };
+    }
   }
   
-  // Can't estimate - need more data
-  return { proteinG, carbsG, fatG };
+  // Can't estimate - return as-is
+  return { calories, proteinG, carbsG, fatG };
 }
 
 export interface SearchDiagnostics {
