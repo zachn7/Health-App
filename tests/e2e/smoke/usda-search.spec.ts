@@ -225,6 +225,14 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Check that other macros are present
     await expect(lastItem.getByTestId('food-carbs')).toBeVisible();
     await expect(lastItem.getByTestId('food-fat')).toBeVisible();
+    
+    // Verify dual format display: should show both servings and grams
+    const servingLabel = await lastItem.getByTestId('serving-size').textContent();
+    console.log('Serving label:', servingLabel);
+    
+    // Should contain both 'serving' and 'g' (dual format)
+    expect(servingLabel?.toLowerCase()).toMatch(/serving/);
+    expect(servingLabel?.toLowerCase()).toMatch(/\d+\s*g/);
   });
 
   test('should add multiple foods back-to-back without hanging', async ({ page }) => {
@@ -346,6 +354,7 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Verify the serving size was updated
     const updatedServingLabel = await firstItem.getByTestId('serving-size').textContent();
     expect(updatedServingLabel).toContain('2');
+    expect(updatedServingLabel).toContain('servings'); // Should show dual format: "X servings (Y g)"
     expect(initialServingLabel).not.toBe(updatedServingLabel);
 
     // Test 2: Edit in grams mode
@@ -367,9 +376,10 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Wait longer for the update to persist and UI to refresh
     await page.waitForTimeout(1000);
 
-    // Verify grams were saved (should show "200g")
+    // Verify grams were saved (should show dual format: "200 g (X servings)")
     const gramsLabel = await firstItem.getByTestId('serving-size').textContent();
-    expect(gramsLabel).toContain('200g');
+    expect(gramsLabel).toContain('200 g');
+    expect(gramsLabel).toContain('servings'); // Should show dual format with both units
 
     // Test 3: Verify macros were recalculated correctly by checking displayed values
     // The label shows "200g" and macros should correspond to that amount

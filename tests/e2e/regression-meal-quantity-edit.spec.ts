@@ -46,8 +46,11 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Verify food appears in meal with initial values
     await expect(page.getByText('Test Chicken Breast')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('1 serving')).toBeVisible({ timeout: 3000 });
-    await expect(page.getByText(/1 serving • 300 cal/)).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText(/1 serving/)).toBeVisible({ timeout: 3000 });
+    // Use testid selector to avoid strict mode violation (appears twice: once in label, once in macros)
+    await expect(page.getByTestId('meal-item-cal-0')).toContainText('300');
+    // Dual format shows both servings and grams: "1 serving (100 g) • 300 cal"
+    await expect(page.getByText(/1 serving.*300 cal/)).toBeVisible({ timeout: 3000 });
     
     // Click edit button on the food item
     await page.getByTestId('meal-item-edit-btn-0').click();
@@ -75,7 +78,10 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     await page.waitForTimeout(300);
     
     // Verify calories updated (should be 2 * 300 = 600)
-    await expect(page.getByText(/2 servings • 600/)).toBeVisible({ timeout: 3000 });
+    // Use testid selector for calories
+    await expect(page.getByTestId('meal-item-cal-0')).toContainText('600');
+    // Verify dual format: "2 servings (200 g) • 600 cal"
+    await expect(page.getByText(/2 servings.*600/)).toBeVisible({ timeout: 3000 });
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
@@ -91,8 +97,9 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     await page.getByTitle('Edit meal').click();
     await page.waitForTimeout(500);
     
-    // Verify quantity persisted (should still show 2 servings)
-    await expect(page.getByText(/2 servings • 600 cal/)).toBeVisible({ timeout: 3000 });
+    // Verify quantity persisted (should still show 2 servings with 600 cal)
+    // Use specific selectors to avoid matching too many elements
+    await expect(page.getByTestId('meal-item-cal-0')).toContainText('600');
     
     console.log('✅ Meal item quantity editing and persistence working correctly');
   });
@@ -134,7 +141,11 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Verify food appears with initial values
     await expect(page.getByText('Test Egg')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(/1 serving • 70 cal/)).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText(/1 serving/)).toBeVisible({ timeout: 3000 });
+    // Use testid selector to avoid strict mode violation
+    await expect(page.getByTestId('meal-item-cal-0')).toContainText('70');
+    // Dual format: "1 serving (100 g) • 70 cal"
+    await expect(page.getByText(/1 serving.*70 cal/)).toBeVisible({ timeout: 3000 });
     
     // Click edit button
     await page.getByTestId('meal-item-edit-btn-0').click();
@@ -297,7 +308,11 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Verify food appears with initial values (1 serving = 300 cal)
     await expect(page.getByText('Beef Steak')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(/1 serving • 300/)).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText(/1 serving/)).toBeVisible({ timeout: 3000 });
+    // Use testid selector to avoid strict mode violation
+    await expect(page.getByTestId('meal-item-cal-0')).toContainText('300');
+    // Dual format: "1 serving (100 g) • 300 cal"
+    await expect(page.getByText(/1 serving.*300/)).toBeVisible({ timeout: 3000 });
     
     // Click edit button
     await page.getByTestId('meal-item-edit-btn-0').click();

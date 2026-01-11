@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
-import { formatServingSize, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
+import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
 import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
@@ -1507,7 +1507,7 @@ export default function Nutrition() {
                     <div className="flex-1">
                       <div className="font-medium" data-testid="nutrition-log-item-name">{item.name}</div>
                       <div className="text-sm text-gray-600" data-testid="serving-size">
-                        {formatServingSize(item)}
+                        {formatServingsAndGrams(item)}
                       </div>
                       <div className="text-sm text-gray-600" data-testid="nutrition-log-item-macros">
                         <span data-testid="food-calories">{Math.round(item.calories)}</span> cal • 

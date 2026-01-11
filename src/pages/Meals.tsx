@@ -4,7 +4,7 @@ import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 import { extractMacrosFromSearchResult } from '../lib/usda-service';
-import { computeServingsChange, formatServingSize, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
+import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 
 export default function Meals() {
   const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans'>('meals');
@@ -553,7 +553,7 @@ export default function Meals() {
                             <div className="flex-1">
                               <h4 className="text-sm font-medium text-gray-900">{item.name}</h4>
                               <p className="text-xs text-gray-600">
-                                {formatServingSize(item)}
+                                {formatServingsAndGrams(item)}
                               </p>
                               {/* Macros - small matching Nutrition Log UX */}
                               <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -760,7 +760,7 @@ export default function Meals() {
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-900">{item.name}</h4>
                           <p className="text-sm text-gray-600">
-                            {formatServingSize(item)} • {Math.round(item.calories)} cal
+                            {formatServingsAndGrams(item)} • {Math.round(item.calories)} cal
                           </p>
                           {/* Show macros without needing to click Edit */}
                           <div className="mt-2 grid grid-cols-4 gap-2 text-xs">

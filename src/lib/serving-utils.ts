@@ -57,8 +57,47 @@ export function calculateMacrosPerGram(item: FoodLogItem) {
 }
 
 /**
- * Format serving size for display
+ * Format serving size as a dual display (servings and grams)
+ * Returns strings like "1 servings (100 g)" or "200 g (2 servings)"
+ * 
+ * @param item - Food log item with quantity and serving info
+ * @returns Formatted string showing both units when possible
+ */
+export function formatServingsAndGrams(item: FoodLogItem | Omit<FoodLogItem, 'id'>): string {
+  const base = item.baseUnit || 'serving';
+  const qty = item.quantidade;
+  const servingGrams = item.servingGrams;
+  
+  // Calculate total grams
+  const totalGrams = item.computedTotalGrams || (qty * servingGrams);
+  
+  // Calculate servings from grams (regardless of baseUnit)
+  const servings = servingGrams > 0 ? roundToTenthServings(totalGrams / servingGrams) : qty;
+  
+  // If we don't have reliable serving grams, show only what we know
+  if (!servingGrams || servingGrams <= 0) {
+    // Manual entry with unknown per-serving size
+    if (base === 'grams') {
+      return `${Math.round(qty)} g`;
+    } else {
+      return `${qty} serving${qty !== 1 ? 's' : ''}`;
+    }
+  }
+  
+  // We have reliable serving grams - show both units
+  if (base === 'grams') {
+    // User is thinking in grams - show grams first
+    return `${Math.round(qty)} g (${servings} serving${servings !== 1 ? 's' : ''})`;
+  } else {
+    // User is thinking in servings - show servings first
+    return `${servings} serving${servings !== 1 ? 's' : ''} (${Math.round(totalGrams)} g)`;
+  }
+}
+
+/**
+ * Format serving size for display (single unit)
  * Returns human-friendly strings like "1 serving" or "200 g"
+ * @deprecated Consider using formatServingsAndGrams for dual display
  */
 export function formatServingSize(item: FoodLogItem | Omit<FoodLogItem, 'id'>): string {
   const base = item.baseUnit || 'serving';
