@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// CI Guard: Fail if any test.skip or describe.skip are found in E2E tests
-// This prevents regressing back to skipped tests
+// CI Guard: Fail if any test.skip/describe.skip/test.fixme/describe.fixme are found in E2E tests
+// This prevents regressing back to skipped or FIXME tests
 
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, extname, dirname } from 'path';
@@ -13,7 +13,10 @@ const TESTS_DIR = join(process.cwd(), 'tests/e2e');
 const BAD_PATTERNS = [
   /test\.skip\s*\(/,
   /describe\.skip\s*\(/,
-  /it\.skip\s*\(/
+  /it\.skip\s*\(/,
+  /test\.fixme\s*\(/,
+  /describe\.fixme\s*\(/,
+  /it\.fixme\s*\(/
 ];
 
 const violations = [];
@@ -25,7 +28,7 @@ function checkFile(filePath) {
   lines.forEach((line, lineNum) => {
     BAD_PATTERNS.forEach(pattern => {
       const match = line.match(pattern);
-      if (match && !line.trim().startsWith('//')) { // Ignore commented skips
+      if (match && !line.trim().startsWith('//')) { // Ignore commented skips/fixmes
         violations.push({
           file: filePath.replace(process.cwd() + '/', ''),
           line: lineNum + 1,
@@ -53,7 +56,7 @@ function walkDir(dir) {
 
 // Main execution
 try {
-  console.log('🔍 Scanning for test.skip() and describe.skip() in E2E tests...');
+  console.log('🔍 Scanning for test.skip/describe.skip and test.fixme/describe.fixme in E2E tests...');
   console.log('');
   
   if (statSync(TESTS_DIR).isDirectory()) {
@@ -61,17 +64,17 @@ try {
   }
   
   if (violations.length > 0) {
-    console.log('❌ FAILED: Found test skips!');
+    console.log(`❌ FAILED: Found ${violations.length} test skip(s)/FIXME(s)!`);
     console.log('');
     violations.forEach(v => {
       console.log(`   ${v.file}:${v.line}`);
       console.log(`   ${v.content}`);
       console.log('');
     });
-    console.log('🛑 Fix: Remove all test.skip/describe.skip calls.');
+    console.log('🛑 Fix: Remove all test.skip/describe.skip and test.fixme/describe.fixme calls.');
     process.exit(1);
   } else {
-    console.log('✅ PASSED: No test skips found!');
+    console.log('✅ PASSED: No test skips or FIXMEs found!');
     console.log('');
     process.exit(0);
   }

@@ -39,6 +39,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
+      - name: Enforce no test skips/FIXMEs
+        run: node scripts/assert-no-playwright-skips.mjs
+      
       - name: Run E2E smoke tests
         run: npm run test:e2e:ci
       
