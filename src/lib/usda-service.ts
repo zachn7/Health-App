@@ -1,7 +1,7 @@
 import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
 import { FoodItem, FoodLogItem } from '@/types';
-import { rerankUSDAFoods } from '@/lib/search/fuzzy';
+
 
 /**
  * Atwater general factors for estimating missing macros
@@ -889,7 +889,7 @@ class USDAService {
     
     try {
       // Import and use searchWithRelaxation for query relaxation
-      const { searchWithRelaxation } = await import('./search/fuzzy');
+      const { searchWithRelaxation, hybridRankUSDAFoods } = await import('./search/fuzzy');
       
       const relaxedResult = await searchWithRelaxation(performQuery, query, {
         maxAttempts: 3,
@@ -902,12 +902,13 @@ class USDAService {
       let foods = relaxedResult.results as USDFoodSearchResult[];
       diagnostics.resultCount = foods.length;
       
-      // Client-side reranking with fuzzy search for better partial matches
+      // Client-side reranking with hybrid MiniSearch + Fuse.js for better partial matches
       // Always rerank with the ORIGINAL query, even if we used a relaxed query
+      // Hybrid ranking prioritizes prefix matches (70%) over fuzzy matches (30%)
       if (query && query.trim() && foods.length > 0) {
         console.log('[USDA] Reranking', foods.length, 'results queryUsed:', relaxedResult.queryUsed, 'for original:', query);
-        foods = rerankUSDAFoods(foods, query);
-        console.log('[USDA] Reranked to', foods.length, 'results');
+        foods = hybridRankUSDAFoods(foods, query);
+        console.log('[USDA] Reranked to', foods.length, 'results using hybrid MiniSearch + Fuse.js');
       }
       
       return { 

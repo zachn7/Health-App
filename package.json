@@ -1,7 +1,7 @@
 {
   "name": "code-puppy-trainer",
   "private": true,
-  "version": "0.2.20",
+  "version": "0.2.21",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,7 @@
     "dexie": "^3.2.4",
     "fuse.js": "^7.1.0",
     "lucide-react": "^0.294.0",
+    "minisearch": "^7.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.48.2",

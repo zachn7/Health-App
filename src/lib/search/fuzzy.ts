@@ -1,8 +1,10 @@
 /**
- * Fuzzy search utilities using Fuse.js
+ * Fuzzy search utilities using Fuse.js and MiniSearch
  * Provides consistent fuzzy search scoring across the app
+ * Hybrid approach: MiniSearch for prefix matches, Fuse.js for fuzzy/typo tolerance
  */
 import Fuse from 'fuse.js';
+import MiniSearch from 'minisearch';
 import { normalizeSearchTerm } from './normalize';
 
 /**
@@ -495,6 +497,121 @@ export function rerankUSDAFoods(
   limit?: number
 ): USDFoodSearchItem[] {
   return searchUSDAFoods(apiResults, searchTerm, limit);
+}
+
+// ==================== Hybrid MiniSearch + Fuse.js Functions ====================
+
+/**
+ * MiniSearch options optimized for food name prefixes
+ * Combines prefix-based field matching with fuzzy search
+ */
+const MINISEARCH_OPTIONS = {
+  fields: ['description', 'brandOwner', 'foodCategory'],
+  idField: 'fdcId',
+  storeFields: ['description', 'brandOwner', 'foodCategory', 'dataType', 'publishedDate'],
+  searchOptions: {
+    boost: { description: 3, brandOwner: 2, foodCategory: 1 }, // Weight food name highest
+    fuzzy: (term: string) => term.length > 3 ? 0.2 : false, // Light fuzzy for longer terms
+    prefix: true, // Enable prefix matching
+    combineWith: 'AND', // Require all tokens to match
+  },
+} as const;
+
+/**
+ * MiniSearch index for USDA foods
+ * Reusable across search calls for performance
+ */
+let usdaMiniSearchIndex: MiniSearch<USDFoodSearchItem> | null = null;
+
+/**
+ * Create or get the shared MiniSearch index
+ */
+function getUSDAMiniSearchIndex(results: USDFoodSearchItem[]): MiniSearch<USDFoodSearchItem> {
+  if (!usdaMiniSearchIndex || usdaMiniSearchIndex.documentCount === 0) {
+    usdaMiniSearchIndex = new MiniSearch(MINISEARCH_OPTIONS as any);
+  }
+  
+  // Add documents to index if not already present
+  for (const doc of results) {
+    if (!usdaMiniSearchIndex.has(doc.fdcId.toString())) {
+      usdaMiniSearchIndex.add(doc);
+    }
+  }
+  
+  return usdaMiniSearchIndex;
+}
+
+/**
+ * Hybrid ranking using MiniSearch (prefix-heavy) + Fuse.js (fuzzy/typo tolerant)
+ * Scores are weighted: 70% MiniSearch (prefix) + 30% Fuse.js (fuzzy)
+ * This ensures exact/prefix matches rank higher than fuzzy noise
+ */
+export function hybridRankUSDAFoods(
+  apiResults: USDFoodSearchItem[],
+  searchTerm: string,
+  limit?: number
+): USDFoodSearchItem[] {
+  if (!searchTerm || searchTerm.trim() === '') {
+    return apiResults;
+  }
+  
+  try {
+    // Step 1: MiniSearch prefix-based scoring (high precision)
+    const miniSearch = getUSDAMiniSearchIndex(apiResults);
+    const miniResults = miniSearch.search(searchTerm);
+    
+    // Create a score map from MiniSearch results
+    const miniScoreMap = new Map<string, number>();
+    for (const result of miniResults) {
+      const id = result.id.toString(); // MiniSearch uses the idField
+      miniScoreMap.set(id, result.score);
+    }
+    
+    // Step 2: Fuse.js fuzzy scoring (tolerant to typos)
+    const fuse = new Fuse(apiResults, USDA_FUSE_CONFIG);
+    const fuseResults = fuse.search(searchTerm);
+    
+    // Create a score map from Fuse.js results
+    const fuseScoreMap = new Map<string, number>();
+    for (const result of fuseResults) {
+      const id = result.item.fdcId.toString();
+      const fuseScore = 1 - (result.score || 0); // Invert: lower score = better match
+      fuseScoreMap.set(id, fuseScore);
+    }
+    
+    // Step 3: Combine scores (70% MiniSearch, 30% Fuse.js)
+    const scoredItems = apiResults.map(item => {
+      const id = item.fdcId.toString();
+      const miniScore = miniScoreMap.get(id) || 0; // 0 means didn't match in MiniSearch
+      const fuseScore = fuseScoreMap.get(id) || 0; // 0 means didn't match in Fuse.js
+      
+      // Hybrid score: prioritize prefix matches (MiniSearch) but consider fuzzy (Fuse.js)
+      const hybridScore = miniScore * 0.7 + fuseScore * 0.3;
+      
+      return { item, score: hybridScore };
+    });
+    
+    // Step 4: Sort by hybrid score (descending) - no filtering, keep all results
+    scoredItems.sort((a, b) => b.score - a.score);
+    
+    const results = scoredItems.map(s => s.item);
+    return limit ? results.slice(0, limit) : results;
+  } catch (error) {
+    console.error('[HybridRank] Error hybrid ranking, falling back to original results:', error);
+    return apiResults;
+  }
+}
+
+/**
+ * Rerank USDA API results with hybrid MiniSearch + Fuse.js
+ * Uses the hybrid ranking that prioritizes prefix matches over fuzzy noise
+ */
+export function rerankUSDAFoodsHybrid(
+  apiResults: USDFoodSearchItem[],
+  searchTerm: string,
+  limit?: number
+): USDFoodSearchItem[] {
+  return hybridRankUSDAFoods(apiResults, searchTerm, limit);
 }
 
 // ==================== Exercise-Specific Functions ====================
