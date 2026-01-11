@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
-import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, computePerServingMacros, type USDAFoodDetail } from '../lib/usda-service';
+import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
 import { formatServingSize, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
@@ -857,10 +857,16 @@ export default function Nutrition() {
                 let macros, displaySize;
                 
                 if (foodDetail) {
-                  // Use hydrated data with correct serving size
-                  const result = computePerServingMacros(foodDetail);
-                  macros = result.macros;
-                  displaySize = result.displaySize;
+                  // Use hydrated data with the SAME pipeline as Add to avoid discrepancies
+                  const loggedPreview = buildLoggedItemPreviewFromDetail(foodDetail);
+                  if (loggedPreview) {
+                    macros = loggedPreview.macros;
+                    displaySize = loggedPreview.displaySize;
+                  } else {
+                    // Validation failed - show as incomplete
+                    macros = undefined;
+                    displaySize = 'Incomplete data';
+                  }
                 } else {
                   // Fallback to search result (shows per-100g as is)
                   macros = extractMacrosFromSearchResult(food);

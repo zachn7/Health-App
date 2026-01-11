@@ -634,6 +634,79 @@ export function getDefaultServingGrams(foodDetail: USDAFoodDetail): number | nul
 }
 
 /**
+ * Build a preview of what the logged food item would look like
+ * Uses the same logic as createFoodLogItem but takes foodDetail as input
+ * Returns a preview object that matches the format of what gets logged
+ * This ensures preview macros match exactly what will be logged
+ */
+export function buildLoggedItemPreviewFromDetail(foodDetail: USDAFoodDetail): {
+  macros: MacroNutrients;
+  servingGrams: number | null;
+  displaySize: string;
+  baseUnit: 'serving' | 'grams';
+  computedTotalGrams: number;
+} | null {
+  // Use unified normalization + validation + inference
+  const nutrition = normalizeFdcNutrition(foodDetail);
+  const validated = validateAndInferMacros(nutrition);
+  
+  // If validation failed, return null (will be handled by caller)
+  if (!validated) {
+    return null;
+  }
+  
+  const servingInfo = USDAService.parseServingInfo(foodDetail);
+  
+  // Default settings: 1 serving
+  const customQuantity = 1;
+  const targetUnit: 'serving' | 'grams' = 'serving';
+  
+  // Calculate the final macros based on quantity=1, unit=serving
+  let scaleFactor = 1;
+  let finalServingSize = servingInfo.displaySize;
+  let finalServingGrams = servingInfo.gramsPerServing;
+  
+  // Foundation/SR foods: show 'per 100 g' (not "1 serving")
+  if (validated.basis === 'per_100g') {
+    finalServingGrams = 100;
+    scaleFactor = 1;
+    finalServingSize = 'per 100 g';  // Foundation shows per 100g, not "1 serving"
+  } else {
+    // Branded foods: use actual serving grams
+    scaleFactor = 1;
+    if (servingInfo.gramsPerServing) {
+      finalServingSize = `1 serving (${Math.round(servingInfo.gramsPerServing)}g)`;
+    } else {
+      // No serving info - show as per 100g
+      finalServingGrams = 100;
+      finalServingSize = 'per 100 g';
+    }
+  }
+  
+  // Apply scaling to get final macro values
+  const finalMacros: MacroNutrients = {
+    calories: Math.round(validated.calories! * scaleFactor),
+    proteinG: Math.round((validated.proteinG! * scaleFactor) * 10) / 10,
+    carbsG: Math.round((validated.carbsG! * scaleFactor) * 10) / 10,
+    fatG: Math.round((validated.fatG! * scaleFactor) * 10) / 10,
+    fiberG: validated.fiberG !== null ? Math.round((validated.fiberG * scaleFactor) * 10) / 10 : undefined,
+    sugarG: validated.sugarG !== null ? Math.round((validated.sugarG * scaleFactor) * 10) / 10 : undefined,
+    sodiumMg: validated.sodiumMg !== null ? Math.round(validated.sodiumMg * scaleFactor) : undefined,
+    basis: validated.basis
+  };
+  
+  const computedTotalGrams = customQuantity * finalServingGrams;
+  
+  return {
+    macros: finalMacros,
+    servingGrams: finalServingGrams,
+    displaySize: finalServingSize,
+    baseUnit: targetUnit,
+    computedTotalGrams
+  };
+}
+
+/**
  * Compute per-serving macros from detailed food data
  * If servingGrams is provided, converts from per-100g to per-serving
  */
@@ -903,7 +976,7 @@ class USDAService {
     };
   }
 
-  private static parseServingInfo(foodDetail: USDAFoodDetail): {
+  public static parseServingInfo(foodDetail: USDAFoodDetail): {
     displaySize: string;
     gramsPerServing: number;
     baseUnit: 'serving' | 'grams';
@@ -1009,6 +1082,78 @@ class USDAService {
     await db.foodItems.put(foodItem);
     
     return foodItem;
+  }
+
+  /**
+   * Build a preview of what the logged food item would look like (synchronous version)
+   * Uses the same logic as createFoodLogItem but takes foodDetail as input
+   * Returns a preview object that matches the format of what gets logged
+   */
+  static buildLoggedItemPreviewFromDetail(foodDetail: USDAFoodDetail): {
+    macros: MacroNutrients;
+    servingGrams: number | null;
+    displaySize: string;
+    baseUnit: 'serving' | 'grams';
+    computedTotalGrams: number;
+  } | null {
+    // Use unified normalization + validation + inference
+    const nutrition = normalizeFdcNutrition(foodDetail);
+    const validated = validateAndInferMacros(nutrition);
+    
+    // If validation failed, return null (will be handled by caller)
+    if (!validated) {
+      return null;
+    }
+    
+    const servingInfo = this.parseServingInfo(foodDetail);
+    
+    // Default settings: 1 serving
+    const customQuantity = 1;
+    const targetUnit = 'serving' as const;
+    
+    // Calculate the final macros based on quantity=1, unit=serving
+    let scaleFactor = 1;
+    let finalServingSize = servingInfo.displaySize;
+    let finalServingGrams = servingInfo.gramsPerServing;
+    
+    // Foundation/SR foods: 1 serving = 100g
+    if (validated.basis === 'per_100g') {
+      finalServingGrams = 100;
+      scaleFactor = 1;
+      finalServingSize = 'per 100 g';  // Foundation shows per 100g, not "1 serving"
+    } else {
+      // Branded foods: use actual serving grams
+      scaleFactor = 1;
+      if (servingInfo.gramsPerServing) {
+        finalServingSize = `1 serving (${servingInfo.gramsPerServing}g)`;
+      } else {
+        // No serving info - show as per 100g
+        finalServingGrams = 100;
+        finalServingSize = 'per 100 g';
+      }
+    }
+    
+    // Apply scaling to get final macro values
+    const finalMacros: MacroNutrients = {
+      calories: Math.round(validated.calories! * scaleFactor),
+      proteinG: Math.round((validated.proteinG! * scaleFactor) * 10) / 10,
+      carbsG: Math.round((validated.carbsG! * scaleFactor) * 10) / 10,
+      fatG: Math.round((validated.fatG! * scaleFactor) * 10) / 10,
+      fiberG: validated.fiberG !== null ? Math.round((validated.fiberG * scaleFactor) * 10) / 10 : undefined,
+      sugarG: validated.sugarG !== null ? Math.round((validated.sugarG * scaleFactor) * 10) / 10 : undefined,
+      sodiumMg: validated.sodiumMg !== null ? Math.round(validated.sodiumMg * scaleFactor) : undefined,
+      basis: validated.basis
+    };
+    
+    const computedTotalGrams = customQuantity * finalServingGrams;
+    
+    return {
+      macros: finalMacros,
+      servingGrams: finalServingGrams,
+      displaySize: finalServingSize,
+      baseUnit: targetUnit,
+      computedTotalGrams
+    };
   }
 
   /**
