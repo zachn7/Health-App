@@ -84,6 +84,76 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     console.log('✅ Macros shown on meal row without Edit click');
   });
 
+  test('should show ingredient macros in meal card view (non-edit state)', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Click "Create New Meal" button
+    await page.getByTestId('create-new-meal-btn').click();
+    await page.waitForTimeout(500);
+    
+    // Set meal name
+    await page.getByTestId('meal-editor-name-input').fill('Card View Macros Test');
+    
+    // Open manual food form
+    await page.getByTestId('meal-editor-add-manual-food-btn').click();
+    await page.waitForTimeout(500);
+    
+    // Fill in manual food form with all macros
+    const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await foodNameInput.fill('Salmon Fillet');
+    
+    const caloriesInput = page.locator('input[placeholder="200"]');
+    await caloriesInput.fill('208');
+    
+    const proteinInput = page.locator('input[placeholder="20"]');
+    await proteinInput.fill('20');
+    
+    const carbsInput = page.locator('input[placeholder="25"]');
+    await carbsInput.fill('0');
+    
+    const fatInput = page.locator('input[placeholder="8"]');
+    await fatInput.fill('13');
+    
+    // Add to meal
+    await page.getByRole('button', { name: 'Add to Meal' }).click();
+    await page.waitForTimeout(500);
+    
+    // Save the meal
+    await page.getByRole('button', { name: 'Save Meal' }).click();
+    await page.waitForTimeout(1000);
+    
+    // Navigate back to meals list
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Find the meal card (without clicking Edit)
+    const mealCard = page.locator('[data-testid^="meal-card-"]').filter({ hasText: 'Card View Macros Test' });
+    await expect(mealCard).toBeVisible({ timeout: 5000 });
+    
+    // Find the details element and open it
+    const detailsElement = mealCard.locator('details').first();
+    // Use JavaScript to set the open attribute
+    await page.evaluate((el) => el.setAttribute('open', ''), await detailsElement.elementHandle());
+    await page.waitForTimeout(300);
+    
+    // Verify the ingredient item is visible
+    // Look for the ingredient within the meal card
+    const ingredient = mealCard.locator('[data-testid^="meal-card-item-"]').filter({ hasText: 'Salmon Fillet' });
+    await expect(ingredient).toBeVisible({ timeout: 5000 });
+    
+    // Verify macros are visible in the ingredient section
+    // The testId format is: meal-card-item-cal-{mealId}-{index}
+    // We'll search by text content instead
+    await expect(ingredient.getByText(/Cal: 208/)).toBeVisible();
+    await expect(ingredient.getByText(/P: 20.0g/)).toBeVisible();
+    await expect(ingredient.getByText(/C: 0.0g/)).toBeVisible();
+    await expect(ingredient.getByText(/F: 13.0g/)).toBeVisible();
+    
+    console.log('✅ Ingredient macros visible in meal card view (non-edit state)');
+  });
+
   test('should create meal, add manual food, save and persist', async ({ page }) => {
     // Navigate to Meals page
     await page.goto('./#/meals');
