@@ -868,9 +868,34 @@ export default function Nutrition() {
                     displaySize = 'Incomplete data';
                   }
                 } else {
-                  // Fallback to search result (shows per-100g as is)
+                  // Fallback to search result - NEVER claim '1 serving' without verified serving size
                   macros = extractMacrosFromSearchResult(food);
-                  displaySize = macros?.basis === 'per_100g' ? 'per 100 g' : '1 serving';
+                  
+                  // Determine display size based on what data we actually have
+                  if (!macros) {
+                    displaySize = 'No nutrition data';
+                  } else if (macros.basis === 'per_100g') {
+                    // Foundation/SR foods show per 100g explicitly
+                    displaySize = 'per 100 g';
+                  } else if (macros.basis === 'per_serving') {
+                    // Branded foods - only show 'serving' if we have the gram weight
+                    if (food.servingSize && food.servingSizeUnit === 'g') {
+                      displaySize = `per serving (${food.servingSize}g)`;
+                    } else if (food.foodPortions && food.foodPortions.length > 0) {
+                      // Use food portions if available
+                      const portion = food.foodPortions[0];
+                      displaySize = `per serving (${portion.gramWeight}g)`;
+                    } else if (food.servingSize) {
+                      // Has serving size but unknown unit
+                      displaySize = `per serving (${food.servingSize}${food.servingSizeUnit || ''})`;
+                    } else {
+                      // No verified serving size - don't fake it!
+                      displaySize = 'per serving';
+                    }
+                  } else {
+                    // Unknown basis - fall back safely
+                    displaySize = 'per serving';
+                  }
                 }
                 
                 const isImporting = usdaImporting.has(food.fdcId);

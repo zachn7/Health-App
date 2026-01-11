@@ -940,6 +940,182 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     });
   });
 
+  test.describe('USDA Preview Basis (Per Serving vs Per 100g)', () => {
+    test('should show "1 serving (X g)" when serving grams are known', async ({ page, context }) => {
+      // Set up age gate and onboarding
+      await context.addInitScript(() => {
+        localStorage.setItem('age_gate_accepted', 'true');
+        localStorage.setItem('onboarding_completed', 'true');
+      });
+      
+      // Mock USDA API to return food with 30g serving size
+      const mockServing30g = (url: string) => {
+        if (url.includes('/foods/search')) {
+          return {
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              foods: [{
+                fdcId: 999999,
+                description: 'Test 30g Pack',
+                dataType: 'Branded',
+                servingSize: 30,
+                servingSizeUnit: 'g',
+                labelNutrients: {
+                  calories: { value: 150 },
+                  protein: { value: 5 },
+                  fat: { value: 6 },
+                  carbohydrates: { value: 18 }
+                }
+              }],
+              totalPages: 1,
+              currentPage: 1
+            })
+          };
+        } else if (url.includes('/food/')) {
+          return {
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              fdcId: 999999,
+              description: 'Test 30g Pack',
+              dataType: 'Branded',
+              servingSize: 30,
+              servingSizeUnit: 'g',
+              labelNutrients: {
+                calories: { value: 150 },
+                protein: { value: 5 },
+                fat: { value: 6 },
+                carbohydrates: { value: 18 }
+              }
+            })
+          };
+        };
+        return null;
+      };
+      
+      await page.route('**/api.nal.usda.gov/fdc/v1/**', async (route) => {
+        const mock = mockServing30g(route.request().url());
+        if (mock) {
+          await route.fulfill(mock);
+        } else {
+          await route.continue();
+        }
+      });
+      
+      // Navigate to nutrition and open USDA modal
+      await page.goto('./#/nutrition');
+      await page.goto('./#/nutrition');
+      await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+      await page.getByTestId('usda-search-button').click();
+      await expect(page.getByTestId('usda-import-modal')).toBeVisible();
+      
+      // Search for the test food
+      await page.getByTestId('usda-search-input').fill('test 30g');
+      await page.waitForTimeout(1000);
+      
+      // Wait for search results and hydration to complete
+      await expect(page.getByTestId('usda-results')).toBeVisible();
+      await page.waitForTimeout(3000); // Wait for hydration
+      
+      // Verify display shows "1 serving (30g)" NOT "1 serving (100g)"
+      // After hydration, the display should use the actual serving size from food details
+      await expect(page.getByText('1 serving (30g)')).toBeVisible();
+      
+      // Verify it does NOT show misleading "1 serving (100g)"
+      const finalResultText = await page.getByTestId('usda-results').textContent();
+      expect(finalResultText).not.toContain('1 serving (100g)');
+      expect(finalResultText).not.toContain('1 serving(100g)');
+      
+      // Verify macros are scaled to 30g (not per 100g)
+      expect(finalResultText).toContain('150 cal');  // 150 cal for 30g, not 500 cal for 100g
+      expect(finalResultText).toContain('5.0g protein');  // 5g for 30g
+      
+      console.log('✅ Preview shows actual serving size (30g) when known');
+    });
+    
+    test('should show "per 100 g" when serving grams are unknown', async ({ page, context }) => {
+      // Set up age gate and onboarding
+      await context.addInitScript(() => {
+        localStorage.setItem('age_gate_accepted', 'true');
+        localStorage.setItem('onboarding_completed', 'true');
+      });
+      
+      // Mock USDA API to return Foundation food (per 100g basis)
+      const mockPer100g = (url: string) => {
+        if (url.includes('/foods/search')) {
+          return {
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              foods: [{
+                fdcId: 888888,
+                description: 'Test Foundation Food',
+                dataType: 'Foundation',
+                foodNutrients: [
+                  { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 350 },
+                  { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 25 },
+                  { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 20 },
+                  { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 30 }
+                ]
+              }],
+              totalPages: 1,
+              currentPage: 1
+            })
+          };
+        } else if (url.includes('/food/')) {
+          return {
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              fdcId: 888888,
+              description: 'Test Foundation Food',
+              dataType: 'Foundation',
+              servingSize: 100,
+              servingSizeUnit: 'g',
+              foodNutrients: [
+                { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 350 },
+                { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 25 },
+                { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 20 },
+                { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 30 }
+              ]
+            })
+          };
+        };
+        return null;
+      };
+      
+      await page.route('**/api.nal.usda.gov/fdc/v1/**', async (route) => {
+        const mock = mockPer100g(route.request().url());
+        if (mock) {
+          await route.fulfill(mock);
+        } else {
+          await route.continue();
+        }
+      });
+      
+      // Navigate to nutrition and open USDA modal
+      await page.goto('./#/nutrition');
+      await expect(page.getByTestId('nutrition-page-heading')).toBeVisible();
+      await page.getByTestId('usda-search-button').click();
+      await expect(page.getByTestId('usda-import-modal')).toBeVisible();
+      
+      // Search for the test food
+      await page.getByTestId('usda-search-input').fill('test foundation');
+      await page.waitForTimeout(600);
+      
+      // Verify display shows "per 100 g" explicitly
+      await expect(page.getByText('per 100 g')).toBeVisible();
+      
+      // Verify it does NOT claim "1 serving (100g)"
+      const resultText = await page.getByTestId('usda-results').textContent();
+      expect(resultText).not.toContain('1 serving (100g)');
+      expect(resultText).not.toContain('1 serving(100g)');
+      
+      console.log('✅ Preview shows "per 100 g" when serving is unknown');
+    });
+  });
+
   test.describe('USDA Query Relaxation', () => {
     test('should show results for partial queries via query relaxation', async ({ page }) => {
       // Go to nutrition page
