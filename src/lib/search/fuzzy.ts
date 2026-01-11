@@ -542,9 +542,34 @@ function getUSDAMiniSearchIndex(results: USDFoodSearchItem[]): MiniSearch<USDFoo
 }
 
 /**
+ * Check if an item has a strong prefix match with the query
+ * Returns true if:
+ * - Item description starts with the query, OR
+ * - Item description contains the query as a substring (for longer queries)
+ */
+function hasStrongPrefixMatch(item: USDFoodSearchItem, query: string): boolean {
+  const normalizedDescription = item.description.toLowerCase().trim();
+  const normalizedQuery = query.toLowerCase().trim();
+  
+  // Exact prefix match (most valuable)
+  if (normalizedDescription.startsWith(normalizedQuery)) {
+    return true;
+  }
+  
+  // Substring match for queries >= 5 characters (still strong signal)
+  if (query.length >= 5 && normalizedDescription.includes(normalizedQuery)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * Hybrid ranking using MiniSearch (prefix-heavy) + Fuse.js (fuzzy/typo tolerant)
  * Scores are weighted: 70% MiniSearch (prefix) + 30% Fuse.js (fuzzy)
  * This ensures exact/prefix matches rank higher than fuzzy noise
+ * 
+ * For queries >= 5 chars with strong prefix matches, only those matches are shown
  */
 export function hybridRankUSDAFoods(
   apiResults: USDFoodSearchItem[],
@@ -556,8 +581,28 @@ export function hybridRankUSDAFoods(
   }
   
   try {
+    const normalizedQuery = searchTerm.toLowerCase().trim();
+    
+    // Phase A: Strong prefix detection for queries >= 5 characters
+    // This ensures 'cheeseca' strongly prefers 'cheesecake' over generic 'cheese'
+    let candidates = apiResults;
+    
+    if (normalizedQuery.length >= 5) {
+      const strongPrefixMatches = apiResults.filter(
+        item => hasStrongPrefixMatch(item, normalizedQuery)
+      );
+      
+      if (strongPrefixMatches.length > 0) {
+        console.log(
+          `[HybridRank] Strong prefix matches found: ${strongPrefixMatches.length}/${apiResults.length} for query "${searchTerm}"`
+        );
+        // Only rank prefix-matching items - this narrows results significantly
+        candidates = strongPrefixMatches;
+      }
+    }
+    
     // Step 1: MiniSearch prefix-based scoring (high precision)
-    const miniSearch = getUSDAMiniSearchIndex(apiResults);
+    const miniSearch = getUSDAMiniSearchIndex(apiResults); // Always index all results
     const miniResults = miniSearch.search(searchTerm);
     
     // Create a score map from MiniSearch results
@@ -579,19 +624,22 @@ export function hybridRankUSDAFoods(
       fuseScoreMap.set(id, fuseScore);
     }
     
-    // Step 3: Combine scores (70% MiniSearch, 30% Fuse.js)
-    const scoredItems = apiResults.map(item => {
+    // Step 3: Combine scores (70% MiniSearch, 30% Fuse.js) - only score candidates
+    const scoredItems = candidates.map(item => {
       const id = item.fdcId.toString();
       const miniScore = miniScoreMap.get(id) || 0; // 0 means didn't match in MiniSearch
       const fuseScore = fuseScoreMap.get(id) || 0; // 0 means didn't match in Fuse.js
       
+      // Bonus score for candidates that passed strong prefix filter (even if not in MiniSearch)
+      const prefixBonus = hasStrongPrefixMatch(item, normalizedQuery) ? 0.2 : 0;
+      
       // Hybrid score: prioritize prefix matches (MiniSearch) but consider fuzzy (Fuse.js)
-      const hybridScore = miniScore * 0.7 + fuseScore * 0.3;
+      const hybridScore = miniScore * 0.7 + fuseScore * 0.3 + prefixBonus;
       
       return { item, score: hybridScore };
     });
     
-    // Step 4: Sort by hybrid score (descending) - no filtering, keep all results
+    // Step 4: Sort by hybrid score (descending)
     scoredItems.sort((a, b) => b.score - a.score);
     
     const results = scoredItems.map(s => s.item);
