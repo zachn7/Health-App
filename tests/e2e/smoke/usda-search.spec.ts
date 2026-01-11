@@ -15,8 +15,8 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
       if (url.includes('/foods/search')) {
         const searchQuery = new URL(url).searchParams.get('query');
         
-        // Return empty results for nonsense searches
-        if (searchQuery === 'xyz nonexistent food 12345') {
+        // Return empty results for nonsense searches and their relaxed variations
+        if (searchQuery && searchQuery.startsWith('xyz nonexistent food')) {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -421,7 +421,7 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Open USDA import dialog
     await page.getByTestId('usda-search-button').click();
     
-    // Set up network wait
+    // Set up network wait for the search response
     const searchResponse = page.waitForResponse(
       response => response.url().includes('/foods/search') && response.status() === 200
     );
@@ -429,11 +429,16 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Search for something that returns no results (already mocked to return empty array)
     await page.getByTestId('usda-search-input').fill('xyz nonexistent food 12345');
     await searchResponse;
+    
+    // Wait for debounce (300ms) + state update
     await page.waitForTimeout(600);
+    
+    // Check for loading state - should be done
+    await expect(page.getByText('Searching...')).not.toBeVisible();
     
     // Should show no results message using testid
     const noResultsElement = page.getByTestId('usda-no-results');
-    await expect(noResultsElement).toBeVisible({ timeout: 10000 });
+    await expect(noResultsElement).toBeVisible();
     await expect(page.getByText(/No results found/i)).toBeVisible();
   });
 });
