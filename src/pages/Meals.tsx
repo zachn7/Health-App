@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator } from 'lucide-react';
+import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 import { extractMacrosFromSearchResult } from '../lib/usda-service';
@@ -530,6 +530,52 @@ export default function Meals() {
                     </div>
                     <div className="text-sm text-gray-600">Fat</div>
                   </div>
+                </div>
+
+                {/* Ingredient List with Macros */}
+                <div className="mb-4 space-y-2">
+                  <details open className="group">
+                    <summary className="flex items-center justify-between cursor-pointer p-2 -m-2 hover:bg-gray-50 rounded-lg">
+                      <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                        <List className="w-4 h-4" />
+                        Ingredients ({meal.items.length})
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-400 transform group-open:rotate-90 transition-transform" />
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {meal.items.map((item, index) => (
+                        <div 
+                          key={index} 
+                          className="p-3 bg-gray-50 rounded-lg border border-gray-100"
+                          data-testid={`meal-card-item-${meal.id}-${index}`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h4 className="text-sm font-medium text-gray-900">{item.name}</h4>
+                              <p className="text-xs text-gray-600">
+                                {formatServingSize(item)}
+                              </p>
+                              {/* Macros - small matching Nutrition Log UX */}
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                <span className="text-blue-600 font-medium" data-testid={`meal-card-item-cal-${meal.id}-${index}`}>
+                                  Cal: {Math.round(item.calories)}
+                                </span>
+                                <span className="text-purple-600 font-medium" data-testid={`meal-card-item-protein-${meal.id}-${index}`}>
+                                  P: {item.proteinG !== undefined && item.proteinG !== null ? `${item.proteinG.toFixed(1)}g` : 'N/A'}
+                                </span>
+                                <span className="text-orange-600 font-medium" data-testid={`meal-card-item-carbs-${meal.id}-${index}`}>
+                                  C: {item.carbsG !== undefined && item.carbsG !== null ? `${item.carbsG.toFixed(1)}g` : 'N/A'}
+                                </span>
+                                <span className="text-yellow-600 font-medium" data-testid={`meal-card-item-fat-${meal.id}-${index}`}>
+                                  F: {item.fatG !== undefined && item.fatG !== null ? `${item.fatG.toFixed(1)}g` : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 </div>
 
                 {/* Import to Nutrition */}
