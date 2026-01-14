@@ -1206,9 +1206,14 @@ export default function Meals() {
                                     ⚠️ Incomplete data
                                   </span>
                                 )}
-                                {macros.basis === 'per_100g' && (
+                                {macros.portionLabel && macros.portionGrams && (
                                   <span className="text-gray-500 font">
-                                    1 serving (100g)
+                                    {macros.portionLabel} ({Math.round(macros.portionGrams)}g)
+                                  </span>
+                                )}
+                                {!macros.portionLabel && macros.basis === 'per_100g' && (
+                                  <span className="text-gray-500 font">
+                                    per 100 g
                                   </span>
                                 )}
                               </div>

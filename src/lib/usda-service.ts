@@ -419,6 +419,67 @@ export interface SearchDiagnostics {
   resultCount: number;
 }
 
+/**
+ * Get default portion grams from food details
+ * Returns null if no usable portion/serving grams are available
+ */
+export function getDefaultPortionGrams(
+  foodDetail: USDAFoodDetail | USDFoodSearchResult
+): { portionGrams: number; label: string } | null {
+  // Rule a: Branded food with servingSize in grams
+  if (foodDetail.servingSize && foodDetail.servingSizeUnit) {
+    const unit = foodDetail.servingSizeUnit.toLowerCase();
+    const size = foodDetail.servingSize;
+    
+    if ((unit.includes('g') || unit.includes('gram')) && size > 0) {
+      return {
+        portionGrams: size,
+        label: '1 serving'
+      };
+    }
+  }
+  
+  // Rule b: foodPortions exist
+  if (foodDetail.foodPortions && foodDetail.foodPortions.length > 0) {
+    const portions = foodDetail.foodPortions.filter(p => p.gramWeight > 0);
+    
+    if (portions.length > 0) {
+      // b1: Prefers portion where portionDescription contains 'serving'
+      const servingPortion = portions.find(p => 
+        p.portionDescription.toLowerCase().includes('serving')
+      );
+      if (servingPortion) {
+        return {
+          portionGrams: servingPortion.gramWeight,
+          label: servingPortion.portionDescription
+        };
+      }
+      
+      // b2: Prefers common units (cup, tbsp, tsp, slice, piece, etc.)
+      const commonUnits = ['cup', 'tbsp', 'tsp', 'tablespoon', 'teaspoon', 'slice', 'piece', 'oz', 'ounce', 'fl oz', 'fluid ounce'];
+      const commonUnitPortion = portions.find(p => 
+        commonUnits.some(unit => p.portionDescription.toLowerCase().includes(unit))
+      );
+      if (commonUnitPortion) {
+        return {
+          portionGrams: commonUnitPortion.gramWeight,
+          label: commonUnitPortion.portionDescription
+        };
+      }
+      
+      // b3: Choose first available portion with gramWeight > 0
+      const firstPortion = portions[0];
+      return {
+        portionGrams: firstPortion.gramWeight,
+        label: firstPortion.portionDescription
+      };
+    }
+  }
+  
+  // Rule c: No grams basis available
+  return null;
+}
+
 export interface USDFoodSearchResult {
   fdcId: number;
   description: string;
@@ -436,10 +497,16 @@ export interface USDFoodSearchResult {
   servingSizeUnit?: string;
   householdServingFullText?: string;
   foodPortions?: {
-    amount: number;
-    description: string;
+    id?: number;
+    portionDescription: string;
     gramWeight: number;
-    modifier: string;
+    sequenceNumber?: number;
+    modifier?: string;
+    measureUnit?: {
+      id?: number;
+      name: string;
+      abbreviation?: string;
+    };
   }[];
 }
 
@@ -473,10 +540,16 @@ export interface USDAFoodDetail {
   servingSizeUnit?: string;
   householdServingFullText?: string;
   foodPortions?: {
-    amount: number;
-    description: string;
+    id?: number;
+    portionDescription: string;
     gramWeight: number;
-    modifier: string;
+    sequenceNumber?: number;
+    modifier?: string;
+    measureUnit?: {
+      id?: number;
+      name: string;
+      abbreviation?: string;
+    };
   }[];
 }
 
@@ -489,6 +562,8 @@ export interface MacroNutrients {
   sugarG?: number;
   sodiumMg?: number;
   basis: 'per_serving' | 'per_100g';
+  portionGrams?: number;
+  portionLabel?: string;
 }
 
 /**
@@ -506,6 +581,9 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
     
     if (!hasData) return null;
     
+    // Try to get default portion info first
+    const portionInfo = getDefaultPortionGrams 
+    
     return {
       calories: ln.calories?.value !== undefined ? Math.round(ln.calories.value) : undefined,
       proteinG: ln.protein?.value !== undefined ? Math.round(ln.protein.value * 10) / 10 : undefined,
@@ -514,11 +592,16 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
       fiberG: ln.fiber?.value !== undefined ? Math.round(ln.fiber.value * 10) / 10 : undefined,
       sugarG: ln.sugars?.value !== undefined ? Math.round(ln.sugars.value * 10) / 10 : undefined,
       sodiumMg: ln.sodium?.value !== undefined ? Math.round(ln.sodium.value) : undefined,
-      basis: 'per_serving' as const
+      basis: 'per_serving' as const,
+      portionGrams: portionInfo?.portionGrams,
+      portionLabel: portionInfo?.label
     };
   }
   
   if (food.foodNutrients && food.foodNutrients.length > 0) {
+    // Try to get default portion info for Foundation foods
+    const portionInfo = getDefaultPortionGrams 
+    
     // Foundation/SR food with foodNutrients (typically per 100g)
     const getNutrientValue = (nutrientNumber: number): number | undefined => {
       const nutrient = food.foodNutrients!.find(n => 
@@ -533,12 +616,28 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
     const carbsG = getNutrientValue(1005);
 
     if (calories !== undefined || proteinG !== undefined || fatG !== undefined || carbsG !== undefined) {
+      let basis: 'nar_serving' | 'nar_100g' = 'nar_100g';
+      let scalingFactor = 1;
+      
+      // If we have real portion info for Foundation food, scale from per_100g to portion size
+      if (portionInfo) {
+        scalingFactor = portionInfo.portionGrams / 100;
+        basis = 'nar_serving'; // Show as nar_serving when we have real portion size
+      }
+      
+      const scaledCalories = calories !== undefined ? Math.round(calories * scalingFactor) : undefined;
+      const scaledProteinG = proteinG !== undefined ? Math.round(proteinG * scalingFactor * 10) / 10 : undefined;
+      const scaledCarbsG = carbsG !== undefined ? Math.round(carbsG * scalingFactor * 10) / 10 : undefined;
+      const scaledFatG = fatG !== undefined ? Math.round(fatG * scalingFactor * 10) / 10 : undefined;
+      
       return {
-        calories: calories !== undefined ? Math.round(calories) : undefined,
-        proteinG: proteinG !== undefined ? Math.round(proteinG * 10) / 10 : undefined,
-        carbsG: carbsG !== undefined ? Math.round(carbsG * 10) / 10 : undefined,
-        fatG: fatG !== undefined ? Math.round(fatG * 10) / 10 : undefined,
-        basis: 'per_100g' as const
+        calories: scaledCalories,
+        proteinG: scaledProteinG,
+        carbsG: scaledCarbsG,
+        fatG: scaledFatG,
+        basis: basis,
+        portionGrams: portionInfo?.portionGrams,
+        portionLabel: portionInfo?.label
       };
     }
   }
@@ -666,21 +765,24 @@ export function buildLoggedItemPreviewFromDetail(foodDetail: USDAFoodDetail): {
   let finalServingSize = servingInfo.displaySize;
   let finalServingGrams = servingInfo.gramsPerServing;
   
-  // Foundation/SR foods: show 'per 100 g' (not "1 serving")
-  if (validated.basis === 'per_100g') {
-    finalServingGrams = 100;
-    scaleFactor = 1;
-    finalServingSize = 'per 100 g';  // Foundation shows per 100g, not "1 serving"
-  } else {
-    // Branded foods: use actual serving grams
-    scaleFactor = 1;
-    if (servingInfo.gramsPerServing) {
-      finalServingSize = `1 serving (${Math.round(servingInfo.gramsPerServing)}g)`;
+  // Try to get default portion grams (handles both Branded and Foundation foods)
+  const defaultPortion = getDefaultPortionGrams(foodDetail);
+  
+  if (defaultPortion) {
+    // We have a real portion - use its grams
+    finalServingGrams = defaultPortion.portionGrams;
+    
+    // If this is a branded food (per_serving basis), show '1 serving (Xg)'
+    if (validated.basis === 'per_serving') {
+      finalServingSize = `1 serving (${Math.round(defaultPortion.portionGrams)}g)`;
     } else {
-      // No serving info - show as per 100g
-      finalServingGrams = 100;
-      finalServingSize = 'per 100 g';
+      // Foundation food with portions - show 'X (Y g)' format
+      finalServingSize = `${defaultPortion.label}`;
     }
+  } else {
+    // No real portion available - fall back to per 100g
+    finalServingGrams = 100;
+    finalServingSize = 'per 100 g';
   }
   
   // Apply scaling to get final macro values

@@ -312,6 +312,8 @@ export function applyUsdaMocks(page: Page): void {
     MOCK_USDA_FOODS.cheesecake.fdcId,
     MOCK_USDA_FOODS.cheeseSpread.fdcId,
     MOCK_USDA_FOODS.creamCheese.fdcId,
+    MOCK_USDA_FOODS.grapes.fdcId,
+    MOCK_USDA_FOODS.appleNoPortions.fdcId,
   ];
   
   mockFoodIds.forEach(fdcId => {
