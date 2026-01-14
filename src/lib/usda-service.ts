@@ -497,6 +497,7 @@ export interface USDFoodSearchResult {
   servingSizeUnit?: string;
   householdServingFullText?: string;
   foodPortions?: {
+    amount?: number;
     id?: number;
     portionDescription: string;
     gramWeight: number;
@@ -540,6 +541,7 @@ export interface USDAFoodDetail {
   servingSizeUnit?: string;
   householdServingFullText?: string;
   foodPortions?: {
+    amount?: number;
     id?: number;
     portionDescription: string;
     gramWeight: number;
@@ -582,7 +584,7 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
     if (!hasData) return null;
     
     // Try to get default portion info first
-    const portionInfo = getDefaultPortionGrams 
+    const portionInfo = getDefaultPortionGrams(food);
     
     return {
       calories: ln.calories?.value !== undefined ? Math.round(ln.calories.value) : undefined,
@@ -600,7 +602,7 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
   
   if (food.foodNutrients && food.foodNutrients.length > 0) {
     // Try to get default portion info for Foundation foods
-    const portionInfo = getDefaultPortionGrams 
+    const portionInfo = getDefaultPortionGrams(food);
     
     // Foundation/SR food with foodNutrients (typically per 100g)
     const getNutrientValue = (nutrientNumber: number): number | undefined => {
@@ -616,13 +618,13 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
     const carbsG = getNutrientValue(1005);
 
     if (calories !== undefined || proteinG !== undefined || fatG !== undefined || carbsG !== undefined) {
-      let basis: 'nar_serving' | 'nar_100g' = 'nar_100g';
+      let basis: 'per_serving' | 'per_100g' = 'per_100g';
       let scalingFactor = 1;
       
       // If we have real portion info for Foundation food, scale from per_100g to portion size
       if (portionInfo) {
         scalingFactor = portionInfo.portionGrams / 100;
-        basis = 'nar_serving'; // Show as nar_serving when we have real portion size
+        basis = 'per_serving'; // Show as nar_serving when we have real portion size
       }
       
       const scaledCalories = calories !== undefined ? Math.round(calories * scalingFactor) : undefined;
