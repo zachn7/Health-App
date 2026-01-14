@@ -156,6 +156,58 @@ export const MOCK_USDA_FOODS = {
     ]
   },
   
+  // Foundation food with foodPortions - test with 1 cup = 186g
+  grapes: {
+    fdcId: 1102665,
+    description: 'Grapes, raw',
+    dataType: 'Foundation',
+    foodPortions: [
+      {
+        id: 239235,
+        portionDescription: '1 cup',
+        gramWeight: 151.0,
+        sequenceNumber: 2,
+        modifier: '10205',
+        measureUnit: {
+          id: 9999,
+          name: 'undetermined',
+          abbreviation: 'undetermined'
+        }
+      },
+      {
+        id: 247739,
+        portionDescription: 'NLEA serving',
+        gramWeight: 126.0,
+        sequenceNumber: 1,
+        modifier: '60831',
+        measureUnit: {
+          id: 9999,
+          name: 'undetermined',
+          abbreviation: 'undetermined'
+        }
+      }
+    ],
+    foodNutrients: [
+      { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 69 },
+      { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.7 },
+      { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
+      { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 18.1 }
+    ]
+  },
+  
+  // Foundation food with no portions - should show 'per 100 g'
+  appleNoPortions: {
+    fdcId: 1111111,
+    description: 'Apple, no portions',
+    dataType: 'Foundation',
+    foodNutrients: [
+      { nutrientId: 1008, nutrientName: 'Energy', unitName: 'kcal', value: 52 },
+      { nutrientId: 1003, nutrientName: 'Protein', unitName: 'g', value: 0.3 },
+      { nutrientId: 1004, nutrientName: 'Total lipid (fat)', unitName: 'g', value: 0.2 },
+      { nutrientId: 1005, nutrientName: 'Carbohydrate, by difference', unitName: 'g', value: 14 }
+    ]
+  },
+  
   // Empty search (no results)
   emptySearch: null
 } as const;
@@ -229,6 +281,10 @@ export function applyUsdaMocks(page: Page): void {
       (query.includes('cheese')) ? MOCK_USDA_FOODS.cheesecake : null,
       (query.includes('cheese')) ? MOCK_USDA_FOODS.cheeseSpread : null,
       (query.includes('cheese')) ? MOCK_USDA_FOODS.creamCheese : null,
+      
+      // Food portion tests
+      (query.includes('grapes') || query === '' || query.includes('all')) ? MOCK_USDA_FOODS.grapes : null,
+      (query.includes('apple-np') || query === '' || query.includes('all')) ? MOCK_USDA_FOODS.appleNoPortions : null,
     ]
     .filter(Boolean);
     
