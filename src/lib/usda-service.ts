@@ -2,6 +2,12 @@ import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
 import { FoodItem, FoodLogItem } from '@/types';
 
+/**
+ * Paging constants for USDA search
+ */
+const MIN_MATCHES = 20; // Minimum results needed after filtering
+const MAX_PAGE = 3; // Maximum pages to fetch when filtering yields too few
+
 
 /**
  * Atwater general factors for estimating missing macros
@@ -947,12 +953,12 @@ class USDAService {
     // Request specific nutrients to get macro data in search results
     const nutrientNumbers = ['1008', '1003', '1004', '1005', '1079', '2000', '1093'].join(',');
     
-    // Define the actual USDA API query function
-    const performQuery = async (searchQuery: string): Promise<{ results: USDFoodSearchResult[] }> => {
+    // Helper to fetch a single page with filtering
+    const fetchPage = async (searchQuery: string, pageNum: number): Promise<{ results: USDFoodSearchResult[] }> => {
       const searchParams = new URLSearchParams({
         query: searchQuery,
         pageSize: pageSize.toString(),
-        pageNumber: '1',
+        pageNumber: pageNum.toString(),
         sortBy: 'score',
         sortOrder: 'desc',
         api_key: apiKey,
@@ -980,6 +986,53 @@ class USDAService {
       foods = this.filterIgnoredFoods(foods);
       
       return { results: foods };
+    };
+
+    // Define the actual USDA API query function with paging
+    const performQuery = async (searchQuery: string): Promise<{ results: USDFoodSearchResult[] }> => {
+      // Always fetch page 1 first
+      let { results: page1Results } = await fetchPage(searchQuery, 1);
+      
+      // If we have enough matches after filtering, return them
+      if (page1Results.length >= MIN_MATCHES) {
+        console.log(`[USDA] Found ${page1Results.length} matches on page 1 (≥${MIN_MATCHES}), no paging needed`);
+        return { results: page1Results };
+      }
+      
+      // Otherwise, fetch additional pages up to MAX_PAGE
+      console.log(`[USDA] Found only ${page1Results.length} matches on page 1 (<${MIN_MATCHES}), fetching additional pages`);
+      let allResults = [...page1Results];
+      const seenFdcIds = new Set(page1Results.map(f => f.fdcId));
+      
+      for (let pageNum = 2; pageNum <= MAX_PAGE; pageNum++) {
+        try {
+          const { results: pageResults } = await fetchPage(searchQuery, pageNum);
+          
+          // Dedupe by fdcId while preserving order from first occurrence
+          let newResultsCount = 0;
+          pageResults.forEach(food => {
+            if (!seenFdcIds.has(food.fdcId)) {
+              seenFdcIds.add(food.fdcId);
+              allResults.push(food);
+              newResultsCount++;
+            }
+          });
+          
+          console.log(`[USDA] Added ${newResultsCount} new results from page ${pageNum}`);
+          
+          // Stop if we have enough matches
+          if (allResults.length >= MIN_MATCHES) {
+            console.log(`[USDA] Reached ${allResults.length} matches, stopping pagination`);
+            break;
+          }
+        } catch (error) {
+          console.log(`[USDA] Error fetching page ${pageNum}:`, error);
+          break; // Stop if we hit an error (e.g., no more pages)
+        }
+      }
+      
+      console.log(`[USDA] Total results after paging: ${allResults.length} from up to ${MAX_PAGE} pages`);
+      return { results: allResults };
     };
     
     const diagnostics: SearchDiagnostics = {

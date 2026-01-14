@@ -38,7 +38,7 @@ export default function Nutrition() {
   const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
   const [usdaQueryUsed, setUSDAQueryUsed] = useState<string>(''); // The actual query that got results
   const [usdaWasRelaxed, setUSDAWasRelaxed] = useState(false); // Whether query relaxation was used
-  // State for hydrated food details (serving sizes, etc.)
+  // State for hydr...
   const [hydratedFoodDetails, setHydratedFoodDetails] = useState<Map<number, USDAFoodDetail>>(new Map());
   const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
   const [selectedUSDAFoods, setSelectedUSDAFoods] = useState<Set<number>>(new Set());
