@@ -704,3 +704,56 @@ export function searchExercises(
   
   return limit ? ranked.slice(0, limit) : ranked;
 }
+
+/**
+* Token-aware prefix filtering for multi-word partial queries
+* Ensures results match all tokens with special handling for the last token as a prefix
+*
+* Rules:
+* - All tokens except the last: MUST appear as substring somewhere in description/name
+* - Last token: MUST match the start of some word (prefix) OR appear as substring if length >= 4
+* - Only keep candidates that match ALL token requirements
+*
+* @param items - Candidate items to filter
+* @param query - User's search query (e.g., "white ric")
+* @param getItemText - Function to extract text fields from an item for matching
+* @returns Filtered items that match all token requirements
+*/
+export function filterByTokenAwarePrefix<T>(
+  items: T[],
+  query: string,
+  getItemText: (item: T) => string
+): T[] {
+  // Normalize and tokenize the query
+  const tokens = query
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(t => t.length >= 2);
+
+  // Single token: no special filtering needed, return all items
+  if (tokens.length <= 1) {
+    return items;
+  }
+
+  const allButLastToken = tokens.slice(0, -1);
+  const lastToken = tokens[tokens.length - 1];
+
+  return items.filter(item => {
+    const itemText = getItemText(item).toLowerCase();
+
+    // All non-last tokens must appear as substrings anywhere
+    for (const token of allButLastToken) {
+      if (!itemText.includes(token)) {
+        return false;
+      }
+    }
+
+    // Last token: must be a prefix of some word OR substring if >= 4 chars
+    const words = itemText.split(/\s+/);
+    const isPrefix = words.some(word => word.startsWith(lastToken));
+    const isLongEnoughSubstring = lastToken.length >= 4 && itemText.includes(lastToken);
+
+    return isPrefix || isLongEnoughSubstring;
+  });
+}

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
+import { filterByTokenAwarePrefix } from '../lib/search/fuzzy';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
@@ -249,7 +250,15 @@ export default function Nutrition() {
     
     try {
       const { results, diagnostics, queryUsed, wasRelaxed } = await usdaService.searchFoods(usdaSearchQuery);
-      setUSDAReplies(results);
+      
+      // Apply token-aware prefix filtering for multi-word queries
+      const filteredResults = filterByTokenAwarePrefix(
+        results,
+        usdaSearchQuery,
+        (item) => item.description || ''
+      );
+      
+      setUSDAReplies(filteredResults);
       setUSDASearchDiagnostics(diagnostics);
       setUSDAQueryUsed(queryUsed);
       setUSDAWasRelaxed(wasRelaxed);
