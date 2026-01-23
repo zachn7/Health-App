@@ -871,6 +871,10 @@ export default function Nutrition() {
                   if (loggedPreview) {
                     macros = loggedPreview.macros;
                     displaySize = loggedPreview.displaySize;
+                    // Override: Foundation foods (per_100g) should show 'per 100 g'
+                    if (macros.basis === 'per_100g') {
+                      displaySize = 'per 100 g';
+                    }
                   } else {
                     // Validation failed - show as incomplete
                     macros = undefined;

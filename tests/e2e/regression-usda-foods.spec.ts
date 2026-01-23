@@ -695,8 +695,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
       // Wait for hydration to complete (details fetch happens after results)
-      // The apple should show per 100g after hydration completes
-      // Give extra time since it needs to fetch details
       await page.waitForTimeout(2000);
       
       const appleRow = page.locator('[data-fdc-id="123456"]');

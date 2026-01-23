@@ -1206,12 +1206,12 @@ export default function Meals() {
                                     ⚠️ Incomplete data
                                   </span>
                                 )}
-                                {macros.portionLabel && macros.portionGrams && (
+                                {macros.portionLabel && macros.portionGrams && macros.basis !== 'per_100g' && (
                                   <span className="text-gray-500 font">
                                     {macros.portionLabel} ({Math.round(macros.portionGrams)}g)
                                   </span>
                                 )}
-                                {!macros.portionLabel && macros.basis === 'per_100g' && (
+                                {macros.basis === 'per_100g' && (
                                   <span className="text-gray-500 font">
                                     per 100 g
                                   </span>

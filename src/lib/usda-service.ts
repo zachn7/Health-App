@@ -630,7 +630,7 @@ export function extractMacrosFromSearchResult(food: USDFoodSearchResult): MacroN
       // If we have real portion info for Foundation food, scale from per_100g to portion size
       if (portionInfo) {
         scalingFactor = portionInfo.portionGrams / 100;
-        basis = 'per_serving'; // Show as nar_serving when we have real portion size
+        basis = 'per_serving'; // Show as per_serving when we have real portion size
       }
       
       const scaledCalories = calories !== undefined ? Math.round(calories * scalingFactor) : undefined;
