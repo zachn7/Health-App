@@ -130,6 +130,8 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    // Wait for profile save to complete
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
     // Navigate to onboarding to complete it
     await page.goto('./#/onboarding');
@@ -145,6 +147,10 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     
     // Go back to profile and update
     await page.goto('./#/profile');
+    await page.waitForLoadState();
+    
+    // Wait for profile data to load and edit button to appear
+    await expect(page.getByTestId('edit-profile-button')).toBeVisible();
     
     // Click Edit Profile button to enter edit mode
     await page.getByTestId('edit-profile-button').click();
