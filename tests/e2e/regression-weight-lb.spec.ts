@@ -52,6 +52,8 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    // Wait for save to complete (success message appears)
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
     // Navigate to progress
     await page.goto('./#/progress');
@@ -235,6 +237,8 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-friday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    // Wait for save to complete (success message appears)
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
     // Navigate between pages and return to progress
     await page.goto('./#/dashboard');

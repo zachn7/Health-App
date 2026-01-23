@@ -11,6 +11,7 @@ export default function Progress() {
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [showAddWeight, setShowAddWeight] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayLocalDateKey());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -34,8 +35,10 @@ export default function Progress() {
     try {
       const userProfile = await repositories.profile.get();
       setProfile(userProfile || null);
+      setProfileLoaded(true);
     } catch (error) {
       console.error('Failed to load profile:', error);
+      setProfileLoaded(true);
     }
   };
 
@@ -79,6 +82,13 @@ export default function Progress() {
       setLoading(false);
     }
   };
+
+  // Wait for profile to load before showing full content
+  useEffect(() => {
+    if (!loading && profileLoaded) {
+      // Both are ready
+    }
+  }, [loading, profileLoaded]);
 
   const saveWeightLog = async () => {
     try {
@@ -171,7 +181,7 @@ export default function Progress() {
     };
   };
 
-  if (loading) {
+  if (loading || !profileLoaded) {
     return (
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center">Loading progress data...</div>
