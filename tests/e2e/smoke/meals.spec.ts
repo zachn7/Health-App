@@ -204,11 +204,12 @@ test.describe('Smoke: Meals Feature', () => {
     // Verify Presets tab is active
     await expect(presetsTab).toHaveClass(/border-blue-500/);
     
-    // Verify presets empty state is visible
-    await expect(page.getByTestId('meals-presets-empty-state')).toBeVisible({ timeout: 5000 });
+    // Verify at least one preset card is visible
+    const presetCards = page.locator('[data-testid^="meals-preset-card-"]');
+    await expect(presetCards.first()).toBeVisible({ timeout: 5000 });
     
-    // Verify "Meal Presets Coming Soon" text
-    await expect(page.getByText('Meal Presets Coming Soon')).toBeVisible({ timeout: 5000 });
+    // Verify search input is visible
+    await expect(page.getByTestId('meals-preset-search-input')).toBeVisible({ timeout: 5000 });
   });
 
   test('Can switch between all three tabs (Saved Meals, Meal Plans, Presets)', async ({ page }) => {

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List } from 'lucide-react';
+import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List, Search, Filter, XCircle } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
+import { mealPresets } from '../data/presetMeals';
+import type { MealPreset } from '../types';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 import { extractMacrosFromSearchResult } from '../lib/usda-service';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
@@ -21,6 +23,13 @@ export default function Meals() {
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [saveStatus, setSaveStatus] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Preset state
+  const [presetSearch, setPresetSearch] = useState('');
+  const [presetFilterTags, setPresetFilterTags] = useState<string[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<MealPreset | null>(null);
+  const [showPresetPreview, setShowPresetPreview] = useState(false);
+  
   const [showDatePicker, setShowDatePicker] = useState<string | null>(null);
   const [showFoodPicker, setShowFoodPicker] = useState(false);
   const [foodSearchQuery, setFoodSearchQuery] = useState('');
@@ -680,22 +689,242 @@ export default function Meals() {
 
       {/* Presets Tab Content */}
       {activeTab === 'presets' && (
-        <div className="space-y-6">
-          {/* Presets Section - Placeholder */}
-          <div className="card text-center py-12" data-testid={testIds.meals.presetsEmptyState}>
-            <Sparkles className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Meal Presets Coming Soon</h3>
-            <p className="text-gray-600 mb-4">Explore pre-built meal plans designed by nutrition experts</p>
-            <div className="max-w-md mx-auto pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-500">
-                These ready-to-use meal plans will include:
-              </p>
-              <ul className="mt-3 text-sm text-gray-600 text-left space-y-1">
-                <li>• High-protein muscle building meals</li>
-                <li>• Weight loss calorie-controlled plans</li>
-                <li>• Low-carb/ketogenic options</li>
-                <li>• Balanced nutrition for athletes</li>
-              </ul>
+        <div className="space-y-6" data-testid={testIds.meals.presetsListRoot}>
+          {/* Search and Filters */}
+          <div className="card">
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  value={presetSearch}
+                  onChange={(e) => setPresetSearch(e.target.value)}
+                  placeholder="Search meal presets by name, goal, tags..."
+                  className="input pl-10"
+                  data-testid={testIds.meals.presetSearchInput}
+                />
+              </div>
+            </div>
+
+            {/* Tag Filters */}
+            <div className="flex flex-wrap gap-2">
+              <Filter className="w-4 h-4 text-gray-500 inline mr-1" />
+              {Array.from(new Set(mealPresets.flatMap(p => p.tags))).sort().map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => {
+                    if (presetFilterTags.includes(tag)) {
+                      setPresetFilterTags(presetFilterTags.filter(t => t !== tag));
+                    } else {
+                      setPresetFilterTags([...presetFilterTags, tag]);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-full text-sm ${
+                    presetFilterTags.includes(tag)
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                  data-testid={`${testIds.presets.filterChip}-${tag.replace(/\s+/g, '-')}`}
+                >
+                  {tag}
+                </button>
+              ))}
+              {presetFilterTags.length > 0 && (
+                <button
+                  onClick={() => setPresetFilterTags([])}
+                  className="px-3 py-1 rounded-full text-sm text-red-600 hover:bg-red-50"
+                  data-testid={testIds.presets.clearFiltersBtn}
+                >
+                  <XCircle className="w-4 h-4 inline mr-1" />
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Preset List */}
+          <div className="space-y-4">
+            {mealPresets
+              .filter(preset => {
+                const searchLower = presetSearch.toLowerCase();
+                const matchesSearch =
+                  preset.title.toLowerCase().includes(searchLower) ||
+                  preset.summary.toLowerCase().includes(searchLower) ||
+                  preset.tags.some(tag => tag.toLowerCase().includes(searchLower));
+                const matchesFilters =
+                  presetFilterTags.length === 0 ||
+                  presetFilterTags.every(tag => preset.tags.includes(tag));
+                return matchesSearch && matchesFilters;
+              })
+              .map(preset => (
+                <div
+                  key={preset.id}
+                  className="card"
+                  data-testid={testIds.meals.presetCard(preset.id)}
+                  data-preset-id={preset.id}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-gray-900">{preset.title}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{preset.summary}</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {preset.tags.slice(0, 4).map(tag => (
+                          <span
+                            key={tag}
+                            className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        <span className="text-xs text-gray-500">
+                          {preset.mealsPerDay} meals/day • {preset.snacksPerDay} snacks/day
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        P: {preset.macroRangesPercent.protein}% • C: {preset.macroRangesPercent.carbs}% • F: {preset.macroRangesPercent.fat}%
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedPreset(preset);
+                        setShowPresetPreview(true);
+                      }}
+                      className="btn btn-secondary text-sm"
+                      data-testid={`${testIds.presets.previewBtn}-${preset.id}`}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+            {mealPresets.filter(preset => {
+              const searchLower = presetSearch.toLowerCase();
+              const matchesSearch =
+                preset.title.toLowerCase().includes(searchLower) ||
+                preset.summary.toLowerCase().includes(searchLower) ||
+                preset.tags.some(tag => tag.toLowerCase().includes(searchLower));
+              const matchesFilters =
+                presetFilterTags.length === 0 ||
+                presetFilterTags.every(tag => preset.tags.includes(tag));
+              return matchesSearch && matchesFilters;
+            }).length === 0 && (
+              <div className="card text-center py-12">
+                <Search className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No matching presets</h3>
+                <p className="text-sm text-gray-600">Try adjusting your search or filters</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Preset Preview Dialog */}
+      {showPresetPreview && selectedPreset && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          data-testid={testIds.presets.previewDialog}
+        >
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedPreset.title}</h2>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedPreset.tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPresetPreview(false);
+                    setSelectedPreset(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                  data-testid={testIds.presets.closePreviewBtn}
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <p className="text-gray-700 mb-4">{selectedPreset.summary}</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Meals/Day</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.mealsPerDay}</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Snacks/Day</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.snacksPerDay}</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Protein</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.macroRangesPercent.protein}%</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Carbs</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.macroRangesPercent.carbs}%</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Fat</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.macroRangesPercent.fat}%</div>
+                </div>
+                {selectedPreset.recommendedCalories && (
+                  <div className="bg-gray-50 p-3 rounded">
+                    <div className="text-xs text-gray-500">Calories (ref)</div>
+                    <div className="font-medium text-gray-900">{selectedPreset.recommendedCalories}</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Meal Structure</h3>
+                <div className="space-y-3">
+                  {selectedPreset.mealStructure.map((meal, index) => (
+                    <div key={index} className="border rounded p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-medium text-gray-900">{meal.meal}</h4>
+                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{meal.goal}</span>
+                      </div>
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        {meal.examples.map((example, exampleIndex) => (
+                          <li key={exampleIndex}>• {example}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {selectedPreset.evidence && selectedPreset.evidence.length > 0 && (
+                <div className="border-t pt-4">
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Scientific Evidence</h3>
+                  {selectedPreset.evidence.map((evidence, index) => (
+                    <div key={index} className="mb-3">
+                      <div className="text-xs font-medium text-gray-900">{evidence.title}</div>
+                      <div className="text-xs text-gray-500">{evidence.source}</div>
+                      <div className="text-xs text-gray-600 mt-1">{evidence.note}</div>
+                      {evidence.url && (
+                        <a
+                          href={evidence.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          Read more
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

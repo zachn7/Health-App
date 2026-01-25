@@ -4,7 +4,9 @@ import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
 import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
 import { testIds } from '../testIds';
-import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings, Sparkles } from 'lucide-react';
+import { workoutPresets } from '../data/presetWorkouts';
+import type { WorkoutPreset } from '../types';
+import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings, Sparkles, Search, Filter, XCircle } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile, GeneratorOptions, ExperienceLevel, GoalType } from '../types';
 
@@ -37,6 +39,12 @@ export default function Workouts() {
   const [substituteSuccess, setSubstituteSuccess] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
+
+  // Preset state
+  const [presetSearch, setPresetSearch] = useState('');
+  const [presetFilterTags, setPresetFilterTags] = useState<string[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<WorkoutPreset | null>(null);
+  const [showPresetPreview, setShowPresetPreview] = useState(false);
 
   const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -952,20 +960,251 @@ export default function Workouts() {
       
       {/* Presets Tab Content */}
       {activeTab === 'presets' && (
-        <div className="card text-center py-12" data-testid={testIds.workouts.presetsEmptyState}>
-          <Sparkles className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Workout Presets Coming Soon</h3>
-          <p className="text-gray-600 mb-4">Explore pre-built workout programs designed by fitness professionals</p>
-          <div className="max-w-md mx-auto pt-6 border-t border-gray-200">
-            <p className="text-sm text-gray-500">
-              These ready-to-use programs will include:
-            </p>
-            <ul className="mt-3 text-sm text-gray-600 text-left space-y-1">
-              <li>• Strength training programs</li>
-              <li>• Hypertrophy muscle building</li>
-              <li>• Fat loss and conditioning</li>
-              <li>• Endurance training plans</li>
-            </ul>
+        <div data-testid={testIds.workouts.presetsListRoot}>
+          {/* Search and Filters */}
+          <div className="card mb-6">
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  value={presetSearch}
+                  onChange={(e) => setPresetSearch(e.target.value)}
+                  placeholder="Search workout presets by name, goal, equipment..."
+                  className="input pl-10"
+                  data-testid={testIds.workouts.presetSearchInput}
+                />
+              </div>
+            </div>
+
+            {/* Tag Filters */}
+            <div className="flex flex-wrap gap-2">
+              <Filter className="w-4 h-4 text-gray-500 inline mr-1" />
+              {Array.from(new Set(workoutPresets.flatMap(p => p.tags))).sort().map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => {
+                    if (presetFilterTags.includes(tag)) {
+                      setPresetFilterTags(presetFilterTags.filter(t => t !== tag));
+                    } else {
+                      setPresetFilterTags([...presetFilterTags, tag]);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-full text-sm ${
+                    presetFilterTags.includes(tag)
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                  data-testid={`${testIds.presets.filterChip}-${tag.replace(/\s+/g, '-')}`}
+                >
+                  {tag}
+                </button>
+              ))}
+              {presetFilterTags.length > 0 && (
+                <button
+                  onClick={() => setPresetFilterTags([])}
+                  className="px-3 py-1 rounded-full text-sm text-red-600 hover:bg-red-50"
+                  data-testid={testIds.presets.clearFiltersBtn}
+                >
+                  <XCircle className="w-4 h-4 inline mr-1" />
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Preset List */}
+          <div className="space-y-4">
+            {workoutPresets
+              .filter(preset => {
+                const searchLower = presetSearch.toLowerCase();
+                const matchesSearch =
+                  preset.title.toLowerCase().includes(searchLower) ||
+                  preset.summary.toLowerCase().includes(searchLower) ||
+                  preset.tags.some(tag => tag.toLowerCase().includes(searchLower));
+                const matchesFilters =
+                  presetFilterTags.length === 0 ||
+                  presetFilterTags.every(tag => preset.tags.includes(tag));
+                return matchesSearch && matchesFilters;
+              })
+              .map(preset => (
+                <div
+                  key={preset.id}
+                  className="card"
+                  data-testid={testIds.workouts.presetCard(preset.id)}
+                  data-preset-id={preset.id}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-gray-900">{preset.title}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{preset.summary}</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {preset.tags.slice(0, 4).map(tag => (
+                          <span
+                            key={tag}
+                            className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        <span className="text-xs text-gray-500">
+                          {preset.daysPerWeek}x/week • {preset.durationWeeks} weeks • {preset.level}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {preset.equipment.length > 0 ? `Equipment: ${preset.equipment.join(', ')}` : 'No equipment required'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedPreset(preset);
+                        setShowPresetPreview(true);
+                      }}
+                      className="btn btn-secondary text-sm"
+                      data-testid={`${testIds.presets.previewBtn}-${preset.id}`}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+            {workoutPresets.filter(preset => {
+              const searchLower = presetSearch.toLowerCase();
+              const matchesSearch =
+                preset.title.toLowerCase().includes(searchLower) ||
+                preset.summary.toLowerCase().includes(searchLower) ||
+                preset.tags.some(tag => tag.toLowerCase().includes(searchLower));
+              const matchesFilters =
+                presetFilterTags.length === 0 ||
+                presetFilterTags.every(tag => preset.tags.includes(tag));
+              return matchesSearch && matchesFilters;
+            }).length === 0 && (
+              <div className="card text-center py-12">
+                <Search className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No matching presets</h3>
+                <p className="text-sm text-gray-600">Try adjusting your search or filters</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Preset Preview Dialog */}
+      {showPresetPreview && selectedPreset && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          data-testid={testIds.presets.previewDialog}
+        >
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedPreset.title}</h2>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedPreset.tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPresetPreview(false);
+                    setSelectedPreset(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                  data-testid={testIds.presets.closePreviewBtn}
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <p className="text-gray-700 mb-4">{selectedPreset.summary}</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Duration</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.durationWeeks} weeks</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Frequency</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.daysPerWeek}x/week</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Session</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.sessionMinutes} min</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-xs text-gray-500">Level</div>
+                  <div className="font-medium text-gray-900">{selectedPreset.level}</div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Equipment Required</h3>
+                <p className="text-sm text-gray-600">
+                  {selectedPreset.equipment.length > 0
+                    ? selectedPreset.equipment.join(', ')
+                    : 'Bodyweight only (no equipment required)'
+                  }
+                </p>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Progression</h3>
+                <p className="text-sm text-gray-600">{selectedPreset.progression}</p>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Workout Structure</h3>
+                <div className="space-y-3">
+                  {selectedPreset.days.map((day, index) => (
+                    <div key={index} className="border rounded p-3">
+                      <h4 className="font-medium text-gray-900 mb-2">{day.name}</h4>
+                      <p className="text-xs text-gray-600 mb-2">{day.focus}</p>
+                      <ul className="space-y-1">
+                        {day.slots.map((slot, slotIndex) => (
+                          <li key={slotIndex} className="text-xs text-gray-700 flex justify-between">
+                            <span>{slot.label}</span>
+                            <span className="text-gray-500">
+                              {slot.sets} × {typeof slot.reps === 'object' ? `${slot.reps.min}-${slot.reps.max}` : slot.reps}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {selectedPreset.evidence && selectedPreset.evidence.length > 0 && (
+                <div className="border-t pt-4">
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Scientific Evidence</h3>
+                  {selectedPreset.evidence.map((evidence, index) => (
+                    <div key={index} className="mb-3">
+                      <div className="text-xs font-medium text-gray-900">{evidence.title}</div>
+                      <div className="text-xs text-gray-500">{evidence.source}</div>
+                      <div className="text-xs text-gray-600 mt-1">{evidence.note}</div>
+                      {evidence.url && (
+                        <a
+                          href={evidence.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          Read more
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

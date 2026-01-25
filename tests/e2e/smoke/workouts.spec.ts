@@ -135,11 +135,12 @@ test.describe('Smoke: Workout Features', () => {
     await expect(presetsTab).toHaveClass(/border-blue-500/);
     await expect(myProgramsTab).not.toHaveClass(/border-blue-500/);
     
-    // Verify presets empty state is visible
-    await expect(page.getByTestId('workouts-presets-empty-state')).toBeVisible({ timeout: 5000 });
+    // Verify at least one preset card is visible
+    const presetCards = page.locator('[data-testid^="workouts-preset-card-"]');
+    await expect(presetCards.first()).toBeVisible({ timeout: 5000 });
     
-    // Verify "Workout Presets Coming Soon" text
-    await expect(page.getByText('Workout Presets Coming Soon')).toBeVisible({ timeout: 5000 });
+    // Verify search input is visible
+    await expect(page.getByTestId('workouts-preset-search-input')).toBeVisible({ timeout: 5000 });
     
     // Switch back to My Programs
     await myProgramsTab.click();

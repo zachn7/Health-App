@@ -78,6 +78,8 @@ export const testIds = {
     // Presets Section
     presetsListRoot: 'meals-presets-list',
     presetsEmptyState: 'meals-presets-empty-state',
+    presetSearchInput: 'meals-preset-search-input',
+    presetCard: (id: string) => `meals-preset-card-${id}`,
     
     createNewMealButton: 'create-new-meal-btn',
     mealList: 'meals-list',
@@ -172,6 +174,8 @@ export const testIds = {
     // Presets Section
     presetsListRoot: 'workouts-presets-list',
     presetsEmptyState: 'workouts-presets-empty-state',
+    presetSearchInput: 'workouts-preset-search-input',
+    presetCard: (id: string) => `workouts-preset-card-${id}`,
     
     // Generator
     generateEmptyPlanButton: 'generate-empty-workout-plan-btn',
@@ -256,6 +260,16 @@ export const testIds = {
   // Settings
   settings: {
     resetAppDataButton: 'reset-app-data-btn',
+  },
+
+  // Shared Presets (for both workouts and meals)
+  presets: {
+    searchInput: 'presets-search-input',
+    filterChip: 'presets-filter-chip',
+    clearFiltersBtn: 'presets-clear-filters-btn',
+    previewBtn: 'presets-preview-btn',
+    previewDialog: 'presets-preview-dialog',
+    closePreviewBtn: 'presets-close-preview-btn',
   },
 } as const;
 
