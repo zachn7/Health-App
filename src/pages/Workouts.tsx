@@ -3,7 +3,8 @@ import { repositories, db } from '../db';
 import { ExerciseDBService } from '../lib/exercise-db';
 import { formatWeight } from '../lib/unit-conversions';
 import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
-import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings } from 'lucide-react';
+import { testIds } from '../testIds';
+import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings, Sparkles } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile, GeneratorOptions, ExperienceLevel, GoalType } from '../types';
 
@@ -24,6 +25,7 @@ interface EditingWorkout {
 }
 
 export default function Workouts() {
+  const [activeTab, setActiveTab] = useState<'myPrograms' | 'presets'>('myPrograms');
   const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
   const [, setExercises] = useState<ExerciseDBItem[]>([]);
   const [importMode, setImportMode] = useState<{ weekIndex: number; dayIndex: number } | null>(null);
@@ -629,25 +631,57 @@ export default function Workouts() {
         <h1 className="text-3xl font-bold text-gray-900">Workouts</h1>
         <p className="mt-2 text-gray-600">Your training plans and exercises</p>
       </div>
-      
-      <div className="mb-6 flex flex-wrap gap-3">
-        <button
-          onClick={() => setShowGeneratorMode(true)}
-          disabled={generating}
-          className="btn btn-primary"
-          data-testid="generate-empty-workout-plan-btn"
-        >
-          {generating ? 'Generating...' : 'Generate New Workout Plan'}
-        </button>
-        <button
-          onClick={() => setShowManualBuilder(true)}
-          className="btn btn-secondary"
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Create Program Manually
-        </button>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex space-x-8">
+          <button
+            onClick={() => setActiveTab('myPrograms')}
+            data-testid={testIds.workouts.myProgramsTab}
+            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'myPrograms'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <User className="w-4 h-4 inline mr-1" />
+            My Programs
+          </button>
+          <button
+            onClick={() => setActiveTab('presets')}
+            data-testid={testIds.workouts.presetsTab}
+            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'presets'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 inline mr-1" />
+            Presets
+          </button>
+        </nav>
       </div>
       
+      {activeTab === 'myPrograms' && (
+        <div className="mb-6 flex flex-wrap gap-3">
+          <button
+            onClick={() => setShowGeneratorMode(true)}
+            disabled={generating}
+            className="btn btn-primary"
+            data-testid="generate-empty-workout-plan-btn"
+          >
+            {generating ? 'Generating...' : 'Generate New Workout Plan'}
+          </button>
+          <button
+            onClick={() => setShowManualBuilder(true)}
+            className="btn btn-secondary"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Create Program Manually
+          </button>
+        </div>
+      )}
+
       {/* Generator Mode Selection Modal */}
       {showGeneratorMode && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -835,6 +869,9 @@ export default function Workouts() {
         </div>
       )}
 
+      {/* My Programs Tab Content */}
+      {activeTab === 'myPrograms' && (
+        <>
       {/* Workout Plans List */}
       <div className="space-y-4 mb-8">
         {workoutPlans.length > 0 ? (
@@ -910,9 +947,31 @@ export default function Workouts() {
           </div>
         )}
       </div>
+      </>
+      )}
       
-      {/* Selected Plan Details */}
-      {selectedPlan && (
+      {/* Presets Tab Content */}
+      {activeTab === 'presets' && (
+        <div className="card text-center py-12" data-testid={testIds.workouts.presetsEmptyState}>
+          <Sparkles className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Workout Presets Coming Soon</h3>
+          <p className="text-gray-600 mb-4">Explore pre-built workout programs designed by fitness professionals</p>
+          <div className="max-w-md mx-auto pt-6 border-t border-gray-200">
+            <p className="text-sm text-gray-500">
+              These ready-to-use programs will include:
+            </p>
+            <ul className="mt-3 text-sm text-gray-600 text-left space-y-1">
+              <li>• Strength training programs</li>
+              <li>• Hypertrophy muscle building</li>
+              <li>• Fat loss and conditioning</li>
+              <li>• Endurance training plans</li>
+            </ul>
+          </div>
+        </div>
+      )}
+      
+      {/* Selected Plan Details (My Programs only) */}
+      {activeTab === 'myPrograms' && selectedPlan && (
         <div className="card">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-medium text-gray-900">{selectedPlan.name}</h2>

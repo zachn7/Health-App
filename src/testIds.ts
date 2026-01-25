@@ -70,6 +70,15 @@ export const testIds = {
 
   // Meals
   meals: {
+    // Tabs
+    savedMealsTab: 'meals-saved-meals-tab',
+    mealPlansTab: 'meals-meal-plans-tab',
+    presetsTab: 'meals-presets-tab',
+    
+    // Presets Section
+    presetsListRoot: 'meals-presets-list',
+    presetsEmptyState: 'meals-presets-empty-state',
+    
     createNewMealButton: 'create-new-meal-btn',
     mealList: 'meals-list',
     mealCard: (id: string | number) => `meal-card-${id}`,
@@ -156,6 +165,14 @@ export const testIds = {
 
   // Workouts
   workouts: {
+    // Tabs
+    myProgramsTab: 'workouts-my-programs-tab',
+    presetsTab: 'workouts-presets-tab',
+    
+    // Presets Section
+    presetsListRoot: 'workouts-presets-list',
+    presetsEmptyState: 'workouts-presets-empty-state',
+    
     // Generator
     generateEmptyPlanButton: 'generate-empty-workout-plan-btn',
     generatePlanButton: 'generate-workout-plan-btn',

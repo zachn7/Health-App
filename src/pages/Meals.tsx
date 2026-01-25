@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { repositories } from '../db';
 import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
+import { testIds } from '../testIds';
 import type { MealTemplate, FoodLogItem, MealPlan } from '../types';
 import { extractMacrosFromSearchResult } from '../lib/usda-service';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 
 export default function Meals() {
-  const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans'>('meals');
+  const [activeTab, setActiveTab] = useState<'meals' | 'mealPlans' | 'presets'>('meals');
   const [meals, setMeals] = useState<MealTemplate[]>([]);
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -393,6 +394,7 @@ export default function Meals() {
           <nav className="flex space-x-8">
             <button
               onClick={() => setActiveTab('meals')}
+              data-testid={testIds.meals.savedMealsTab}
               className={`pb-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'meals'
                   ? 'border-blue-500 text-blue-600'
@@ -404,14 +406,27 @@ export default function Meals() {
             </button>
             <button
               onClick={() => setActiveTab('mealPlans')}
+              data-testid={testIds.meals.mealPlansTab}
               className={`pb-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'mealPlans'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              <Sparkles className="w-4 h-4 inline mr-1" />
+              <List className="w-4 h-4 inline mr-1" />
               Meal Plans
+            </button>
+            <button
+              onClick={() => setActiveTab('presets')}
+              data-testid={testIds.meals.presetsTab}
+              className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'presets'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 inline mr-1" />
+              Presets
             </button>
           </nav>
         </div>
@@ -660,6 +675,29 @@ export default function Meals() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Presets Tab Content */}
+      {activeTab === 'presets' && (
+        <div className="space-y-6">
+          {/* Presets Section - Placeholder */}
+          <div className="card text-center py-12" data-testid={testIds.meals.presetsEmptyState}>
+            <Sparkles className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Meal Presets Coming Soon</h3>
+            <p className="text-gray-600 mb-4">Explore pre-built meal plans designed by nutrition experts</p>
+            <div className="max-w-md mx-auto pt-6 border-t border-gray-200">
+              <p className="text-sm text-gray-500">
+                These ready-to-use meal plans will include:
+              </p>
+              <ul className="mt-3 text-sm text-gray-600 text-left space-y-1">
+                <li>• High-protein muscle building meals</li>
+                <li>• Weight loss calorie-controlled plans</li>
+                <li>• Low-carb/ketogenic options</li>
+                <li>• Balanced nutrition for athletes</li>
+              </ul>
+            </div>
+          </div>
         </div>
       )}
 

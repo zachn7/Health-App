@@ -117,6 +117,35 @@ test.describe('Smoke: Workout Features', () => {
     expect(hasPlans || hasCreateButton || hasGenerateButton).toBeTruthy();
   });
 
+  test('Can switch between My Programs and Presets tabs', async ({ page }) => {
+    // Navigate to Workouts page
+    await page.goto('./#/workouts');
+    await page.waitForLoadState('networkidle');
+    
+    // Verify My Programs tab is visible and clickable
+    const myProgramsTab = page.getByTestId('workouts-my-programs-tab');
+    await expect(myProgramsTab).toBeVisible({ timeout: 5000 });
+    await expect(myProgramsTab).toHaveClass(/border-blue-500/);
+    
+    // Click Presets tab
+    const presetsTab = page.getByTestId('workouts-presets-tab');
+    await presetsTab.click();
+    
+    // Verify Presets tab is active
+    await expect(presetsTab).toHaveClass(/border-blue-500/);
+    await expect(myProgramsTab).not.toHaveClass(/border-blue-500/);
+    
+    // Verify presets empty state is visible
+    await expect(page.getByTestId('workouts-presets-empty-state')).toBeVisible({ timeout: 5000 });
+    
+    // Verify "Workout Presets Coming Soon" text
+    await expect(page.getByText('Workout Presets Coming Soon')).toBeVisible({ timeout: 5000 });
+    
+    // Switch back to My Programs
+    await myProgramsTab.click();
+    await expect(myProgramsTab).toHaveClass(/border-blue-500/);
+  });
+
   test('Can navigate to Workout Logger', async ({ page }) => {
     // Navigate directly to Workout Logger
     await page.goto('./#/log/workout');

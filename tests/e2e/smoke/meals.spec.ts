@@ -191,6 +191,60 @@ test.describe('Smoke: Meals Feature', () => {
     await expect(savedMealsButton).toHaveClass(/border-blue-500/);
   });
 
+  test('Can switch to Presets tab and see placeholder', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Click Presets tab
+    const presetsTab = page.getByTestId('meals-presets-tab');
+    await presetsTab.click();
+    await page.waitForTimeout(300);
+    
+    // Verify Presets tab is active
+    await expect(presetsTab).toHaveClass(/border-blue-500/);
+    
+    // Verify presets empty state is visible
+    await expect(page.getByTestId('meals-presets-empty-state')).toBeVisible({ timeout: 5000 });
+    
+    // Verify "Meal Presets Coming Soon" text
+    await expect(page.getByText('Meal Presets Coming Soon')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Can switch between all three tabs (Saved Meals, Meal Plans, Presets)', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Get all three tabs
+    const savedMealsTab = page.getByTestId('meals-saved-meals-tab');
+    const mealPlansTab = page.getByTestId('meals-meal-plans-tab');
+    const presetsTab = page.getByTestId('meals-presets-tab');
+    
+    // Verify all tabs are visible
+    await expect(savedMealsTab).toBeVisible({ timeout: 5000 });
+    await expect(mealPlansTab).toBeVisible({ timeout: 5000 });
+    await expect(presetsTab).toBeVisible({ timeout: 5000 });
+    
+    // Start on Saved Meals
+    await expect(savedMealsTab).toHaveClass(/border-blue-500/);
+    
+    // Switch to Meal Plans
+    await mealPlansTab.click();
+    await page.waitForTimeout(300);
+    await expect(mealPlansTab).toHaveClass(/border-blue-500/);
+    
+    // Switch to Presets
+    await presetsTab.click();
+    await page.waitForTimeout(300);
+    await expect(presetsTab).toHaveClass(/border-blue-500/);
+    
+    // Switch back to Saved Meals
+    await savedMealsTab.click();
+    await page.waitForTimeout(300);
+    await expect(savedMealsTab).toHaveClass(/border-blue-500/);
+  });
+
   // Note: USDA food adding tested in usda-search.spec.ts
   // Skipped here to avoid modal management complexity
   
