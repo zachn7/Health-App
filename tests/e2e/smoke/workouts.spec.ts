@@ -147,6 +147,37 @@ test.describe('Smoke: Workout Features', () => {
     await expect(myProgramsTab).toHaveClass(/border-blue-500/);
   });
 
+  test('Can toggle preset filters on workouts presets tab', async ({ page }) => {
+    // Navigate to Workouts page
+    await page.goto('./#/workouts');
+    await page.waitForLoadState('networkidle');
+    
+    // Click Presets tab
+    const presetsTab = page.getByTestId('workouts-presets-tab');
+    await presetsTab.click();
+    
+    // Verify filter toggle button is visible
+    const filterToggle = page.getByTestId('workouts-presets-filters-toggle');
+    await expect(filterToggle).toBeVisible({ timeout: 5000 });
+    
+    // Verify filters panel is initially hidden (or could be visible if previously opened)
+    const filtersPanel = page.getByTestId('workouts-presets-filters-panel');
+    
+    // Click filter toggle to open
+    await filterToggle.click();
+    await page.waitForTimeout(300);
+    
+    // Verify filter controls are now visible
+    await expect(filtersPanel).toBeVisible({ timeout: 3000 });
+    
+    // Click filter toggle to close
+    await filterToggle.click();
+    await page.waitForTimeout(300);
+    
+    // Verify filters panel is hidden
+    await expect(filtersPanel).not.toBeVisible({ timeout: 3000 });
+  });
+
   test('Can navigate to Workout Logger', async ({ page }) => {
     // Navigate directly to Workout Logger
     await page.goto('./#/log/workout');

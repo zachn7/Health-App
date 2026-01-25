@@ -48,6 +48,10 @@ export default function Workouts() {
   const [showPresetPreview, setShowPresetPreview] = useState(false);
   const [importingPreset, setImportingPreset] = useState(false);
   const [importWarning, setImportWarning] = useState<string | null>(null);
+  const [showPresetFilters, setShowPresetFilters] = useState(() => {
+    const saved = localStorage.getItem('presets.workouts.filtersOpen');
+    return saved === 'true';
+  });
 
   const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -81,6 +85,11 @@ export default function Workouts() {
     loadWorkoutData();
     loadProfile();
   }, []);
+
+  // Persist preset filters open/closed state
+  useEffect(() => {
+    localStorage.setItem('presets.workouts.filtersOpen', String(showPresetFilters));
+  }, [showPresetFilters]);
 
   const loadProfile = async () => {
     try {
@@ -1060,8 +1069,8 @@ export default function Workouts() {
         <div data-testid={testIds.workouts.presetsListRoot}>
           {/* Search and Filters */}
           <div className="card mb-6">
-            <div className="mb-4">
-              <div className="relative">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
@@ -1072,12 +1081,24 @@ export default function Workouts() {
                   data-testid={testIds.workouts.presetSearchInput}
                 />
               </div>
+              <button
+                onClick={() => setShowPresetFilters(!showPresetFilters)}
+                className="btn btn-secondary"
+                aria-expanded={showPresetFilters}
+                aria-label="Toggle filters"
+                data-testid={testIds.workouts.presetsFiltersToggle}
+              >
+                <Filter className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Tag Filters */}
-            <div className="flex flex-wrap gap-2">
-              <Filter className="w-4 h-4 text-gray-500 inline mr-1" />
-              {Array.from(new Set(workoutPresets.flatMap(p => p.tags))).sort().map(tag => (
+            {showPresetFilters && (
+              <div
+                className="flex flex-wrap gap-2"
+                data-testid={testIds.workouts.presetsFiltersPanel}
+              >
+                {Array.from(new Set(workoutPresets.flatMap(p => p.tags))).sort().map(tag => (
                 <button
                   key={tag}
                   onClick={() => {
@@ -1107,7 +1128,8 @@ export default function Workouts() {
                   Clear
                 </button>
               )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Preset List */}

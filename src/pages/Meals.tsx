@@ -31,6 +31,10 @@ export default function Meals() {
   const [showPresetPreview, setShowPresetPreview] = useState(false);
   const [importingMealPlan, setImportingMealPlan] = useState(false);
   const [editingMealPlan, setEditingMealPlan] = useState<MealPlan | null>(null);
+  const [showPresetFilters, setShowPresetFilters] = useState(() => {
+    const saved = localStorage.getItem('presets.meals.filtersOpen');
+    return saved === 'true';
+  });
   
   const [showDatePicker, setShowDatePicker] = useState<string | null>(null);
   const [showFoodPicker, setShowFoodPicker] = useState(false);
@@ -66,6 +70,11 @@ export default function Meals() {
       loadSavedFoods();
     }
   }, [showFoodPicker]);
+
+  // Persist preset filters open/closed state
+  useEffect(() => {
+    localStorage.setItem('presets.meals.filtersOpen', String(showPresetFilters));
+  }, [showPresetFilters]);
 
   const loadSavedFoods = async () => {
     try {
@@ -907,8 +916,8 @@ export default function Meals() {
         <div className="space-y-6" data-testid={testIds.meals.presetsListRoot}>
           {/* Search and Filters */}
           <div className="card">
-            <div className="mb-4">
-              <div className="relative">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
@@ -919,12 +928,24 @@ export default function Meals() {
                   data-testid={testIds.meals.presetSearchInput}
                 />
               </div>
+              <button
+                onClick={() => setShowPresetFilters(!showPresetFilters)}
+                className="btn btn-secondary"
+                aria-expanded={showPresetFilters}
+                aria-label="Toggle filters"
+                data-testid={testIds.meals.presetsFiltersToggle}
+              >
+                <Filter className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Tag Filters */}
-            <div className="flex flex-wrap gap-2">
-              <Filter className="w-4 h-4 text-gray-500 inline mr-1" />
-              {Array.from(new Set(mealPresets.flatMap(p => p.tags))).sort().map(tag => (
+            {showPresetFilters && (
+              <div
+                className="flex flex-wrap gap-2"
+                data-testid={testIds.meals.presetsFiltersPanel}
+              >
+                {Array.from(new Set(mealPresets.flatMap(p => p.tags))).sort().map(tag => (
                 <button
                   key={tag}
                   onClick={() => {
@@ -954,7 +975,8 @@ export default function Meals() {
                   Clear
                 </button>
               )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Preset List */}

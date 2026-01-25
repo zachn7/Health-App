@@ -81,6 +81,8 @@ export const testIds = {
     presetSearchInput: 'meals-preset-search-input',
     presetCard: (id: string) => `meals-preset-card-${id}`,
     presetImportBtn: (id: string) => `meals-preset-import-btn-${id}`,
+    presetsFiltersToggle: 'meals-presets-filters-toggle',
+    presetsFiltersPanel: 'meals-presets-filters-panel',
     
     createNewMealButton: 'create-new-meal-btn',
     mealList: 'meals-list',
@@ -179,6 +181,8 @@ export const testIds = {
     presetCard: (id: string) => `workouts-preset-card-${id}`,
     presetImportBtn: (id: string) => `workouts-preset-import-btn-${id}`,
     importWarning: 'workouts-preset-import-warning',
+    presetsFiltersToggle: 'workouts-presets-filters-toggle',
+    presetsFiltersPanel: 'workouts-presets-filters-panel',
     
     // Generator
     generateEmptyPlanButton: 'generate-empty-workout-plan-btn',

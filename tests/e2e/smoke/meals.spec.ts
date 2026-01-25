@@ -212,6 +212,37 @@ test.describe('Smoke: Meals Feature', () => {
     await expect(page.getByTestId('meals-preset-search-input')).toBeVisible({ timeout: 5000 });
   });
 
+  test('Can toggle preset filters on meals presets tab', async ({ page }) => {
+    // Navigate to Meals page
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+    
+    // Click Presets tab
+    const presetsTab = page.getByTestId('meals-presets-tab');
+    await presetsTab.click();
+    
+    // Verify filter toggle button is visible
+    const filterToggle = page.getByTestId('meals-presets-filters-toggle');
+    await expect(filterToggle).toBeVisible({ timeout: 5000 });
+    
+    // Verify filters panel is initially visible or hidden (depends on localStorage)
+    const filtersPanel = page.getByTestId('meals-presets-filters-panel');
+    
+    // Click filter toggle to open
+    await filterToggle.click();
+    await page.waitForTimeout(300);
+    
+    // Verify filter controls are visible
+    await expect(filtersPanel).toBeVisible({ timeout: 3000 });
+    
+    // Click filter toggle to close
+    await filterToggle.click();
+    await page.waitForTimeout(300);
+    
+    // Verify filters panel is hidden
+    await expect(filtersPanel).not.toBeVisible({ timeout: 3000 });
+  });
+
   test('Can switch between all three tabs (Saved Meals, Meal Plans, Presets)', async ({ page }) => {
     // Navigate to Meals page
     await page.goto('./#/meals');
