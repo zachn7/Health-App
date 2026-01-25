@@ -41,6 +41,9 @@ export default function Meals() {
   const [foodSearchQuery, setFoodSearchQuery] = useState('');
   const [foodSearchResults, setFoodSearchResults] = useState<any[]>([]);
   const [foodSearchLoading, setFoodSearchLoading] = useState(false);
+  
+  // Meal plan editor state
+  const [addingFoodToMeal, setAddingFoodToMeal] = useState<{ dayId: string; mealId: string } | null>(null);
   const [deleteConfirmMeal, setDeleteConfirmMeal] = useState<MealTemplate | null>(null);
   const [deleteConfirmItemIndex, setDeleteConfirmItemIndex] = useState<number | null>(null);
   const [showManualFoodForm, setShowManualFoodForm] = useState(false);
@@ -210,6 +213,121 @@ export default function Meals() {
     }
   };
 
+  // Meal plan editor helper: Add food to meal
+  const handleAddFoodToMealPlanMeal = async (dayId: string, mealId: string, food: any) => {
+    if (!editingMealPlan) return;
+    
+    try {
+      // Create a MealPlanFood item from search result
+      const mealPlanFood = {
+        id: crypto.randomUUID(),
+        name: food.description || food.name,
+        servingSize: food.serving_size || '1 serving',
+        quantidade: 1,
+        calories: 0,
+        proteinG: 0,
+        carbsG: 0,
+        fatG: 0,
+        baseUnit: 'serving' as const,
+        servingGrams: food.serving_g || 100,
+        computedTotalGrams: food.serving_g || 100,
+        fdcId: food.fdc_id
+      };
+      
+      // Extract macros if available
+      const { extractMacrosFromSearchResult } = await import('../lib/usda-service');
+      const macros = extractMacrosFromSearchResult(food);
+      if (macros) {
+        mealPlanFood.calories = macros.calories || 0;
+        mealPlanFood.proteinG = macros.proteinG || 0;
+        mealPlanFood.carbsG = macros.carbsG || 0;
+        mealPlanFood.fatG = macros.fatG || 0;
+      }
+      
+      // Create updated plan with added food
+      const updatedPlan = {
+        ...editingMealPlan,
+        days: editingMealPlan.days.map(day => {
+          if (day.id !== dayId) return day;
+          
+          return {
+            ...day,
+            meals: day.meals.map(meal => {
+              if (meal.id !== mealId) return meal;
+              
+              // Add food and recalculate totals
+              const updatedFoods = [...meal.foods, mealPlanFood];
+              const newTotals = updatedFoods.reduce(
+                (totals, item) => ({
+                  calories: totals.calories + item.calories,
+                  proteinG: totals.proteinG + item.proteinG,
+                  carbsG: totals.carbsG + item.carbsG,
+                  fatG: totals.fatG + item.fatG
+                }),
+                { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
+              );
+              
+              return {
+                ...meal,
+                foods: updatedFoods,
+                calories: newTotals.calories,
+                proteinG: newTotals.proteinG,
+                carbsG: newTotals.carbsG,
+                fatG: newTotals.fatG
+              };
+            })
+          };
+        })
+      };
+      
+      // Update both local state and database
+      setEditingMealPlan(updatedPlan);
+      await repositories.nutrition.updateMealPlan(editingMealPlan.id, {
+        days: updatedPlan.days
+      });
+      
+      // Update meal plans list
+      await loadMealPlans();
+    } catch (error) {
+      console.error('Failed to add food to meal:', error);
+      alert('Failed to add food. Please try again.');
+    }
+  };
+
+  // Meal plan editor helper: Delete meal section
+  const handleDeleteMealSection = async (dayId: string, mealId: string) => {
+    if (!editingMealPlan) return;
+    
+    if (!confirm('Are you sure you want to delete this meal section?')) return;
+    
+    try {
+      // Create updated plan with meal section removed
+      const updatedPlan = {
+        ...editingMealPlan,
+        days: editingMealPlan.days.map(day => {
+          if (day.id !== dayId) return day;
+          
+          return {
+            ...day,
+            meals: day.meals.filter(meal => meal.id !== mealId)
+          };
+        })
+      };
+      
+      // Update both local state and database
+      setEditingMealPlan(updatedPlan);
+      await repositories.nutrition.updateMealPlan(editingMealPlan.id, {
+        days: updatedPlan.days
+      });
+      
+      // Update meal plans list
+      await loadMealPlans();
+    } catch (error) {
+      console.error('Failed to delete meal section:', error);
+      alert('Failed to delete meal section. Please try again.');
+    }
+  };
+
   const calculateMealTotals = (items: Omit<FoodLogItem, 'id'>[]) => {
     return items.reduce(
       (totals, item) => ({
@@ -351,7 +469,17 @@ export default function Meals() {
 
   const addFoodToMeal = async (food: any) => {
     try {
-      // Use the same logic as Nutrition Logger: createFoodLogItem with default 1 serving
+      // If we're in meal plan editor mode
+      if (addingFoodToMeal) {
+        await handleAddFoodToMealPlanMeal(addingFoodToMeal.dayId, addingFoodToMeal.mealId, food);
+        setShowFoodPicker(false);
+        setFoodSearchQuery('');
+        setFoodSearchResults([]);
+        setAddingFoodToMeal(null);
+        return;
+      }
+      
+      // Regular meal template mode
       const { usdaService } = await import('../lib/usda-service');
       const foodLogItem = await usdaService.createFoodLogItem(food.fdcId, 1, 'serving');
       
@@ -834,18 +962,63 @@ export default function Meals() {
                     <h4 className="font-medium text-gray-900 mb-3">{formatLocalDate(day.date, { weekday: 'long', month: 'short', day: 'numeric' })}</h4>
                     <div className="space-y-2">
                       {day.meals.map((meal) => (
-                        <div key={meal.id} className="flex items-start space-x-3 p-3 bg-white rounded border border-gray-200">
-                          <div className="flex-1">
+                        <div key={meal.id} className="p-3 bg-white rounded border border-gray-200">
+                          {/* Meal Header with Actions */}
+                          <div className="flex justify-between items-center mb-2">
                             <div className="font-medium text-gray-900">{meal.label}</div>
-                            {meal.foods.length === 0 && (
-                              <div className="text-sm text-gray-500">No foods added yet</div>
-                            )}
-                            {meal.foods.length > 0 && (
-                              <div className="text-sm text-gray-600">
-                                {meal.foods.length} food(s) • {meal.calories} cal
-                              </div>
-                            )}
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => {
+                                  setAddingFoodToMeal({ dayId: day.id, mealId: meal.id });
+                                  setShowFoodPicker(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                                data-testid={`meal-plan-${editingMealPlan.id}-day-${day.id}-meal-${meal.id}-add-food`}
+                              >
+                                <Plus className="w-4 h-4 mr-1" />
+                                Add Food
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMealSection(day.id, meal.id)}
+                                className="text-red-600 hover:text-red-700 text-sm flex items-center"
+                                data-testid={`meal-plan-${editingMealPlan.id}-day-${day.id}-meal-${meal.id}-delete-meal`}
+                              >
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Delete
+                              </button>
+                            </div>
                           </div>
+                          
+                          {/* Meal Macro Totals */}
+                          {meal.foods.length > 0 && (
+                            <div className="flex items-center space-x-4 text-xs mb-2 bg-blue-50 p-2 rounded">
+                              <span className="font-medium text-blue-700">{Math.round(meal.calories)} cal</span>
+                              <span className="text-blue-600">P: {Math.round(meal.proteinG)}g</span>
+                              <span className="text-blue-600">C: {Math.round(meal.carbsG)}g</span>
+                              <span className="text-blue-600">F: {Math.round(meal.fatG)}g</span>
+                            </div>
+                          )}
+                          
+                          {/* Food List */}
+                          {meal.foods.length === 0 ? (
+                            <div className="text-sm text-gray-500 italic">No foods added yet</div>
+                          ) : (
+                            <div className="space-y-1">
+                              {meal.foods.map((food) => (
+                                <div key={food.id} className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900">{food.name}</div>
+                                    <div className="text-gray-600">{food.quantidade} {food.baseUnit === 'serving' ? 'serving' : 'g'} • {Math.round(food.calories)} cal</div>
+                                  </div>
+                                  <div className="flex items-center space-x-2 text-xs text-gray-600">
+                                    {food.proteinG > 0 && <span className="text-blue-600">P: {Math.round(food.proteinG)}g</span>}
+                                    {food.carbsG > 0 && <span className="text-orange-600">C: {Math.round(food.carbsG)}g</span>}
+                                    {food.fatG > 0 && <span className="text-yellow-600">F: {Math.round(food.fatG)}g</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
