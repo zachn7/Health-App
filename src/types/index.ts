@@ -48,6 +48,9 @@ export const FoodSource = {
   IMPORTED: 'imported'
 } as const;
 
+// Re-export preset types for convenience
+export * from './presets';
+
 export type FoodSource = typeof FoodSource[keyof typeof FoodSource];
 
 export type UnitSystem = 'metric' | 'imperial';
