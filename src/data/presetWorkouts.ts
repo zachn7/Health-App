@@ -59,7 +59,7 @@ export const workoutPresets: WorkoutPreset[] = [
   },
   {
     id: 'upper-lower-3d',
-    title: 'Upper/Lower Split 3x per Week',
+    title: 'Upper/Lower Split 4x per Week',
     summary: 'Alternating upper and lower body sessions allows for more volume per muscle group while still hitting each area twice weekly. Great for intermediate lifters.',
     tags: ['intermediate', 'upper-lower', '4 days', 'strength', 'hypertrophy', 'gym'],
     durationWeeks: 12,
@@ -210,7 +210,7 @@ export const workoutPresets: WorkoutPreset[] = [
   },
   {
     id: 'push-pull-legs-3d',
-    title: 'Push/Pull/Legs 3x per Week',
+    title: 'Push/Pull/Legs 6x per Week',
     summary: 'Classic bodybuilding split organized by movement pattern. Push handles chest, shoulders, triceps. Pull handles back, biceps. Legs is all lower body. Rotate through 3 on, 1 off.',
     tags: ['intermediate', 'advanced', 'push-pull-legs', '6 days', 'hypertrophy', 'strength', 'bodybuilding', 'gym'],
     durationWeeks: 16,

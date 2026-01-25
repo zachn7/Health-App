@@ -3,6 +3,19 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
+// Validate preset frequencies in development
+if (import.meta.env.DEV) {
+  try {
+    import('./lib/validate-preset-frequencies').then(({ validatePresetFrequency }) => {
+      validatePresetFrequency();
+    }).catch(err => {
+      console.error('Preset frequency validation error:', err);
+    });
+  } catch (err) {
+    console.error('Failed to import preset validator:', err);
+  }
+}
+
 // Initialize exercise database on app startup
 import { ExerciseDBService } from '@/lib/exercise-db'
 import { initDatabase } from '@/db'
