@@ -54,6 +54,7 @@ export default function Workouts() {
   });
 
   const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
+  const [swapTarget, setSwapTarget] = useState<{ weekIndex: number; dayIndex: number; exerciseIndex: number } | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [exerciseData, setExerciseData] = useState<ExerciseData>({});
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<WorkoutPlan | null>(null);
@@ -194,18 +195,44 @@ export default function Workouts() {
       
       await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
       
+      // Update state
       setWorkoutPlans(prev => 
         prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
       );
       setSelectedPlan(updatedPlan);
-      // Load new exercise data (failure here shouldn't affect the replacement)
-      try {
-        await loadExerciseData([newExerciseId]);
-      } catch (error) {
-        // Log but don't fail the operation - replacement succeeded
-        console.warn('Failed to load exercise data after replacement:', error);
-        // Don't set error state - replacement was successful
-      }
+      
+      // Load new exercise data
+      await loadExerciseData([newExerciseId]);
+    }
+  };
+
+  const replaceExerciseByIndex = async (weekIndex: number, dayIndex: number, exerciseIndex: number, newExerciseId: string) => {
+    if (!selectedPlan) return;
+    
+    try {
+      const updatedPlan = { ...selectedPlan };
+      const workout = updatedPlan.weeks[weekIndex]?.workouts[dayIndex];
+      
+      if (!workout || !workout.exercises[exerciseIndex]) return;
+      
+      // Replace the exercise at the specific index (preserving sets/reps/weight)
+      workout.exercises[exerciseIndex] = {
+        ...workout.exercises[exerciseIndex],
+        exerciseId: newExerciseId
+      };
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      setWorkoutPlans(prev => 
+        prev.map(plan => plan.id === updatedPlan.id ? updatedPlan : plan)
+      );
+      setSelectedPlan(updatedPlan);
+      
+      // Load new exercise data
+      await loadExerciseData([newExerciseId]);
+    } catch (error) {
+      console.error('Failed to replace exercise by index:', error);
+      alert('Failed to replace exercise');
     }
   };
   
@@ -1572,7 +1599,7 @@ export default function Workouts() {
                           return (
                             <div 
                               key={exIndex}
-                              data-testid={`plan-exercise-${exercise.exerciseId}`}
+                              data-testid={`workout-editor-exercise-row-${exIndex}`}
                               className={`border-l-4 pl-4 ${selectedExercises.has(exercise.exerciseId) ? 'border-indigo-500 bg-indigo-50' : 'border-blue-500'}`}
                             >
                               <div className="flex items-start space-x-3">
@@ -1622,11 +1649,14 @@ export default function Workouts() {
                                   <>
                                     <div className="flex space-x-1">
                                       <button
-                                        onClick={() => setShowExercisePicker(true)}
+                                        onClick={() => {
+                                          setSwapTarget({ weekIndex: selectedWeek, dayIndex, exerciseIndex: exIndex });
+                                          setShowExercisePicker(true);
+                                        }}
                                         className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs"
                                         title="Replace with different exercise"
                                         aria-label="Swap exercise"
-                                        data-testid="replace-exercise-btn"
+                                        data-testid="workout-editor-exercise-swap-btn"
                                       >
                                         <ArrowLeftRight className="w-4 h-4" />
                                         <span className="hidden md:inline">Swap</span>
@@ -1963,7 +1993,11 @@ export default function Workouts() {
                 }
               } else if (selectedPlan) {
                 // Handle regular editing
-                if (editingWorkout.exerciseId) {
+                if (swapTarget) {
+                  // Swap mode: replace the specific exercise by index
+                  replaceExerciseByIndex(swapTarget.weekIndex, swapTarget.dayIndex, swapTarget.exerciseIndex, exercise.id);
+                  setSwapTarget(null);
+                } else if (editingWorkout.exerciseId) {
                   replaceExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, editingWorkout.exerciseId, exercise.id);
                 } else {
                   addExercise(editingWorkout.weekIndex, editingWorkout.dayIndex, exercise.id);
@@ -1973,7 +2007,8 @@ export default function Workouts() {
           }}
           onClose={() => {
             setShowExercisePicker(false);
-            setEditingWorkout(null);
+            setSwapTarget(null);
+            // Don't clear editingWorkout - keep edit mode active after swap
           }}
           excludeIds={selectedPlan?.weeks[selectedWeek]?.workouts[editingWorkout.dayIndex]?.exercises.map(ex => ex.exerciseId) || []}
           allowCustom={true}
