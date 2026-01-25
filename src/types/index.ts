@@ -222,6 +222,7 @@ export interface FoodLogItem {
   baseUnit: 'serving' | 'grams'; // Unit being measured
   fdcId?: number; // USDA FDC ID for reference
   computedTotalGrams: number; // Precomputed: quantidade * servingGrams (total grams invariant)
+  mealGroup?: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Uncategorized'; // Meal time grouping
   createdAt?: string;
   updatedAt?: string;
 }

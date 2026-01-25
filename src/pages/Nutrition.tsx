@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
+import { Plus, Download } from 'lucide-react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
@@ -7,7 +8,7 @@ import { filterByTokenAwarePrefix } from '../lib/search/fuzzy';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
-import type { NutritionLog, FoodLogItem, MacroTotals, Profile, FoodItem } from '../types';
+import type { NutritionLog, FoodLogItem, Profile, FoodItem } from '../types';
 
 export default function Nutrition() {
   const isDev = process.env.NODE_ENV === 'development';
@@ -60,6 +61,15 @@ export default function Nutrition() {
     originalServingGrams?: number;
   }>({ quantity: 1, unit: 'serving', calories: 0, proteinG: 0, carbsG: 0, fatG: 0 });
   const [editingQtyDraftValue, setEditingQtyDraftValue] = useState<string>('');
+  
+  // Meal plan import state
+  const [showMealPlanImport, setShowMealPlanImport] = useState(false);
+  const [mealPlans, setMealPlans] = useState<any[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
+  const [importScope, setImportScope] = useState<'wholeDay' | 'singleMeal'>('wholeDay');
+  const [selectedMealIndex, setSelectedMealIndex] = useState<number>(0);
+  const [activeMealGroup, setActiveMealGroup] = useState<'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Uncategorized' | null>(null);
 
   useEffect(() => {
     loadNutritionData();
@@ -67,6 +77,13 @@ export default function Nutrition() {
     loadSavedFoods();
     loadSavedMeals();
   }, [selectedDate]);
+  
+  // Load meal plans when import modal opens
+  useEffect(() => {
+    if (showMealPlanImport) {
+      loadMealPlans();
+    }
+  }, [showMealPlanImport]);
 
   const loadUSDAStatus = async () => {
     try {
@@ -93,6 +110,35 @@ export default function Nutrition() {
       setSavedMeals(meals || []);
     } catch (error) {
       console.error('Failed to load saved meals:', error);
+    }
+  };
+
+  // Helper to filter and group items by mealGroup
+  const getItemsByMealGroup = (mealGroup: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Uncategorized') => {
+    if (!currentLog || currentLog.items.length === 0) return [];
+    return currentLog.items.filter(item => (item.mealGroup || 'Uncategorized') === mealGroup);
+  };
+
+  // Helper to calculate totals for a group
+  const calculateGroupTotals = (items: FoodLogItem[]) => {
+    return items.reduce(
+      (totals, item) => ({
+        calories: totals.calories + item.calories,
+        proteinG: totals.proteinG + item.proteinG,
+        carbsG: totals.carbsG + item.carbsG,
+        fatG: totals.fatG + item.fatG
+      }),
+      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
+    );
+  };
+
+  // Load meal plans for import
+  const loadMealPlans = async () => {
+    try {
+      const plans = await repositories.nutrition.getMealPlans();
+      setMealPlans(plans || []);
+    } catch (error) {
+      console.error('Failed to load meal plans:', error);
     }
   };
 
@@ -139,41 +185,20 @@ export default function Nutrition() {
 
   const saveFood = async () => {
     try {
-      const dateStr = selectedDate;
+      // Canonical model: computedTotalGrams = quantidade * servingGrams
+      const computedTotalGrams = newFood.quantidade * (newFood.servingGrams || 100);
       
-      // Create a completely new object with unique ID to avoid shared references
-      const foodToSave: FoodLogItem = JSON.parse(JSON.stringify({
+      // Create a new object with unique ID
+      const foodToSave: FoodLogItem = {
         ...newFood,
-        id: crypto.randomUUID(), // Ensure unique ID for each entry,
+        id: crypto.randomUUID(),
+        computedTotalGrams,
+        mealGroup: activeMealGroup || 'Uncategorized',
         createdAt: new Date().toISOString(),
-        baseUnit: newFood.baseUnit || 'serving',
-        servingGrams: newFood.servingGrams || 100
-      }));
+        updatedAt: new Date().toISOString()
+      };
       
-      if (!currentLog) {
-        // Create new log for selected date
-        const newLog: NutritionLog = {
-          id: crypto.randomUUID(),
-          date: dateStr,
-          items: [foodToSave],
-          totals: calculateTotals([foodToSave]), // Calculate from persisted entries
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        await repositories.nutrition.createNutritionLog(newLog);
-        setCurrentLog(newLog);
-      } else {
-        // Add to existing log - create new array to avoid reference issues
-        const updatedItems = [...currentLog.items, foodToSave];
-        const updatedLog: NutritionLog = {
-          ...currentLog,
-          items: updatedItems,
-          totals: calculateTotals(updatedItems), // Calculate from persisted entries
-          updatedAt: new Date().toISOString()
-        };
-        await repositories.nutrition.updateNutritionLog(updatedLog.id, updatedLog);
-        setCurrentLog(updatedLog);
-      }
+      await saveFoodItem(foodToSave, activeMealGroup || 'Uncategorized');
       
       // Reset form
       setNewFood({
@@ -190,33 +215,11 @@ export default function Nutrition() {
         computedTotalGrams: 100
       });
       setShowAddFood(false);
+      setActiveMealGroup(null);
     } catch (error) {
       console.error('Failed to save food:', error);
       alert('Failed to save food item. Please try again.');
     }
-  };
-
-  const calculateTotals = (items: FoodLogItem[]): MacroTotals => {
-    return items.reduce(
-      (totals, item) => ({
-        calories: totals.calories + item.calories * item.quantidade,
-        proteinG: totals.proteinG + item.proteinG * item.quantidade,
-        carbsG: totals.carbsG + item.carbsG * item.quantidade,
-        fatG: totals.fatG + item.fatG * item.quantidade,
-        fiberG: (totals.fiberG || 0) + ((item.fiberG || 0) * item.quantidade),
-        sugarG: (totals.sugarG || 0) + ((item.sugarG || 0) * item.quantidade),
-        sodiumMg: (totals.sodiumMg || 0) + ((item.sodiumMg || 0) * item.quantidade)
-      }),
-      {
-        calories: 0,
-        proteinG: 0,
-        carbsG: 0,
-        fatG: 0,
-        fiberG: 0,
-        sugarG: 0,
-        sodiumMg: 0
-      }
-    );
   };
 
   const deleteFood = async (foodId: string) => {
@@ -491,7 +494,7 @@ export default function Nutrition() {
     setShowServingSizeEdit(item.id);
   };
 
-  const saveFoodItem = async (foodItem: FoodLogItem) => {
+  const saveFoodItem = async (foodItem: FoodLogItem, mealGroup?: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Uncategorized') => {
     const dateStr = selectedDate;
     
     // Canonical model: computedTotalGrams = quantidade * servingGrams
@@ -504,6 +507,7 @@ export default function Nutrition() {
       baseUnit: foodItem.baseUnit || 'serving',
       servingGrams: foodItem.servingGrams || 100,
       computedTotalGrams,
+      mealGroup: mealGroup || 'Uncategorized',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -540,7 +544,7 @@ export default function Nutrition() {
       computedTotalGrams
     };
     
-    await saveFoodItem(foodLogItem);
+    await saveFoodItem(foodLogItem, 'Uncategorized');
   };
 
   const addSavedMeal = async (meal: any) => {
@@ -568,6 +572,71 @@ export default function Nutrition() {
     
     // Close the modal after adding
     setShowSavedMealsModal(false);
+  };
+
+  // Handle importing from meal plan
+  const handleImportMealPlan = async () => {
+    if (!selectedPlan) return;
+    
+    try {
+      const day = selectedPlan.days[selectedDayIndex];
+      let mealsToImport: any[] = [];
+      
+      if (importScope === 'wholeDay') {
+        // Import all meals from the day
+        mealsToImport = day.meals;
+      } else {
+        // Import only the selected meal
+        mealsToImport = [day.meals[selectedMealIndex]];
+      }
+      
+      // For each meal, add all its foods
+      for (const meal of mealsToImport) {
+        // Map meal labels to meal groups
+        let mealGroup: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Uncategorized' = 'Uncategorized';
+        const mealLabel = meal.label.toLowerCase();
+        
+        if (mealLabel.includes('breakfast')) {
+          mealGroup = 'Breakfast';
+        } else if (mealLabel.includes('lunch')) {
+          mealGroup = 'Lunch';
+        } else if (mealLabel.includes('dinner')) {
+          mealGroup = 'Dinner';
+        } else if (mealLabel.includes('snack')) {
+          mealGroup = 'Snacks';
+        }
+        
+        // Add each food from the meal
+        for (const food of meal.foods) {
+          const foodLogItem: FoodLogItem = {
+            id: crypto.randomUUID(),
+            name: food.name,
+            servingSize: food.servingSize || '1 serving',
+            quantidade: food.quantidade || 1,
+            calories: food.calories || 0,
+            proteinG: food.proteinG || 0,
+            carbsG: food.carbsG || 0,
+            fatG: food.fatG || 0,
+            baseUnit: food.baseUnit || 'serving',
+            servingGrams: food.servingGrams || 100,
+            computedTotalGrams: food.computedTotalGrams || (food.quantidade || 1) * (food.servingGrams || 100),
+            fdcId: food.fdcId
+          };
+          
+          await saveFoodItem(foodLogItem, mealGroup);
+        }
+      }
+      
+      // Close the import modal
+      setShowMealPlanImport(false);
+      setSelectedPlan(null);
+      setSelectedDayIndex(0);
+      setImportScope('wholeDay');
+      setSelectedMealIndex(0);
+    } catch (error) {
+      console.error('Failed to import meal plan:', error);
+      alert('Failed to import meal plan. Please try again.');
+    }
   };
 
   if (loading) {
@@ -683,12 +752,27 @@ export default function Nutrition() {
         <button
           data-testid="nutrition-manual-entry-btn"
           onClick={() => {
+            setActiveMealGroup(
+activeMealGroup ? null : activeMealGroup || 'Uncategorized');
             setShowAddFood(true);
             setShowUSDAImport(false);
           }}
           className="btn btn-primary"
         >
           Manual Entry
+        </button>
+        
+        {/* Import from Meal Plan button */}
+        <button
+          data-testid="nutrition-import-meal-plan-btn"
+          onClick={() => {
+            loadMealPlans();
+            setShowMealPlanImport(true);
+          }}
+          className="btn btn-outline-secondary flex items-center"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Import Meal Plan
         </button>
         
         {isUSDAEnabled && (
@@ -1284,7 +1368,7 @@ export default function Nutrition() {
         </div>
       )}
       
-      {/* Food Items - Always render so testid can be found even when no log exists yet */}
+      {/* Food Items Grouped by Meal Time */}
       <div className="card">
         <h3 className="text-lg font-medium text-gray-900 mb-4">
           Food Items ({currentLog?.items.length || 0})
@@ -1295,8 +1379,43 @@ export default function Nutrition() {
             <p className="text-gray-600">No food items logged for this date</p>
           </div>
         ) : (
-          <div className="space-y-3" data-testid="nutrition-log-list">
-            {currentLog.items.map((item) => (
+          <div className="space-y-4" data-testid="nutrition-log-list">
+            {(['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Uncategorized'] as const).map((mealGroup) => {
+              const groupItems = getItemsByMealGroup(mealGroup);
+              const groupTotals = calculateGroupTotals(groupItems);
+              
+              // Only show sections that have items
+              if (groupItems.length === 0) return null;
+              
+              return (
+                <div key={mealGroup} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Section Header with Add Food button */}
+                  <div className="flex justify-between items-center p-3 bg-gray-50 border-b border-gray-200">
+                    <h4 className="font-medium text-gray-900">{mealGroup}</h4>
+                    <button
+                      data-testid={`nutrition-add-food-${mealGroup.toLowerCase()}`}
+                      onClick={() => {
+                        setActiveMealGroup(mealGroup);
+                        setShowAddFood(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Food
+                    </button>
+                  </div>
+                  
+                  {/* Group Totals */}
+                  <div className="flex gap-4 text-xs bg-blue-50 px-4 py-2 border-b border-gray-200">
+                    <span className="font-medium text-blue-700">{Math.round(groupTotals.calories)} cal</span>
+                    <span className="text-blue-600">P: {Math.round(groupTotals.proteinG)}g</span>
+                    <span className="text-blue-600">C: {Math.round(groupTotals.carbsG)}g</span>
+                    <span className="text-blue-600">F: {Math.round(groupTotals.fatG)}g</span>
+                  </div>
+                  
+                  {/* Food Items in this group */}
+                  <div className="divide-y divide-gray-200">
+                    {groupItems.map((item) => (
               <div key={item.id} data-testid="nutrition-food-item" className="p-3 bg-gray-50 rounded-lg">
                 {showServingSizeEdit === item.id ? (
                   // Edit mode - Meals-style UI with toggle + macro tiles
@@ -1548,9 +1667,125 @@ export default function Nutrition() {
                 )}
               </div>
             ))}
-            </div>
-          )}
+                </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+      
+      {/* Meal Plan Import Modal */}
+      {showMealPlanImport && (
+        <div className="card mb-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Import from Meal Plan</h3>
+          
+          <div className="space-y-4">
+            {/* Select Plan */}
+            <div>
+              <label className="label">Select Meal Plan</label>
+              <select
+                value={selectedPlan?.id || ''}
+                onChange={(e) => {
+                  const plan = mealPlans.find(p => p.id === e.target.value);
+                  setSelectedPlan(plan || null);
+                  setSelectedDayIndex(0);
+                }}
+                className="input"
+                disabled={mealPlans.length === 0}
+              >
+                {mealPlans.length === 0 && (
+                  <option value="">No meal plans available</option>
+                )}
+                {mealPlans.map(plan => (
+                  <option key={plan.id} value={plan.id}>{plan.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Select Day */}
+            {selectedPlan && (
+              <div>
+                <label className="label">Select Day</label>
+                <select
+                  value={selectedDayIndex}
+                  onChange={(e) => setSelectedDayIndex(parseInt(e.target.value))}
+                  className="input"
+                >
+                  {selectedPlan.days.map((day: any, index: number) => (
+                    <option key={day.id} value={index}>
+                      Day {index + 1}: {formatLocalDate(day.date, { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {/* Import Scope */}
+            {selectedPlan && (
+              <div>
+                <label className="label">Import Scope</label>
+                <div className="flex space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={importScope === 'wholeDay'}
+                      onChange={() => setImportScope('wholeDay')}
+                      className="mr-2"
+                    />
+                    <span>Whole Day</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={importScope === 'singleMeal'}
+                      onChange={() => setImportScope('singleMeal')}
+                      className="mr-2"
+                    />
+                    <span>Specific Meal</span>
+                  </label>
+                </div>
+              </div>
+            )}
+            
+            {/* Select Meal (if single meal scope) */}
+            {selectedPlan && importScope === 'singleMeal' && (
+              <div>
+                <label className="label">Select Meal</label>
+                <select
+                  value={selectedMealIndex}
+                  onChange={(e) => setSelectedMealIndex(parseInt(e.target.value))}
+                  className="input"
+                >
+                  {selectedPlan.days[selectedDayIndex].meals.map((meal: any, index: number) => (
+                    <option key={meal.id} value={index}>{meal.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          
+          {/* Actions */}
+          <div className="flex justify-end space-x-2 mt-6">
+            <button
+              onClick={() => {
+                setShowMealPlanImport(false);
+                setSelectedPlan(null);
+              }}
+              className="btn btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleImportMealPlan}
+              disabled={!selectedPlan}
+              className="btn btn-primary"
+            >
+              Import
+            </button>
+          </div>
+        </div>
+      )}
       
       {!currentLog && (
         <div className="card text-center py-12">
