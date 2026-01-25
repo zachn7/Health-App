@@ -74,6 +74,45 @@ await page.waitForTimeout(5000);
 
 ## Common Patterns
 
+### Preset Imports (Workout & Meal)
+
+For preset import flows, use the following pattern:
+
+```typescript
+// Navigate to presets tab
+await page.getByTestId('workouts-presets-tab').click();
+
+// Wait for preset cards to load
+const presetCards = page.locator('[data-testid^="workouts-preset-card-"]');
+await expect(presetCards.first()).toBeVisible({ timeout: 10000 });
+
+// Click Import as Copy button (using semantic role)
+const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
+await expect(importButton).toBeVisible();
+await importButton.click();
+
+// Wait for import to complete and editor to load
+await page.waitForTimeout(2000);
+
+// Verify editor shows imported data
+await expect(page.getByText('Imported from preset:')).toBeVisible();
+```
+
+Test IDs for preset imports:
+- `workouts.presetCard(id)` - Workout preset card wrapper
+- `workouts.presetImportBtn(id)` - Import button for workout preset
+- `workouts.importWarning` - Warning banner for unresolved exercises
+- `meals.presetCard(id)` - Meal preset card wrapper
+- `meals.presetImportBtn(id)` - Import button for meal preset
+- `meals.presetImportBtn(preset)` - Helper with preset ID parameter
+- `presets.previewBtn` - Preview button (shared between workout and meal presets)
+
+**Pattern Guide:**
+- Use `getByRole('button', { name: 'Import as Copy' })` for the import button action
+- Use `getByTestId(testIds.workouts.importWarning)` for warning banner verification
+- Check for "Imported from preset:" text to verify successful import
+- Use `getByRole('button', { name: 'Swap' })` for exercise swap functionality
+
 ### Waiting for Asynchronous Operations
 
 ```typescript

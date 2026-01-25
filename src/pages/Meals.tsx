@@ -1011,7 +1011,7 @@ export default function Meals() {
                         ) : (
                           <Download className="w-4 h-4 mr-1 inline" />
                         )}
-                        Import
+                        Import as Copy
                       </button>
                       <button
                         onClick={() => {

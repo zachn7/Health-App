@@ -30,7 +30,7 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
     // Get first preset card and import it
     const firstPresetCard = presetCards.first();
     const presetId = await firstPresetCard.getAttribute('data-preset-id');
-    const importButton = firstPresetCard.getByRole('button', { name: 'Import' });
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await expect(importButton).toBeVisible();
     await importButton.click();
 
@@ -94,7 +94,7 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
 
     // Import first preset
     const firstPresetCard = presetCards.first();
-    const importButton = firstPresetCard.getByRole('button', { name: 'Import' });
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
 
     // Wait for import to complete
@@ -129,7 +129,7 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
 
     const presetCards = page.locator('[data-testid^="meals-preset-card-"]');
     const firstPresetCard = presetCards.first();
-    const importButton = firstPresetCard.getByRole('button', { name: 'Import' });
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
 
     // Wait for editor to load

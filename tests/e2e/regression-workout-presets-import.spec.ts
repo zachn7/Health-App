@@ -29,7 +29,7 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
 
     // Get the first preset card and click Import
     const firstPresetCard = presetCards.first();
-    const importButton = firstPresetCard.getByRole('button', { name: 'Import' }).first();
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' }).first();
     await expect(importButton).toBeVisible();
     await importButton.click();
 
@@ -73,7 +73,7 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
 
     const presetCards = page.locator('[data-testid^="workouts-preset-card-"]');
     const firstPresetCard = presetCards.first();
-    const importButton = firstPresetCard.getByRole('button', { name: 'Import' });
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await expect(importButton).toBeVisible();
     await importButton.click();
 
@@ -116,7 +116,7 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
 
     // Import second preset (likely different equipment requirements)
     const secondPresetCard = presetCards.nth(1);
-    const importButton = secondPresetCard.getByRole('button', { name: 'Import' });
+    const importButton = secondPresetCard.getByRole('button', { name: 'Import as Copy' });
     await expect(importButton).toBeVisible();
     await importButton.click();
 
@@ -147,7 +147,7 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
 
     // Import a preset
     const firstPresetCard = presetCards.first();
-    const importButton = firstPresetCard.getByRole('button', { name: 'Import' });
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await expect(importButton).toBeVisible();
     await importButton.click();
 
