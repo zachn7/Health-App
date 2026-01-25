@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List, Search, Filter, XCircle } from 'lucide-react';
+import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List, Search, Filter, XCircle, Download } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
 import { mealPresets } from '../data/presetMeals';
@@ -29,6 +29,8 @@ export default function Meals() {
   const [presetFilterTags, setPresetFilterTags] = useState<string[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<MealPreset | null>(null);
   const [showPresetPreview, setShowPresetPreview] = useState(false);
+  const [importingMealPlan, setImportingMealPlan] = useState(false);
+  const [editingMealPlan, setEditingMealPlan] = useState<MealPlan | null>(null);
   
   const [showDatePicker, setShowDatePicker] = useState<string | null>(null);
   const [showFoodPicker, setShowFoodPicker] = useState(false);
@@ -91,6 +93,111 @@ export default function Meals() {
       setMealPlans(loadedPlans);
     } catch (error) {
       console.error('Failed to load meal plans:', error);
+    }
+  };
+
+  const handleImportMealPlan = async (preset: MealPreset) => {
+    try {
+      setImportingMealPlan(true);
+      
+      // Calculate calories from macro percentages (default 2000 calories)
+      const totalCalories = preset.recommendedCalories || 2000;
+      const proteinCalories = (preset.macroRangesPercent.protein / 100) * totalCalories;
+      const carbsCalories = (preset.macroRangesPercent.carbs / 100) * totalCalories;
+      const fatCalories = (preset.macroRangesPercent.fat / 100) * totalCalories;
+      
+      // Create meal plan from preset
+      const today = getTodayLocalDateKey();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 6); // 7-day template
+      const endDateKey = endDate.toISOString().split('T')[0];
+      
+      // Build meals array for the day
+      const meals = [
+        {
+          id: crypto.randomUUID(),
+          label: 'Breakfast',
+          foods: [],
+          calories: 0,
+          proteinG: 0,
+          carbsG: 0,
+          fatG: 0,
+        },
+        {
+          id: crypto.randomUUID(),
+          label: 'Lunch',
+          foods: [],
+          calories: 0,
+          proteinG: 0,
+          carbsG: 0,
+          fatG: 0,
+        },
+        {
+          id: crypto.randomUUID(),
+          label: 'Dinner',
+          foods: [],
+          calories: 0,
+          proteinG: 0,
+          carbsG: 0,
+          fatG: 0,
+        },
+      ];
+      
+      // Add snacks if specified
+      if (preset.snacksPerDay > 0) {
+        for (let i = 1; i <= preset.snacksPerDay; i++) {
+          meals.push({
+            id: crypto.randomUUID(),
+            label: `Snack ${i}`,
+            foods: [],
+            calories: 0,
+            proteinG: 0,
+            carbsG: 0,
+            fatG: 0,
+          });
+        }
+      }
+      
+      const newPlan: Omit<MealPlan, 'id' | 'createdAt' | 'updatedAt'> = {
+        name: preset.title,
+        startDate: today,
+        endDate: endDateKey,
+        days: [
+          {
+            id: crypto.randomUUID(),
+            date: today,
+            meals,
+            totals: {
+              calories: totalCalories,
+              proteinG: Math.round(proteinCalories / 4),
+              carbsG: Math.round(carbsCalories / 4),
+              fatG: Math.round(fatCalories / 9),
+            },
+          },
+        ],
+        generationType: 'offline_basic',
+        constraintsSnapshot: {
+          calories: totalCalories,
+          proteinG: Math.round(proteinCalories / 4),
+          carbsG: Math.round(carbsCalories / 4),
+          fatG: Math.round(fatCalories / 9),
+          mealsPerDay: preset.mealsPerDay,
+          dietaryPreferences: preset.tags,
+        },
+        notes: `Imported from preset: ${preset.title}\n${preset.summary}\n\nMeal Structure:\n${preset.mealStructure.map(ms => `• ${ms.meal}: ${ms.goal}\n  Examples: ${ms.examples.join(', ')}`).join('\n\n')}`,
+      };
+      
+      const savedPlan = await repositories.nutrition.createMealPlan(newPlan);
+      setMealPlans([savedPlan, ...mealPlans]);
+      
+      // Open editor for the imported plan
+      setEditingMealPlan(savedPlan);
+      setActiveTab('mealPlans');
+    } catch (error) {
+      console.error('Failed to import meal plan:', error);
+      alert('Failed to import meal plan. Please try again.');
+    } finally {
+      setImportingMealPlan(false);
     }
   };
 
@@ -648,41 +755,149 @@ export default function Meals() {
       {/* Meal Plans Tab Content */}
       {activeTab === 'mealPlans' && (
         <div className="space-y-6">
-          {/* Coming Soon / Placeholder */}
-          <div className="card text-center py-16">
-            <Sparkles className="w-20 h-20 mx-auto text-gray-300 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Meal Plans</h2>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Create and manage weekly meal plans with AI-powered generation or simple offline templates.
-            </p>
-          </div>
+          {/* Meal Plan Editor */}
+          {editingMealPlan ? (
+            <div className="card">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Edit Meal Plan</h2>
+                <button
+                  onClick={() => setEditingMealPlan(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                  aria-label="Close editor"
+                  data-testid="meal-plan-close-editor-btn"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Plan Name Editor */}
+              <div className="mb-6">
+                <label className="label">Plan Name</label>
+                <input
+                  type="text"
+                  value={editingMealPlan.name}
+                  onChange={(e) => {
+                    const updatedPlan = { ...editingMealPlan, name: e.target.value };
+                    setEditingMealPlan(updatedPlan);
+                  }}
+                  onBlur={async () => {
+                    await repositories.nutrition.updateMealPlan(editingMealPlan.id, { name: editingMealPlan.name });
+                    loadMealPlans();
+                  }}
+                  className="input w-full"
+                  data-testid="meal-plan-title-input"
+                />
+              </div>
 
-          {/* Existing Meal Plans */}
-          {mealPlans.length > 0 && (
-            <div className="mt-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Your Meal Plans</h3>
+              {/* Plan Details */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="card bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-1">Duration</div>
+                  <div className="font-medium text-gray-900">
+                    {editingMealPlan.days.length} days
+                  </div>
+                </div>
+                <div className="card bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-1">Daily Calories</div>
+                  <div className="font-medium text-gray-900">
+                    {editingMealPlan.constraintsSnapshot.calories} cal
+                  </div>
+                </div>
+                <div className="card bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-1">Protein</div>
+                  <div className="font-medium text-gray-900">
+                    {editingMealPlan.constraintsSnapshot.proteinG}g
+                  </div>
+                </div>
+                <div className="card bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-1">Type</div>
+                  <div className="font-medium text-gray-900">
+                    {editingMealPlan.generationType === 'ai_webllm' ? 'AI Generated' : 'Offline Template'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Day Structure */}
               <div className="space-y-4">
-                {mealPlans.map((plan) => (
-                  <div key={plan.id} className="card">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="text-lg font-medium text-gray-900">{plan.name}</h4>
-                        <p className="text-sm text-gray-600">
-                          {plan.days.length} days • {formatLocalDate(plan.startDate, { month: 'long', day: 'numeric' })} - {formatLocalDate(plan.endDate, { month: 'long', day: 'numeric' })}
-                        </p>
-                        <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
-                          plan.generationType === 'ai_webllm'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {plan.generationType === 'ai_webllm' ? 'AI Generated' : 'Offline Plan'}
-                        </span>
-                      </div>
+                <h3 className="text-lg font-medium text-gray-900">Day Structure</h3>
+                {editingMealPlan.days.map((day) => (
+                  <div key={day.id} className="card bg-gray-50">
+                    <h4 className="font-medium text-gray-900 mb-3">{formatLocalDate(day.date, { weekday: 'long', month: 'short', day: 'numeric' })}</h4>
+                    <div className="space-y-2">
+                      {day.meals.map((meal) => (
+                        <div key={meal.id} className="flex items-start space-x-3 p-3 bg-white rounded border border-gray-200">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">{meal.label}</div>
+                            {meal.foods.length === 0 && (
+                              <div className="text-sm text-gray-500">No foods added yet</div>
+                            )}
+                            {meal.foods.length > 0 && (
+                              <div className="text-sm text-gray-600">
+                                {meal.foods.length} food(s) • {meal.calories} cal
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Notes Section */}
+              {editingMealPlan.notes && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Plan Notes</h3>
+                  <div className="card bg-gray-50">
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap">{editingMealPlan.notes}</pre>
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              {/* Coming Soon / Placeholder */}
+              <div className="card text-center py-16">
+                <Sparkles className="w-20 h-20 mx-auto text-gray-300 mb-4" />
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Meal Plans</h2>
+                <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                  Create and manage weekly meal plans with AI-powered generation or simple offline templates.
+                </p>
+              </div>
+
+              {/* Existing Meal Plans */}
+              {mealPlans.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Your Meal Plans</h3>
+                  <div className="space-y-4">
+                    {mealPlans.map((plan) => (
+                      <div 
+                        key={plan.id} 
+                        className="card cursor-pointer hover:border-blue-500"
+                        onClick={() => setEditingMealPlan(plan)}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="text-lg font-medium text-gray-900">{plan.name}</h4>
+                            <p className="text-sm text-gray-600">
+                              {plan.days.length} days • {formatLocalDate(plan.startDate, { month: 'long', day: 'numeric' })} - {formatLocalDate(plan.endDate, { month: 'long', day: 'numeric' })}
+                            </p>
+                            <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
+                              plan.generationType === 'ai_webllm'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {plan.generationType === 'ai_webllm' ? 'AI Generated' : 'Offline Template'}
+                            </span>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-gray-400" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -784,16 +999,31 @@ export default function Meals() {
                         P: {preset.macroRangesPercent.protein}% • C: {preset.macroRangesPercent.carbs}% • F: {preset.macroRangesPercent.fat}%
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedPreset(preset);
-                        setShowPresetPreview(true);
-                      }}
-                      className="btn btn-secondary text-sm"
-                      data-testid={`${testIds.presets.previewBtn}-${preset.id}`}
-                    >
-                      Preview
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleImportMealPlan(preset)}
+                        disabled={importingMealPlan}
+                        className="btn btn-primary text-sm"
+                        data-testid={testIds.meals.presetImportBtn(preset.id)}
+                      >
+                        {importingMealPlan ? (
+                          <Loader2 className="w-4 h-4 mr-1 inline animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-1 inline" />
+                        )}
+                        Import
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedPreset(preset);
+                          setShowPresetPreview(true);
+                        }}
+                        className="btn btn-secondary text-sm"
+                        data-testid={`${testIds.presets.previewBtn}-${preset.id}`}
+                      >
+                        Preview
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

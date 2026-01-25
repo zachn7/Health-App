@@ -80,6 +80,7 @@ export const testIds = {
     presetsEmptyState: 'meals-presets-empty-state',
     presetSearchInput: 'meals-preset-search-input',
     presetCard: (id: string) => `meals-preset-card-${id}`,
+    presetImportBtn: (id: string) => `meals-preset-import-btn-${id}`,
     
     createNewMealButton: 'create-new-meal-btn',
     mealList: 'meals-list',
