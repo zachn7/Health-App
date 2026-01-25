@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { repositories } from '../db';
-import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List, Search, Filter, XCircle, Download } from 'lucide-react';
+import { Plus, Edit3, Trash2, Calendar, Utensils, Loader2, ChevronRight, Save, X, Sparkles, Calculator, List, Search, Filter, XCircle, Download, Check } from 'lucide-react';
 import { getTodayLocalDateKey, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
 import { mealPresets } from '../data/presetMeals';
@@ -44,6 +44,8 @@ export default function Meals() {
   
   // Meal plan editor state
   const [addingFoodToMeal, setAddingFoodToMeal] = useState<{ dayId: string; mealId: string } | null>(null);
+  const [logSuccessMessage, setLogSuccessMessage] = useState<string | null>(null);
+  const [logSuccessTimer, setLogSuccessTimer] = useState<NodeJS.Timeout | null>(null);
   const [deleteConfirmMeal, setDeleteConfirmMeal] = useState<MealTemplate | null>(null);
   const [deleteConfirmItemIndex, setDeleteConfirmItemIndex] = useState<number | null>(null);
   const [showManualFoodForm, setShowManualFoodForm] = useState(false);
@@ -325,6 +327,124 @@ export default function Meals() {
     } catch (error) {
       console.error('Failed to delete meal section:', error);
       alert('Failed to delete meal section. Please try again.');
+    }
+  };
+
+  // Helper to map meal label to nutrition log meal group
+  const mapMealToGroup = (mealLabel: string): 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Uncategorized' => {
+    const label = mealLabel.toLowerCase();
+    if (label.includes('breakfast')) return 'Breakfast';
+    if (label.includes('lunch')) return 'Lunch';
+    if (label.includes('dinner')) return 'Dinner';
+    if (label.includes('snack')) return 'Snacks';
+    return 'Uncategorized';
+  };
+
+  // Log single meal to nutrition log
+  const handleLogMealToToday = async (dayId: string, mealId: string, mealLabel: string) => {
+    if (!editingMealPlan) return;
+    
+    const day = editingMealPlan.days.find(d => d.id === dayId);
+    if (!day) return;
+    
+    const meal = day.meals.find(m => m.id === mealId);
+    if (!meal || meal.foods.length === 0) return;
+    
+    try {
+      const targetDate = getTodayLocalDateKey();
+      const mealGroup = mapMealToGroup(mealLabel);
+      
+      // Create FoodLogItem for each food in the meal
+      let foodItems = 0;
+      for (const food of meal.foods) {
+        const foodLogItem: FoodLogItem = {
+          id: crypto.randomUUID(),
+          name: food.name,
+          servingSize: food.servingSize || '1 serving',
+          quantidade: food.quantidade || 1,
+          calories: food.calories || 0,
+          proteinG: food.proteinG || 0,
+          carbsG: food.carbsG || 0,
+          fatG: food.fatG || 0,
+          baseUnit: food.baseUnit || 'serving',
+          servingGrams: food.servingGrams || 100,
+          computedTotalGrams: food.computedTotalGrams || (food.quantidade || 1) * (food.servingGrams || 100),
+          fdcId: food.fdcId,
+          mealGroup,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        await repositories.nutrition.addFoodToDayLog(targetDate, foodLogItem);
+        foodItems++;
+      }
+      
+      // Show success message
+      setLogSuccessMessage(`Logged ${foodItems} item${foodItems !== 1 ? 's' : ''} to ${mealLabel}`);
+      
+      // Auto-dismiss after 3 seconds
+      if (logSuccessTimer) clearTimeout(logSuccessTimer);
+      const timer = setTimeout(() => setLogSuccessMessage(null), 3000);
+      setLogSuccessTimer(timer);
+      
+    } catch (error) {
+      console.error('Failed to log meal:', error);
+      alert('Failed to log meal. Please try again.');
+    }
+  };
+
+  // Log entire day to nutrition log
+  const handleLogDayToToday = async () => {
+    if (!editingMealPlan) return;
+    
+    // Just log the first day
+    const day = editingMealPlan.days[0];
+    if (!day) return;
+    
+    try {
+      const targetDate = getTodayLocalDateKey();
+      let totalItems = 0;
+      
+      for (const meal of day.meals) {
+        if (meal.foods.length === 0) continue;
+        
+        const mealGroup = mapMealToGroup(meal.label);
+        
+        for (const food of meal.foods) {
+          const foodLogItem: FoodLogItem = {
+            id: crypto.randomUUID(),
+            name: food.name,
+            servingSize: food.servingSize || '1 serving',
+            quantidade: food.quantidade || 1,
+            calories: food.calories || 0,
+            proteinG: food.proteinG || 0,
+            carbsG: food.carbsG || 0,
+            fatG: food.fatG || 0,
+            baseUnit: food.baseUnit || 'serving',
+            servingGrams: food.servingGrams || 100,
+            computedTotalGrams: food.computedTotalGrams || (food.quantidade || 1) * (food.servingGrams || 100),
+            fdcId: food.fdcId,
+            mealGroup,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          
+          await repositories.nutrition.addFoodToDayLog(targetDate, foodLogItem);
+          totalItems++;
+        }
+      }
+      
+      // Show success message
+      setLogSuccessMessage(`Logged ${totalItems} item${totalItems !== 1 ? 's' : ''} from today's meals`);
+      
+      // Auto-dismiss after 3 seconds
+      if (logSuccessTimer) clearTimeout(logSuccessTimer);
+      const timer = setTimeout(() => setLogSuccessMessage(null), 3000);
+      setLogSuccessTimer(timer);
+      
+    } catch (error) {
+      console.error('Failed to log day:', error);
+      alert('Failed to log day. Please try again.');
     }
   };
 
@@ -954,6 +1074,27 @@ export default function Meals() {
                 </div>
               </div>
 
+              {/* Log Day to Today Button */}
+              <div className="mb-6">
+                <button
+                  onClick={handleLogDayToToday}
+                  disabled={editingMealPlan.days.length === 0}
+                  className="btn btn-primary w-full"
+                  data-testid="meal-plan-log-day-btn"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Log Day to Today
+                </button>
+              </div>
+
+              {/* Success Message Toast */}
+              {logSuccessMessage && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center">
+                  <Check className="w-5 h-5 text-green-600 mr-2" />
+                  <span className="text-green-700 text-sm">{logSuccessMessage}</span>
+                </div>
+              )}
+
               {/* Day Structure */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Day Structure</h3>
@@ -967,6 +1108,16 @@ export default function Meals() {
                           <div className="flex justify-between items-center mb-2">
                             <div className="font-medium text-gray-900">{meal.label}</div>
                             <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleLogMealToToday(day.id, meal.id, meal.label)}
+                                disabled={meal.foods.length === 0}
+                                className="text-green-600 hover:text-green-700 text-sm flex items-center disabled:text-gray-400 disabled:cursor-not-allowed"
+                                title={meal.foods.length === 0 ? 'Add foods to this meal first' : 'Log this meal to today'}
+                                data-testid={`meal-plan-log-meal-btn-${meal.label.toLowerCase().replace(/\s+/g, '-')}`}
+                              >
+                                <Check className="w-4 h-4 mr-1" />
+                                Log
+                              </button>
                               <button
                                 onClick={() => {
                                   setAddingFoodToMeal({ dayId: day.id, mealId: meal.id });
