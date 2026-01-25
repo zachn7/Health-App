@@ -176,6 +176,8 @@ export const testIds = {
     presetsEmptyState: 'workouts-presets-empty-state',
     presetSearchInput: 'workouts-preset-search-input',
     presetCard: (id: string) => `workouts-preset-card-${id}`,
+    presetImportBtn: (id: string) => `workouts-preset-import-btn-${id}`,
+    importWarning: 'workouts-preset-import-warning',
     
     // Generator
     generateEmptyPlanButton: 'generate-empty-workout-plan-btn',

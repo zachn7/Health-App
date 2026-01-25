@@ -6,7 +6,8 @@ import { safeJSONStringify, CurrentWorkoutSchema } from '../lib/schemas';
 import { testIds } from '../testIds';
 import { workoutPresets } from '../data/presetWorkouts';
 import type { WorkoutPreset } from '../types';
-import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings, Sparkles, Search, Filter, XCircle } from 'lucide-react';
+import { resolveWorkoutDay } from '../lib/preset-slot-resolver';
+import { Edit3, Plus, RefreshCw, Trash2, X, AlertCircle, ArrowLeftRight, Sliders, User, Settings, Sparkles, Search, Filter, XCircle, Download, AlertTriangle } from 'lucide-react';
 import ExercisePicker from '../components/ExercisePicker';
 import type { WorkoutPlan, ExerciseDBItem, Profile, GeneratorOptions, ExperienceLevel, GoalType } from '../types';
 
@@ -45,6 +46,8 @@ export default function Workouts() {
   const [presetFilterTags, setPresetFilterTags] = useState<string[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<WorkoutPreset | null>(null);
   const [showPresetPreview, setShowPresetPreview] = useState(false);
+  const [importingPreset, setImportingPreset] = useState(false);
+  const [importWarning, setImportWarning] = useState<string | null>(null);
 
   const [editingWorkout, setEditingWorkout] = useState<EditingWorkout | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -335,6 +338,100 @@ export default function Workouts() {
     } catch (error) {
       console.error('Failed to update exercise prescription:', error);
       alert('Failed to update exercise prescription');
+    }
+  };
+
+  const handleImportPreset = async (preset: WorkoutPreset) => {
+    try {
+      setImportingPreset(true);
+      setImportWarning(null);
+      
+      // Resolve all workout days from the preset
+      const weeks: any[] = [];
+      let totalUnresolved = 0;
+      
+      // Create a single week (most presets are weekly)
+      const week = preset.durationWeeks;
+      for (let i = 0; i < week; i++) {
+        const workouts: any[] = [];
+        
+        for (let dayIndex = 0; dayIndex < preset.days.length; dayIndex++) {
+          const presetDay = preset.days[dayIndex];
+          
+          // Resolve exercises for this day
+          const { resolved, unresolvedCount } = await resolveWorkoutDay(
+            preset.id,
+            dayIndex,
+            presetDay.slots,
+            preset.equipment
+          );
+          
+          totalUnresolved += unresolvedCount;
+          
+          // Convert resolved exercises to plan format using the same order as slots
+          const exercises = resolved.map((resolvedExercise, idx) => {
+            const slot = presetDay.slots[idx];
+            return {
+              exerciseId: resolvedExercise.exerciseId,
+              sets: {
+                sets: slot.sets || 3,
+                repsRange: resolvedExercise.unresolved
+                  ? { min: 8, max: 12 }
+                  : typeof slot.reps === 'object'
+                    ? slot.reps
+                    : undefined,
+                reps: typeof slot.reps === 'number'
+                  ? slot.reps
+                  : undefined,
+                restTime: slot.restSeconds,
+                notes: resolvedExercise.unresolved ? 'Please swap this with a real exercise' : undefined,
+              },
+            };
+          });
+          
+          workouts.push({
+            day: presetDay.name,
+            exercises,
+            notes: presetDay.focus,
+          });
+        }
+        
+        weeks.push({
+          week: i + 1,
+          workouts,
+        });
+      }
+      
+      // Create the workout plan
+      const newPlan: WorkoutPlan = {
+        id: crypto.randomUUID(),
+        name: preset.title,
+        weeks,
+        generatedBy: 'manual',
+        notes: `Imported from preset: ${preset.title}\n${preset.summary}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // Save to database
+      const savedPlan = await repositories.workout.createWorkoutPlan(newPlan);
+      
+      // Refresh workout plans
+      loadWorkoutData();
+      
+      // Show warning if there were unresolved exercises
+      if (totalUnresolved > 0) {
+        setImportWarning(`${totalUnresolved} exercise(s) could not be auto-matched. You'll need to swap them manually.`);
+      }
+      
+      // Switch to My Programs and select the imported plan
+      setActiveTab('myPrograms');
+      setSelectedPlan(savedPlan);
+    } catch (error) {
+      console.error('Failed to import preset:', error);
+      alert('Failed to import preset. Please try again.');
+    } finally {
+      setImportingPreset(false);
     }
   };
 
@@ -1055,16 +1152,31 @@ export default function Workouts() {
                         {preset.equipment.length > 0 ? `Equipment: ${preset.equipment.join(', ')}` : 'No equipment required'}
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedPreset(preset);
-                        setShowPresetPreview(true);
-                      }}
-                      className="btn btn-secondary text-sm"
-                      data-testid={`${testIds.presets.previewBtn}-${preset.id}`}
-                    >
-                      Preview
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleImportPreset(preset)}
+                        disabled={importingPreset}
+                        className="btn btn-primary text-sm"
+                        data-testid={testIds.workouts.presetImportBtn(preset.id)}
+                      >
+                        {importingPreset ? (
+                          <RefreshCw className="w-4 h-4 mr-1 inline animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-1 inline" />
+                        )}
+                        Import
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedPreset(preset);
+                          setShowPresetPreview(true);
+                        }}
+                        className="btn btn-secondary text-sm"
+                        data-testid={`${testIds.presets.previewBtn}-${preset.id}`}
+                      >
+                        Preview
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1212,6 +1324,24 @@ export default function Workouts() {
       {/* Selected Plan Details (My Programs only) */}
       {activeTab === 'myPrograms' && selectedPlan && (
         <div className="card">
+          {/* Import Warning Banner */}
+          {importWarning && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start space-x-3" data-testid={testIds.workouts.importWarning}>
+              <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-medium text-yellow-800">Some exercises need attention</h4>
+                <p className="text-sm text-yellow-700 mt-1">{importWarning}</p>
+              </div>
+              <button
+                onClick={() => setImportWarning(null)}
+                className="text-yellow-600 hover:text-yellow-800 flex-shrink-0"
+                aria-label="Dismiss warning"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-medium text-gray-900">{selectedPlan.name}</h2>
             <button
