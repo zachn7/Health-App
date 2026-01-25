@@ -102,9 +102,11 @@ Test IDs for preset imports:
 - `workouts.presetCard(id)` - Workout preset card wrapper
 - `workouts.presetImportBtn(id)` - Import button for workout preset
 - `workouts.importWarning` - Warning banner for unresolved exercises
+- `workouts.presetsFiltersToggle` - Toggle button for filters panel
 - `meals.presetCard(id)` - Meal preset card wrapper
 - `meals.presetImportBtn(id)` - Import button for meal preset
 - `meals.presetImportBtn(preset)` - Helper with preset ID parameter
+- `meals.presetsFiltersToggle` - Toggle button for filters panel
 - `presets.previewBtn` - Preview button (shared between workout and meal presets)
 
 **Pattern Guide:**
@@ -112,6 +114,31 @@ Test IDs for preset imports:
 - Use `getByTestId(testIds.workouts.importWarning)` for warning banner verification
 - Check for "Imported from preset:" text to verify successful import
 - Use `getByRole('button', { name: 'Swap' })` for exercise swap functionality
+
+### Meal Plan Editor
+
+For meal plan editor interactions:
+
+```typescript
+// Verify editor is open
+await expect(page.getByTestId('meal-plan-title-input')).toBeVisible();
+
+// Log day to today
+await page.getByTestId('meal-plan-log-day-btn').click();
+await expect(page.locator('div').filter({ hasText: /Logged/i })).toBeVisible();
+
+// Log specific meal
+const logButtons = page.getByRole('button', { name: 'Log' });
+await logButtons.first().click();
+```
+
+Test IDs for meal plan editor:
+- `mealPlan.titleInput` - Plan name input field
+- `mealPlan.logDayBtn` - Log entire day to today button
+- `mealPlan.logMealBtn(mealKey)` - Log specific meal to today button
+- `mealPlan.closeEditorBtn` - Close editor button
+- Pattern: `meal-plan-{planId}-day-{dayId}-meal-{mealId}-add-food`
+- Pattern: `meal-plan-{planId}-day-{dayId}-meal-{mealId}-delete-meal`
 
 ### Waiting for Asynchronous Operations
 
@@ -151,6 +178,29 @@ await page.getByRole('button', { name: 'Submit' }).click();
 // Wait for success/error
 await expect(page.getByTestId('success-message')).toBeVisible();
 ```
+
+### Nutrition Log Meal Groups
+
+For nutrition log with meal-time grouping:
+
+```typescript
+// Verify section is visible
+const dinnerSection = page.locator('div').filter({ hasText: 'Dinner' });
+await expect(dinnerSection.first()).toBeVisible();
+
+// Add food to specific meal group
+await page.getByTestId('nutrition-add-food-breakfast').click();
+
+// Import from meal plan
+await page.getByTestId('nutrition-import-meal-plan-btn').click();
+await expect(page.locator('select')).toBeVisible();
+```
+
+Test IDs for nutrition log meal groups:
+- `nutrition.importMealPlanBtn` - Import from meal plan button
+- `nutrition.addFood.{mealGroup}` - Add food per meal group (breakfast, lunch, dinner, snacks)
+- Meal groups: Breakfast, Lunch, Dinner, Snacks, Uncategorized
+- Preserving legacy behavior: items without mealGroup appear as Uncategorized
 
 ## When Tests Fail
 
