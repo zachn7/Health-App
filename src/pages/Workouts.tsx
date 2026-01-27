@@ -40,6 +40,8 @@ export default function Workouts() {
   const [substituteSuccess, setSubstituteSuccess] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null);
   const [selectedWeek, setSelectedWeek] = useState(0);
+  const [weekCarouselStart, setWeekCarouselStart] = useState(0);
+  const VISIBLE_WEEKS = 5;
 
   // Preset state
   const [presetSearch, setPresetSearch] = useState('');
@@ -707,6 +709,45 @@ export default function Workouts() {
     } catch (error) {
       console.error('Failed to rename day:', error);
       alert('Failed to rename day.');
+    }
+  };
+
+  const toggleDayCompletion = async (plan: WorkoutPlan, weekIndex: number, dayIndex: number) => {
+    if (!plan) return;
+    
+    try {
+      const updatedPlan = { ...plan };
+      
+      // Initialize completedDays array if it doesn't exist
+      if (!updatedPlan.completedDays) {
+        updatedPlan.completedDays = [];
+      }
+      
+      // Calculate global day index across all weeks
+      let dayGlobalIndex = 0;
+      for (let i = 0; i < weekIndex; i++) {
+        dayGlobalIndex += updatedPlan.weeks[i].workouts.length;
+      }
+      dayGlobalIndex += dayIndex;
+      
+      // Toggle completion
+      const completedIndex = updatedPlan.completedDays.indexOf(dayGlobalIndex);
+      if (completedIndex === -1) {
+        updatedPlan.completedDays.push(dayGlobalIndex);
+      } else {
+        updatedPlan.completedDays.splice(completedIndex, 1);
+      }
+      
+      updatedPlan.updatedAt = new Date().toISOString();
+      await repositories.workout.updateWorkoutPlan(updatedPlan.id, updatedPlan);
+      
+      setWorkoutPlans(prev => 
+        prev.map(p => p.id === updatedPlan.id ? updatedPlan : p)
+      );
+      setSelectedPlan(updatedPlan);
+    } catch (error) {
+      console.error('Failed to toggle day completion:', error);
+      alert('Failed to update completion status.');
     }
   };
 
@@ -1403,21 +1444,52 @@ export default function Workouts() {
           
           <div className="space-y-6">
             <div>
-              <label className="label">Select Week</label>
-              <div className="flex space-x-2">
-                {selectedPlan.weeks.map((_, weekIndex) => (
-                  <button
-                    key={weekIndex}
-                    onClick={() => setSelectedWeek(weekIndex)}
-                    className={`px-3 py-1 rounded text-sm ${
-                      selectedWeek === weekIndex
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    Week {weekIndex + 1}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between">
+                <label className="label mb-0">Select Week</label>
+                {selectedPlan.weeks.length > VISIBLE_WEEKS && (
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={() => setWeekCarouselStart(Math.max(0, weekCarouselStart - 1))}
+                      disabled={weekCarouselStart === 0}
+                      className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid="workout-plan-weeks-prev"
+                      aria-label="Previous weeks"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setWeekCarouselStart(Math.min(selectedPlan.weeks.length - VISIBLE_WEEKS, weekCarouselStart + 1))}
+                      disabled={weekCarouselStart + VISIBLE_WEEKS >= selectedPlan.weeks.length}
+                      className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid="workout-plan-weeks-next"
+                      aria-label="Next weeks"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="flex space-x-2 mt-2">
+                {selectedPlan.weeks
+                  .slice(weekCarouselStart, weekCarouselStart + VISIBLE_WEEKS)
+                  .map((_, weekIndex) => (
+                    <button
+                      key={weekIndex + weekCarouselStart}
+                      onClick={() => setSelectedWeek(weekIndex + weekCarouselStart)}
+                      className={`px-3 py-1 rounded text-sm ${
+                        selectedWeek === weekIndex + weekCarouselStart
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                      data-testid={`workout-plan-week-btn-${weekIndex + weekCarouselStart}`}
+                    >
+                      Week {weekIndex + weekCarouselStart + 1}
+                    </button>
+                  ))}
               </div>
             </div>
             
@@ -1442,15 +1514,42 @@ export default function Workouts() {
                   const isEditing = editingWorkout?.weekIndex === selectedWeek && 
                                    editingWorkout?.dayIndex === dayIndex;
                   
+                  // Calculate global day index for completion tracking
+                  let dayGlobalIndex = 0;
+                  for (let i = 0; i < selectedWeek; i++) {
+                    dayGlobalIndex += selectedPlan.weeks[i].workouts.length;
+                  }
+                  dayGlobalIndex += dayIndex;
+                  const isDayCompleted = selectedPlan.completedDays?.includes(dayGlobalIndex) || false;
+                  
                   return (
                     <div 
                       key={dayIndex} 
                       data-testid={`workout-day-${selectedWeek}-${dayIndex}`}
-                      className="border rounded-lg p-4"
+                      className={`border rounded-lg p-4 transition-opacity ${
+                        isDayCompleted ? 'bg-green-50 border-green-200' : ''
+                      }`}
                     >
                       <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          {isEditing ? (
+                        <div className="flex items-start space-x-3 flex-1">
+                          <button
+                            onClick={() => toggleDayCompletion(selectedPlan, selectedWeek, dayIndex)}
+                            className={`mt-0.5 flex items-center justify-center w-5 h-5 rounded border transition-colors ${
+                              isDayCompleted
+                                ? 'bg-green-500 border-green-500 text-white'
+                                : 'border-gray-300 hover:border-green-500'
+                            }`}
+                            data-testid={`workout-plan-day-complete-${selectedWeek}-${dayIndex}`}
+                            aria-label={isDayCompleted ? 'Mark as incomplete' : 'Mark as complete'}
+                          >
+                            {isDayCompleted && (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                          <div className="flex-1">
+                            {isEditing ? (
                             <input
                               type="text"
                               defaultValue={workout.day}
@@ -1475,6 +1574,7 @@ export default function Workouts() {
                           {workout.notes && (
                             <p className="text-sm text-gray-600 mt-1">{workout.notes}</p>
                           )}
+                          </div>
                         </div>
                         <div className="flex space-x-2">
                           {isEditing ? (
@@ -1620,7 +1720,7 @@ export default function Workouts() {
                                   />
                                 )}
                                 <div className="flex-1">
-                                  <div className="font-medium">
+                                  <div className="font-medium" data-testid={`${testIds.workouts.planExercise(exercise.exerciseId)}`}>
                                     {exerciseName}
                                   </div>
                                   <div className="text-sm text-gray-600">
@@ -1648,19 +1748,21 @@ export default function Workouts() {
                                 {isEditing && (
                                   <>
                                     <div className="flex space-x-1">
-                                      <button
-                                        onClick={() => {
-                                          setSwapTarget({ weekIndex: selectedWeek, dayIndex, exerciseIndex: exIndex });
-                                          setShowExercisePicker(true);
-                                        }}
-                                        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs"
-                                        title="Replace with different exercise"
-                                        aria-label="Swap exercise"
-                                        data-testid="workout-editor-exercise-swap-btn"
-                                      >
-                                        <ArrowLeftRight className="w-4 h-4" />
-                                        <span className="hidden md:inline">Swap</span>
-                                      </button>
+                                      <span data-testid={testIds.workouts.replaceExerciseButton}>
+                                        <button
+                                          onClick={() => {
+                                            setSwapTarget({ weekIndex: selectedWeek, dayIndex, exerciseIndex: exIndex });
+                                            setShowExercisePicker(true);
+                                          }}
+                                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs"
+                                          title="Replace with different exercise"
+                                          aria-label="Swap exercise"
+                                          data-testid="workout-editor-exercise-swap-btn"
+                                        >
+                                          <ArrowLeftRight className="w-4 h-4" />
+                                          <span className="hidden md:inline">Swap</span>
+                                        </button>
+                                      </span>
                                       <button
                                         onClick={() => editExercisePrescription(selectedWeek, dayIndex, exIndex)}
                                         className="text-green-600 hover:text-green-800 flex items-center gap-1 text-xs"

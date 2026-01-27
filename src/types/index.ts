@@ -151,6 +151,7 @@ export interface WorkoutPlan {
   createdAt: string;
   updatedAt: string;
   generationSeed?: number; // Seed used for deterministic generation
+  completedDays?: number[]; // Indices of completed days (optional, for tracking)
 }
 
 export interface ExerciseLogEntry {
