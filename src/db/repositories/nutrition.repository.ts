@@ -363,6 +363,8 @@ export class NutritionRepository {
    */
   async importMealPlanMeal(date: string, mealFoods: any[]): Promise<NutritionLog> {
     // Convert meal plan foods to food log items
+    // Note: We preserve the exact servingGrams and computedTotalGrams from the meal plan food
+    // to ensure accurate display of servings+grams equivalence (no 100g fallback)
     const foodLogItems = mealFoods.map(food => ({
       id: crypto.randomUUID(),
       name: food.name,
@@ -376,8 +378,8 @@ export class NutritionRepository {
       sugarG: food.sugarG,
       sodiumMg: food.sodiumMg,
       baseUnit: food.baseUnit || 'serving',
-      servingGrams: food.servingGrams || 100,
-      computedTotalGrams: food.computedTotalGrams || (food.quantidade || 1) * (food.servingGrams || 100),
+      servingGrams: food.servingGrams,
+      computedTotalGrams: food.computedTotalGrams,
       fdcId: food.fdcId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

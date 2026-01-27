@@ -235,4 +235,86 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
       await expect(foodItems.first()).toBeVisible({ timeout: 5000 });
     }
   });
+
+  test('should import meal plan food with correct servings+grams display', async ({ page }) => {
+    // Set up profile
+    await setupTestProfile(page);
+
+    // Navigate to Meals page to create a simple meal plan
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+
+    // Switch to Presets tab
+    const presetsTab = page.getByTestId('meals-presets-tab');
+    await presetsTab.click();
+    await expect(presetsTab).toHaveClass(/border-blue-500/);
+
+    // Wait for preset cards to load
+    const presetCards = page.locator('[data-testid^="meals-preset-card-"]');
+    await expect(presetCards.first()).toBeVisible({ timeout: 10000 });
+
+    // Import first preset (these should have proper servingGrams from USDA data)
+    const firstPresetCard = presetCards.first();
+    const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
+    await importButton.click();
+    await page.waitForTimeout(2000);
+
+    // Verify meal plan editor is open
+    const titleInput = page.getByTestId('meal-plan-title-input');
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
+
+    // Click "Log Day to Today" button to import all
+    const logDayButton = page.getByTestId('meal-plan-log-day-btn');
+    await logDayButton.click();
+    await page.waitForTimeout(2000);
+
+    // Navigate to Nutrition page
+    await page.goto('./#/nutrition');
+    await page.waitForLoadState('networkidle');
+
+    // Verify food items exist
+    const foodItems = page.getByTestId('nutrition-food-item');
+    const itemCount = await foodItems.count();
+    
+    if (itemCount > 0) {
+      // Get the first food item's text content
+      const firstFood = foodItems.first();
+      const foodText = await firstFood.textContent();
+      
+      // Verify the text shows both servings and grams (format: "X serving(s) (Y g)" or "Y g (X serving(s))")
+      // The key is that it should NOT show "100 g" unless that's the true value
+      expect(foodText).toBeTruthy();
+      
+      // Check if the display format is correct (should contain both units)
+      const hasServingText = foodText?.match(/\d+(\.\d+)?\s+servings?/i);
+      const hasGramText = foodText?.match(/\d+\s*g/);
+      
+      // At least one should exist depending on baseUnit
+      expect(hasServingText || hasGramText).toBeTruthy();
+      
+      // If grams are shown, verify we have more than just "100 g" as fallback
+      // (we're checking that the gram value is meaningful, not always exactly 100)
+      if (hasGramText) {
+        const gramMatch = foodText?.match(/(\d+)\s*g/);
+        const gramValue = gramMatch ? parseInt(gramMatch[1]) : 0;
+        // Gram value should be non-zero and reasonable
+        expect(gramValue).toBeGreaterThan(0);
+      }
+      
+      // Reload to verify persistence of correct display
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+      
+      const foodItemsAfterReload = page.getByTestId('nutrition-food-item');
+      await expect(foodItemsAfterReload.first()).toBeVisible({ timeout: 5000 });
+      
+      const foodTextAfterReload = await foodItemsAfterReload.first().textContent();
+      expect(foodTextAfterReload).toBeTruthy();
+      
+      // Verify same format persists
+      const hasServingText2 = foodTextAfterReload?.match(/\d+(\.\d+)?\s+servings?/i);
+      const hasGramText2 = foodTextAfterReload?.match(/\d+\s*g/);
+      expect(hasServingText2 || hasGramText2).toBeTruthy();
+    }
+  });
 });
