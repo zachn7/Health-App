@@ -42,6 +42,8 @@ export default function Workouts() {
   const [selectedWeek, setSelectedWeek] = useState(0);
   const [weekCarouselStart, setWeekCarouselStart] = useState(0);
   const VISIBLE_WEEKS = 5;
+  const [dayCarouselStart, setDayCarouselStart] = useState(0);
+  const VISIBLE_DAYS = 5;
 
   // Preset state
   const [presetSearch, setPresetSearch] = useState('');
@@ -1508,6 +1510,66 @@ export default function Workouts() {
                   </button>
                 </div>
               </div>
+              
+              {/* Day Selector Carousel */}
+              {selectedPlan.weeks[selectedWeek]?.workouts.length > VISIBLE_DAYS && (
+                <div className="flex items-center justify-between mb-4 bg-gray-50 p-3 rounded">
+                  <label className="text-sm text-gray-600 mb-0">Jump to Day:</label>
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={() => setDayCarouselStart(Math.max(0, dayCarouselStart - 1))}
+                      disabled={dayCarouselStart === 0}
+                      className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid="workout-plan-days-prev"
+                      aria-label="Previous days"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setDayCarouselStart(Math.min(selectedPlan.weeks[selectedWeek].workouts.length - VISIBLE_DAYS, dayCarouselStart + 1))}
+                      disabled={dayCarouselStart + VISIBLE_DAYS >= selectedPlan.weeks[selectedWeek].workouts.length}
+                      className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid="workout-plan-days-next"
+                      aria-label="Next days"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {selectedPlan.weeks[selectedWeek]?.workouts.length > VISIBLE_DAYS && (
+                <div className="flex space-x-2 mb-4 overflow-x-auto">
+                  {selectedPlan.weeks[selectedWeek].workouts
+                    .slice(dayCarouselStart, dayCarouselStart + VISIBLE_DAYS)
+                    .map((workout, dayIndex) => {
+                      const globalDayIndex = dayCarouselStart + dayIndex;
+                      return (
+                        <button
+                          key={globalDayIndex}
+                          onClick={() => {
+                            const dayCard = document.querySelector(`[data-testid="workout-day-${selectedWeek}-${globalDayIndex}"]`);
+                            if (dayCard) {
+                              dayCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                          }}
+                          className={`px-3 py-1 rounded text-sm ${
+                            dayCarouselStart === globalDayIndex
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          data-testid={`workout-plan-day-btn-${globalDayIndex}`}
+                        >
+                          {workout.day}
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
               
               <div className="space-y-4">
                 {selectedPlan.weeks[selectedWeek]?.workouts.map((workout, dayIndex) => {
