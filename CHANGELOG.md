@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.27] - 2026-01-27
+
+### Fixed
+- **Nutrition Log Display Fix**: Imported meal plan foods now show correct servings+grams equivalence
+  - Removed 100g fallback from import function to preserve true portion sizes
+  - Branded foods (e.g., cheese at 28g, yogurt at 120g) display accurately
+  - Manual foods with custom grams also display correctly
+- **Nutrition Log Meal Groups**: All meal sections now visible even when empty
+  - Breakfast, Lunch, Dinner, Snacks sections always show with Add Food buttons
+  - Added per-section Add Food buttons with testIds for automation
+  - Foods added via per-section buttons use correct mealGroup field
+  - Empty sections show helpful messaging
+
+### Added
+- **Meal Plan Editor Enhancements**:
+  - Manual food entry option in each meal section (works without USDA API)
+  - Per-section "Manual" button to add custom foods
+  - Inline servings/grams editing for food items in meal plans
+  - Delete button for saved meal plans with confirmation modal
+  - Accessible confirm modal with Cancel button auto-focused
+  - TestIds for all new edit controls and delete functionality
+- **Workout Plans**: Day selector carousel with completion tracking
+  - Swipeable day cards with visual completion indicators
+  - Day marking/progress persistence
+  - Smooth animations and transitions
+- **Workout Editor**: Swap replaces exercise in-place and keeps edit mode active
+  - Improved UX for replacing exercises in workout plans
+  - No unintended editor close after swap operation
+- **E2E Tests**:
+  - Test: Import meal plan food with correct servings+grams display
+  - Test: Edit meal plan food serving and persist after save
+  - Test: Delete meal plan with confirm modal and persist
+  - Test: Add food to Dinner section using per-section Add Food button
+  - Test: Meal group persistence after page reload
+  - Test: Workout plans day selector and completion tracking
+
+### Changed
+- Meal plan food items now preserve servingGrams and computedTotalGrams during import
+- Meal plan cards restructured for better UX (delete button, inline editing)\- Enhanced error handling for meal plan operations
+
+### Tested
+- All 183 E2E tests passing (0 failed, 0 skipped)
+- Meal plan import/export flows verified
+- Manual food entry tested across Nutrition and Meals pages
+- Serving size editing verified in both Nutrition Log and Meal Plan editor
+- Delete flow with confirmation modal tested
+
 ## [0.2.6] - 2025-01-XX
 
 ### Fixed
