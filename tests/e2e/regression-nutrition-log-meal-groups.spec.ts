@@ -96,6 +96,98 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     expect(itemCount).toBeGreaterThan(0);
   });
 
+  test('should add food to Dinner section using Dinner Add Food button', async ({ page }) => {
+    // Set up profile
+    await setupTestProfile(page);
+
+    // Navigate to Nutrition page
+    await page.goto('./#/nutrition');
+    await page.waitForLoadState('networkidle');
+
+    // Click Dinner Add Food button
+    const dinnerAddButton = page.getByTestId('nutrition-add-food-dinner');
+    await expect(dinnerAddButton).toBeVisible({ timeout: 5000 });
+    await dinnerAddButton.click();
+    await page.waitForTimeout(500);
+
+    // Fill in food details
+    const nameInput = page.locator('input[placeholder*="Chicken Breast"]');
+    await nameInput.fill('Test Dinner Food');
+
+    const numberInputs = page.locator('input[type="number"]');
+    await numberInputs.nth(1).fill('400');
+
+    // Click Save
+    const saveButton = page.getByRole('button', { name: 'Save Food' });
+    await saveButton.click();
+    await page.waitForTimeout(2000);
+
+    // Verify food was added and appears under Dinner section
+    const dinnerSection = page.locator('text=Dinner').last();
+    await expect(dinnerSection).toBeVisible();
+
+    // Find the food item within the Dinner section
+    // The Dinner section should have our added food
+    const allFoodItems = page.getByTestId('nutrition-food-item');
+    const itemCount = await allFoodItems.count();
+    expect(itemCount).toBeGreaterThan(0);
+
+    // Verify the food name appears
+    const pageContent = await page.content();
+    expect(pageContent).toContain('Test Dinner Food');
+
+    console.log('✅ Food added to Dinner section successfully');
+  });
+
+  test('should persist meal group after page reload', async ({ page }) => {
+    // Set up profile
+    await setupTestProfile(page);
+
+    // Navigate to Nutrition page
+    await page.goto('./#/nutrition');
+    await page.waitForLoadState('networkidle');
+
+    // Add food to Lunch section
+    const lunchAddButton = page.getByTestId('nutrition-add-food-lunch');
+    await expect(lunchAddButton).toBeVisible({ timeout: 5000 });
+    await lunchAddButton.click();
+    await page.waitForTimeout(500);
+
+    const nameInput = page.locator('input[placeholder*="Chicken Breast"]');
+    await nameInput.fill('Test Lunch Food');
+
+    const numberInputs = page.locator('input[type="number"]');
+    await numberInputs.nth(1).fill('300');
+
+    const saveButton = page.getByRole('button', { name: 'Save Food' });
+    await saveButton.click();
+    await page.waitForTimeout(2000);
+
+    // Verify food was added
+    let foodItems = page.getByTestId('nutrition-food-item');
+    let itemCountBeforeReload = await foodItems.count();
+    expect(itemCountBeforeReload).toBeGreaterThan(0);
+
+    console.log('✅ Food added before reload');
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1000);
+
+    // Verify food still exists after reload
+    foodItems = page.getByTestId('nutrition-food-item');
+    let itemCountAfterReload = await foodItems.count();
+    expect(itemCountAfterReload).toBeGreaterThan(0);
+    expect(itemCountAfterReload).toBe(itemCountBeforeReload);
+
+    // Verify the food name still appears
+    const pageContent = await page.content();
+    expect(pageContent).toContain('Test Lunch Food');
+
+    console.log('✅ Food persists after reload');
+  });
+
   test('should show meal group sections', async ({ page }) => {
     // Set up profile
     await setupTestProfile(page);

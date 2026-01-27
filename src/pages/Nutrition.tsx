@@ -1377,6 +1377,28 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
         {!currentLog || currentLog.items.length === 0 ? (
           <div className="text-center py-8" data-testid="nutrition-log-list">
             <p className="text-gray-600">No food items logged for this date</p>
+            {/* Show empty meal group sections for adding foods */}
+            <div className="space-y-4 mt-4">
+              {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).map((mealGroup) => (
+                <div key={mealGroup} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Section Header with Add Food button */}
+                  <div className="flex justify-between items-center p-3 bg-gray-50 border-b border-gray-200">
+                    <h4 className="font-medium text-gray-900">{mealGroup}</h4>
+                    <button
+                      data-testid={`nutrition-add-food-${mealGroup.toLowerCase()}`}
+                      onClick={() => {
+                        setActiveMealGroup(mealGroup);
+                        setShowAddFood(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Food
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="space-y-4" data-testid="nutrition-log-list">
@@ -1384,9 +1406,7 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
               const groupItems = getItemsByMealGroup(mealGroup);
               const groupTotals = calculateGroupTotals(groupItems);
               
-              // Only show sections that have items
-              if (groupItems.length === 0) return null;
-              
+              // Always show all meal group sections, even if empty
               return (
                 <div key={mealGroup} className="border border-gray-200 rounded-lg overflow-hidden">
                   {/* Section Header with Add Food button */}
@@ -1415,7 +1435,12 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
                   
                   {/* Food Items in this group */}
                   <div className="divide-y divide-gray-200">
-                    {groupItems.map((item) => (
+                    {groupItems.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500 text-sm">
+                        No items in this {mealGroup.toLowerCase()} section. Click "Add Food" above to add items.
+                      </div>
+                    ) : (
+                      groupItems.map((item) => (
               <div key={item.id} data-testid="nutrition-food-item" className="p-3 bg-gray-50 rounded-lg">
                 {showServingSizeEdit === item.id ? (
                   // Edit mode - Meals-style UI with toggle + macro tiles
@@ -1666,7 +1691,8 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
                   </div>
                 )}
               </div>
-            ))}
+            ))
+                      )}
                 </div>
                 </div>
               );
