@@ -119,11 +119,13 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     console.log('Exercise count before substitution:', exerciseCountBefore);
     
     // Click the substitute button on the first exercise
-    const substituteButton = firstExercise.getByTestId('substitute-exercise-btn');
+    // Note: The substitute button is in the workout editor, sibling to the plan-exercise-{id} element
+    const firstExerciseRow = page.locator('[data-testid^="workout-editor-exercise-row-"]').first();
+    const substituteButton = firstExerciseRow.getByTestId('substitute-exercise-btn');
     await expect(substituteButton).toBeVisible({ timeout: 3000 });
     
     // Check that no error is visible on the first exercise before clicking
-    const errorMessageOnFirst = firstExercise.getByTestId('substitute-error');
+    const errorMessageOnFirst = page.locator('[data-testid="substitute-error"]');
     await expect(errorMessageOnFirst).not.toBeVisible({ timeout: 1000 });
     
     await substituteButton.click();
@@ -133,7 +135,8 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await expect(errorMessageOnFirst).not.toBeVisible({ timeout: 2000 });
     
     // Get updated exercise text
-    const updatedExerciseText = await firstExercise.textContent();
+    const updatedFirstExercise = page.locator('[data-testid^="plan-exercise-"]').first();
+    const updatedExerciseText = await updatedFirstExercise.textContent();
     console.log('Updated exercise text:', updatedExerciseText);
     
     // Count exercises after substitution
@@ -197,17 +200,16 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     console.log('Original exercise:', originalExerciseText);
     
     // Get the substitute button for the first exercise
-    const firstExerciseRow = page.locator('[data-testid^="plan-exercise-"]').first();
-    const substituteButton = firstExerciseRow.getByTestId(testIds.workouts.substituteExerciseButton).first();
+    // Note: The substitute button is in the workout editor, sibling to the plan-exercise-{id} element
+    const firstExerciseRow = page.locator('[data-testid^="workout-editor-exercise-row-"]').first();
+    const substituteButton = firstExerciseRow.getByTestId(testIds.workouts.substituteExerciseButton);
     await expect(substituteButton).toBeVisible({ timeout: 3000 });
-    
-    // Do first substitution
-    await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
     await substituteButton.click();
     await page.waitForTimeout(1000);
     await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
     
-    let afterFirstSub = await firstExercise.textContent();
+    let firstExerciseAfterFirst = page.locator('[data-testid^="plan-exercise-"]').first();
+    let afterFirstSub = await firstExerciseAfterFirst.textContent();
     console.log('After 1st substitution:', afterFirstSub);
     expect(afterFirstSub).not.toBe(originalExerciseText);
     
@@ -216,7 +218,8 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await page.waitForTimeout(1000);
     await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
     
-    let afterSecondSub = await firstExercise.textContent();
+    let firstExerciseAfterSecond = page.locator('[data-testid^="plan-exercise-"]').first();
+    let afterSecondSub = await firstExerciseAfterSecond.textContent();
     console.log('After 2nd substitution:', afterSecondSub);
     expect(afterSecondSub).not.toBe(afterFirstSub);
     expect(afterSecondSub).not.toBe(originalExerciseText);
@@ -226,7 +229,8 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await page.waitForTimeout(1000);
     await expect(page.getByTestId(testIds.workouts.substituteError)).not.toBeVisible();
     
-    let afterThirdSub = await firstExercise.textContent();
+    let firstExerciseAfterThird = page.locator('[data-testid^="plan-exercise-"]').first();
+    let afterThirdSub = await firstExerciseAfterThird.textContent();
     console.log('After 3rd substitution:', afterThirdSub);
     expect(afterThirdSub).not.toBe(afterSecondSub);
     expect(afterThirdSub).not.toBe(afterFirstSub);
