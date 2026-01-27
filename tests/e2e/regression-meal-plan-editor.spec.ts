@@ -205,10 +205,12 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     await mealPlansTab.click();
     await page.waitForTimeout(500);
     
-    // Open the plan again (click on the first plan card)
-    const planCard = page.locator('.card.cursor-pointer').first();
-    await expect(planCard).toBeVisible({ timeout: 5000 });
-    await planCard.click();
+    // Open the plan again (click on the first plan card text area)
+    const planCards = page.locator('.card');
+    const firstPlanCard = planCards.filter({ hasText: /days/ }).first();
+    await expect(firstPlanCard).toBeVisible({ timeout: 5000 });
+    // Click on the first div which is the clickable area
+    await firstPlanCard.locator('div').first().click();
     await page.waitForTimeout(500);
     
     // Find the food again after reload and reopening editor
@@ -263,5 +265,110 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     
     // Verify plan still exists
     await expect(page.getByText(planName)).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should delete meal plan with confirm modal and persist after reload', async ({ page }) => {
+    await setupTestProfile(page);
+
+    await page.goto('./#/meals');
+    await page.waitForLoadState('networkidle');
+
+    // Switch to Meal Plans tab
+    const mealPlansTab = page.getByTestId('meals-meal-plans-tab');
+    await mealPlansTab.click();
+    await expect(mealPlansTab).toHaveClass(/border-blue-500/);
+
+    // Wait for meal plans to load
+    await page.waitForTimeout(500);
+
+    // If no plans exist, first create/import one
+    const plansCount = await page.locator('.card.cursor-pointer').count();
+    if (plansCount === 0) {
+      // Navigate to Presets tab to import a plan
+      const presetsTab = page.getByTestId('meals-presets-tab');
+      await presetsTab.click();
+      await page.waitForTimeout(500);
+
+      const presetCards = page.locator('[data-testid^="meals-preset-card-"]');
+      await expect(presetCards.first()).toBeVisible({ timeout: 10000 });
+
+      const firstPresetCard = presetCards.first();
+      const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
+      await importButton.click();
+      await page.waitForTimeout(2000);
+
+      // Set a unique name
+      const titleInput = page.getByTestId('meal-plan-title-input');
+      await expect(titleInput).toBeVisible({ timeout: 5000 });
+      const uniqueName = `Delete Test Plan ${Date.now()}`;
+      await titleInput.fill(uniqueName);
+      // Wait a bit for auto-save
+      await page.waitForTimeout(1000);
+      
+      // Close the editor to return to plans list
+      const closeEditorButton = page.getByRole('button', { name: 'Close editor' });
+      if (await closeEditorButton.isVisible()) {
+        await closeEditorButton.click();
+        await page.waitForTimeout(500);
+      }
+      
+      // Go back to Meal Plans tab
+      await mealPlansTab.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Find the first delete button
+    const deleteButton = page.getByTestId(/meal-plan-delete-btn-/).first();
+    await expect(deleteButton).toBeVisible({ timeout: 5000 });
+    
+    // Get the plan name before deletion
+    const planCard = deleteButton.locator('..').locator('..');
+    const planName = await planCard.locator('h4').textContent();
+    expect(planName).toBeTruthy();
+
+    // Click delete button
+    await deleteButton.click();
+    await page.waitForTimeout(300);
+
+    // Verify confirm modal is visible
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 3000 });
+    
+    // Verify the plan name is in the modal
+    await expect(dialog.getByText(planName!)).toBeVisible({ timeout: 3000 });
+
+    // Verify Cancel button is focused (autoFocus)
+    const cancelButton = page.getByTestId('delete-plan-cancel-btn');
+    await expect(cancelButton).toBeVisible({ timeout: 3000 });
+    await expect(cancelButton).toBeFocused();
+
+    // Verify Delete button
+    const confirmButton = page.getByTestId('delete-plan-confirm-btn');
+    await expect(confirmButton).toBeVisible({ timeout: 3000 });
+
+    // Click Delete
+    await confirmButton.click();
+    await page.waitForTimeout(500);
+
+    // Verify modal is closed
+    await expect(dialog).not.toBeVisible({ timeout: 3000 });
+
+    // Verify plan is gone from the list
+    if (planName) {
+      await expect(page.getByText(planName)).not.toBeVisible({ timeout: 3000 });
+    }
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    
+    // Navigate to Meal Plans tab
+    await mealPlansTab.click();
+    await page.waitForTimeout(500);
+
+    // Verify plan is still gone after reload
+    if (planName) {
+      await expect(page.getByText(planName)).not.toBeVisible({ timeout: 3000 });
+    }
   });
 });

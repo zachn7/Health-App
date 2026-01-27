@@ -49,6 +49,7 @@ export default function Meals() {
   const [logSuccessTimer, setLogSuccessTimer] = useState<NodeJS.Timeout | null>(null);
   const [deleteConfirmMeal, setDeleteConfirmMeal] = useState<MealTemplate | null>(null);
   const [deleteConfirmItemIndex, setDeleteConfirmItemIndex] = useState<number | null>(null);
+  const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<MealPlan | null>(null);
   const [showManualFoodForm, setShowManualFoodForm] = useState(false);
   const [manualFood, setManualFood] = useState({
     name: '',
@@ -376,6 +377,23 @@ export default function Meals() {
     } catch (error) {
       console.error('Failed to update food serving:', error);
       alert('Failed to update food serving. Please try again.');
+    }
+  };
+
+  const handleDeleteMealPlan = async (plan: MealPlan) => {
+    setDeleteConfirmPlan(plan);
+  };
+
+  const confirmDeleteMealPlan = async () => {
+    if (!deleteConfirmPlan) return;
+    
+    try {
+      await repositories.nutrition.deleteMealPlan(deleteConfirmPlan.id);
+      setDeleteConfirmPlan(null);
+      await loadMealPlans();
+    } catch (error) {
+      console.error('Failed to delete meal plan:', error);
+      alert('Failed to delete meal plan. Please try again.');
     }
   };
 
@@ -1352,11 +1370,13 @@ export default function Meals() {
                     {mealPlans.map((plan) => (
                       <div 
                         key={plan.id} 
-                        className="card cursor-pointer hover:border-blue-500"
-                        onClick={() => setEditingMealPlan(plan)}
+                        className="card hover:border-blue-500"
                       >
                         <div className="flex justify-between items-start">
-                          <div>
+                          <div 
+                            className="flex-1 cursor-pointer"
+                            onClick={() => setEditingMealPlan(plan)}
+                          >
                             <h4 className="text-lg font-medium text-gray-900">{plan.name}</h4>
                             <p className="text-sm text-gray-600">
                               {plan.days.length} days • {formatLocalDate(plan.startDate, { month: 'long', day: 'numeric' })} - {formatLocalDate(plan.endDate, { month: 'long', day: 'numeric' })}
@@ -1369,7 +1389,17 @@ export default function Meals() {
                               {plan.generationType === 'ai_webllm' ? 'AI Generated' : 'Offline Template'}
                             </span>
                           </div>
-                          <ChevronRight className="w-5 h-5 text-gray-400" />
+                          <div className="flex items-center gap-2 ml-2">
+                            <button
+                              onClick={() => handleDeleteMealPlan(plan)}
+                              className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50"
+                              title="Delete this meal plan"
+                              data-testid={`meal-plan-delete-btn-${plan.id}`}
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                            <ChevronRight className="w-5 h-5 text-gray-400" />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -2489,6 +2519,45 @@ export default function Meals() {
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Meal Plan Confirmation */}
+      {deleteConfirmPlan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="delete-plan-title">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 id="delete-plan-title" className="text-lg font-medium text-gray-900">Delete Meal Plan</h3>
+                <p className="text-sm text-gray-600">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="mb-6 text-gray-700">
+              Are you sure you want to delete <strong>"{deleteConfirmPlan.name}"</strong>? This will permanently remove the entire meal plan and all its data.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmPlan(null)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                data-testid="delete-plan-cancel-btn"
+                autoFocus
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteMealPlan}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                data-testid="delete-plan-confirm-btn"
+              >
+                Delete
               </button>
             </div>
           </div>
