@@ -44,6 +44,7 @@ export default function Meals() {
   
   // Meal plan editor state
   const [addingFoodToMeal, setAddingFoodToMeal] = useState<{ dayId: string; mealId: string } | null>(null);
+  const [editingFoodServing, setEditingFoodServing] = useState<{ dayId: string; mealId: string; foodId: string; quantidade: number; originalCalories: number } | null>(null);
   const [logSuccessMessage, setLogSuccessMessage] = useState<string | null>(null);
   const [logSuccessTimer, setLogSuccessTimer] = useState<NodeJS.Timeout | null>(null);
   const [deleteConfirmMeal, setDeleteConfirmMeal] = useState<MealTemplate | null>(null);
@@ -327,6 +328,54 @@ export default function Meals() {
     } catch (error) {
       console.error('Failed to delete meal section:', error);
       alert('Failed to delete meal section. Please try again.');
+    }
+  };
+
+  const saveFoodServing = async (dayId: string, mealId: string, foodId: string, newQuantidade: number) => {
+    if (!editingMealPlan) return;
+    
+    const ratio = newQuantidade / (editingFoodServing?.quantidade || 1);
+    
+    try {
+      const updatedPlan = {
+        ...editingMealPlan,
+        days: editingMealPlan.days.map(day => {
+          if (day.id !== dayId) return day;
+          
+          return {
+            ...day,
+            meals: day.meals.map(meal => {
+              if (meal.id !== mealId) return meal;
+              
+              return {
+                ...meal,
+                foods: meal.foods.map(food => {
+                  if (food.id !== foodId) return food;
+                  
+                  return {
+                    ...food,
+                    quantidade: newQuantidade,
+                    calories: food.calories * ratio,
+                    proteinG: food.proteinG * ratio,
+                    carbsG: food.carbsG * ratio,
+                    fatG: food.fatG * ratio
+                  };
+                })
+              };
+            })
+          };
+        })
+      };
+      
+      setEditingMealPlan(updatedPlan);
+      setEditingFoodServing(null);
+      await repositories.nutrition.updateMealPlan(editingMealPlan.id, {
+        days: updatedPlan.days
+      });
+      await loadMealPlans();
+    } catch (error) {
+      console.error('Failed to update food serving:', error);
+      alert('Failed to update food serving. Please try again.');
     }
   };
 
@@ -653,6 +702,31 @@ export default function Meals() {
       computedTotalGrams: grams || 100
     };
 
+    // If in meal plan editor mode, add to the meal plan meal
+    if (addingFoodToMeal) {
+      const foodWithId: FoodLogItem = {
+        ...newFoodItem,
+        id: crypto.randomUUID()
+      };
+      handleAddFoodToMealPlanMeal(addingFoodToMeal.dayId, addingFoodToMeal.mealId, foodWithId);
+      setShowManualFoodForm(false);
+      setAddingFoodToMeal(null);
+      setManualFood({
+        name: '',
+        calories: '',
+        proteinG: '',
+        carbsG: '',
+        fatG: '',
+        fiberG: '',
+        sugarG: '',
+        sodiumMg: '',
+        servingSize: '',
+        grams: ''
+      });
+      return;
+    }
+    
+    // Regular meal template mode
     setMealItems([...mealItems, newFoodItem]);
     setShowManualFoodForm(false);
     setManualFood({
@@ -1130,6 +1204,29 @@ export default function Meals() {
                                 Add Food
                               </button>
                               <button
+                                onClick={() => {
+                                  setAddingFoodToMeal({ dayId: day.id, mealId: meal.id });
+                                  setManualFood({
+                                    name: '',
+                                    calories: '',
+                                    proteinG: '',
+                                    carbsG: '',
+                                    fatG: '',
+                                    fiberG: '',
+                                    sugarG: '',
+                                    sodiumMg: '',
+                                    servingSize: '',
+                                    grams: ''
+                                  });
+                                  setShowManualFoodForm(true);
+                                }}
+                                className="text-purple-600 hover:text-purple-700 text-sm flex items-center"
+                                data-testid={`meal-plan-${editingMealPlan.id}-day-${day.id}-meal-${meal.id}-add-manual-food`}
+                              >
+                                <Calculator className="w-4 h-4 mr-1" />
+                                Manual
+                              </button>
+                              <button
                                 onClick={() => handleDeleteMealSection(day.id, meal.id)}
                                 className="text-red-600 hover:text-red-700 text-sm flex items-center"
                                 data-testid={`meal-plan-${editingMealPlan.id}-day-${day.id}-meal-${meal.id}-delete-meal`}
@@ -1156,16 +1253,65 @@ export default function Meals() {
                           ) : (
                             <div className="space-y-1">
                               {meal.foods.map((food) => (
-                                <div key={food.id} className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded">
-                                  <div className="flex-1">
-                                    <div className="font-medium text-gray-900">{food.name}</div>
-                                    <div className="text-gray-600">{food.quantidade} {food.baseUnit === 'serving' ? 'serving' : 'g'} • {Math.round(food.calories)} cal</div>
-                                  </div>
-                                  <div className="flex items-center space-x-2 text-xs text-gray-600">
-                                    {food.proteinG > 0 && <span className="text-blue-600">P: {Math.round(food.proteinG)}g</span>}
-                                    {food.carbsG > 0 && <span className="text-orange-600">C: {Math.round(food.carbsG)}g</span>}
-                                    {food.fatG > 0 && <span className="text-yellow-600">F: {Math.round(food.fatG)}g</span>}
-                                  </div>
+                                <div 
+                                  key={food.id} 
+                                  className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded"
+                                  data-testid={`meal-plan-food-${food.id}`}
+                                >
+                                  {editingFoodServing?.foodId === food.id ? (
+                                    // Edit serving mode
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        min="0.1"
+                                        value={editingFoodServing.quantidade}
+                                        onChange={(e) => {
+                                          const newQuantidade = parseFloat(e.target.value) || 0;
+                                          setEditingFoodServing({ ...editingFoodServing, quantidade: newQuantidade });
+                                        }}
+                                        className="w-20 p-1 border border-gray-300 rounded text-xs"
+                                        data-testid={`meal-plan-food-edit-qty-${food.id}`}
+                                      />
+                                      <span className="text-gray-600 text-xs">
+                                        {food.baseUnit === 'serving' ? 'servings' : 'g'} • {Math.round(editingFoodServing.quantidade / (food.quantidade || 1) * editingFoodServing.originalCalories)} cal
+                                      </span>
+                                      <button
+                                        onClick={() => saveFoodServing(day.id, meal.id, food.id, editingFoodServing.quantidade)}
+                                        className="text-green-600 hover:text-green-800 font-medium text-xs"
+                                        data-testid={`meal-plan-food-save-qty-${food.id}`}
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingFoodServing(null)}
+                                        className="text-gray-500 hover:text-gray-700 text-xs"
+                                        data-testid={`meal-plan-food-cancel-qty-${food.id}`}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    // View mode
+                                    <>
+                                      <div className="flex-1">
+                                        <div className="font-medium text-gray-900">{food.name}</div>
+                                        <div className="text-gray-600">{food.quantidade} {food.baseUnit === 'serving' ? 'serving' : 'g'} • {Math.round(food.calories)} cal</div>
+                                      </div>
+                                      <div className="flex items-center space-x-2 text-xs text-gray-600">
+                                        {food.proteinG > 0 && <span className="text-blue-600">P: {Math.round(food.proteinG)}g</span>}
+                                        {food.carbsG > 0 && <span className="text-orange-600">C: {Math.round(food.carbsG)}g</span>}
+                                        {food.fatG > 0 && <span className="text-yellow-600">F: {Math.round(food.fatG)}g</span>}
+                                        <button
+                                          onClick={() => setEditingFoodServing({ dayId: day.id, mealId: meal.id, foodId: food.id, quantidade: food.quantidade, originalCalories: food.calories })}
+                                          className="text-blue-600 hover:text-blue-800 text-xs ml-2"
+                                          data-testid={`meal-plan-food-edit-btn-${food.id}`}
+                                        >
+                                          Edit
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               ))}
                             </div>
