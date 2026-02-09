@@ -269,6 +269,17 @@ export const testIds = {
     resetAppDataButton: 'reset-app-data-btn',
   },
 
+  // Navigation / Layout
+  nav: {
+    toggleBtn: 'nav-toggle-btn',
+    sidebarNav: 'sidebar-nav',
+  },
+
+  // Layout
+  layout: {
+    mainContent: 'main-content',
+  },
+
   // Shared Presets (for both workouts and meals)
   presets: {
     searchInput: 'presets-search-input',
