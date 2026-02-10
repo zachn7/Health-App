@@ -7,7 +7,7 @@ import { formatWeight } from '../lib/unit-conversions';
 import { getWebGPUDiagnostics } from '../ai/webgpu';
 import { validateAndRepairModelId, getAvailableModels } from '../ai/webllmConfig';
 import { Component, ErrorInfo, ReactNode } from 'react';
-import { Brain, Send, Loader2, AlertCircle, XCircle } from 'lucide-react';
+import { Brain, Send, Loader2, AlertCircle, XCircle, RefreshCw, Info } from 'lucide-react';
 import type { Profile, WorkoutPlan } from '../types';
 
 // Local ErrorBoundary for AI widget only - shows inline error banner
@@ -132,6 +132,14 @@ export default function Coach() {
       setWebLLMError('WebGPU is not available in your browser. AI Coach requires WebGPU support. Please use Chrome, Edge, or another WebGPU-enabled browser.');
     }
   }, [webllmEnabled, hasWebGPU]);
+  
+  // Cleanup: cancel WebLLM initialization when component unmounts
+  useEffect(() => {
+    return () => {
+      console.log('[Coach] Unmounting, canceling WebLLM initialization if in progress');
+      webllmService.cancelInit();
+    };
+  }, []);
 
   const checkWebGPUSupport = async () => {
     try {
@@ -400,11 +408,12 @@ export default function Coach() {
     setWebLLMModelLoading(true);
     setWebLLMError(null);
     setModelValidationWarning(null);
+    webllmService.clearLastError();
     
     try {
       // Set up progress callback for better UX
       webllmService.setInitProgressCallback((progress) => {
-        console.log('WebLLM init progress:', progress);
+        console.log('[Coach] WebLLM init progress:', progress);
         // Could show progress details to user if needed
       });
       
@@ -415,25 +424,59 @@ export default function Coach() {
       const engineState = webllmService.getEngineState();
       const selectedModel = availableModels.find(m => m.model_id === selectedModelId);
       
-      if (!selectedModel || !availableModels.some(m => m.model_id === engineState.selectedModelId)) {
-        setModelValidationWarning(`Model loaded: ${engineState.selectedModelId}`);
+      // Use try-catch to safely check engine state
+      try {
+        if (!selectedModel || !availableModels.some(m => m.model_id === engineState.selectedModelId)) {
+          setModelValidationWarning(`Model loaded: ${engineState.selectedModelId}`);
+        }
+      } catch (e) {
+        // Engine state check failed - not critical, just log
+        console.warn('[Coach] Failed to check engine state:', e);
       }
     } catch (error) {
-      console.error('Failed to initialize WebLLM:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize AI model';
-      setWebLLMError(errorMessage);
+      console.error('[Coach] Failed to initialize WebLLM:', error);
+      
+      // Use WebLLM service's error classification if available
+      const classifiedError = webllmService.getLastError();
+      
+      if (classifiedError) {
+        // Build user-friendly error message
+        let errorMessage = classifiedError.message;
+        
+        // Check for cancellation (don't show as error)
+        if (error instanceof Error && error.name === 'CancelError') {
+          console.log('[Coach] WebLLM initialization cancelled');
+          setWebLLMModelLoading(false);
+          return;
+        }
+        
+        // Set user-friendly error
+        setWebLLMError(errorMessage);
+        
+        // Add suggestions to validation warning for better UX
+        if (classifiedError.suggestions && classifiedError.suggestions.length > 0) {
+          setModelValidationWarning(
+            `Suggestions:\n\u2022 ${classifiedError.suggestions.join('\n\u2022 ')}`
+          );
+        }
+      } else {
+        // Fallback to basic error handling
+        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize AI model';
+        
+        // Try to detect specific issues for better user guidance
+        if (errorMessage.includes('WebGPU') || errorMessage.includes('gpu')) {
+          setWebLLMError('WebGPU is not available in your browser. AI Coach requires WebGPU support. Please use Chrome, Edge, or another WebGPU-enabled browser.');
+        } else if (errorMessage.includes('disabled')) {
+          setWebLLMError('WebLLM Coach is disabled. Please enable it in Settings.');
+        } else if (errorMessage.includes('model') || errorMessage.includes('model_id')) {
+          setWebLLMError('The AI model could not be loaded. Please try selecting a different model or refresh the page.');
+        } else {
+          setWebLLMError(errorMessage);
+        }
+      }
       
       // Ensure model loading state is reset on error
       setWebLLMModelReady(false);
-      
-      // Try to detect specific issues for better user guidance
-      if (errorMessage.includes('WebGPU') || errorMessage.includes('gpu')) {
-        setWebLLMError('WebGPU is not available in your browser. AI Coach requires WebGPU support. Please use Chrome, Edge, or another WebGPU-enabled browser.');
-      } else if (errorMessage.includes('disabled')) {
-        setWebLLMError('WebLLM Coach is disabled. Please enable it in Settings.');
-      } else if (errorMessage.includes('model') || errorMessage.includes('model_id')) {
-        setWebLLMError('The AI model could not be loaded. Please try selecting a different model or refresh the page.');
-      }
     } finally {
       webllmService.clearInitProgressCallback();
       setWebLLMModelLoading(false);
@@ -639,17 +682,17 @@ export default function Coach() {
               </div>
             </div>
             
-            {/* Model Validation Warning */}
+            {/* Model Validation Warning / Suggestions */}
             {modelValidationWarning && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex items-start">
-                  <AlertCircle className="w-4 h-4 mt-0.5 text-yellow-600 mr-2" />
-                  <div className="text-sm text-yellow-800">
-                    <div className="font-medium">Model Selection Issue</div>
-                    <div>{modelValidationWarning}</div>
+                  <Info className="w-4 h-4 mt-0.5 text-yellow-600 mr-2 flex-shrink-0" />
+                  <div className="text-sm text-yellow-800 flex-1">
+                    <div className="font-medium mb-1">Information</div>
+                    <div className="whitespace-pre-line text-xs leading-relaxed">{modelValidationWarning}</div>
                     <button
                       onClick={() => setModelValidationWarning(null)}
-                      className="text-xs text-yellow-600 hover:text-yellow-800 underline mt-1"
+                      className="text-xs text-yellow-600 hover:text-yellow-800 underline mt-2"
                     >
                       Dismiss
                     </button>
@@ -657,6 +700,39 @@ export default function Coach() {
                 </div>
               </div>
             )}
+            
+            {/* WebLLM Error Banner */}
+            {webllmError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <XCircle className="w-4 h-4 mt-0.5 text-red-600 mr-2 flex-shrink-0" />
+                  <div className="text-sm text-red-800 flex-1">
+                    <div className="font-medium mb-1">AI Coach Error</div>
+                    <div className="text-xs mb-2">{webllmError}</div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setWebLLMError(null);
+                          initializeWebLLM();
+                        }}
+                        className="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded flex items-center"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Retry
+                      </button>
+                      <button
+                        onClick={() => setWebLLMError(null)}
+                        className="text-xs text-red-600 hover:text-red-800 underline"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* DEV Diagnostics Panel */}
             
             {/* DEV Diagnostics Panel */}
             {process.env.NODE_ENV === 'development' && (

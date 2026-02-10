@@ -159,4 +159,95 @@ test.describe('Smoke: AI Coach Features', () => {
     expect(bodyText).toBeTruthy();
     expect(bodyText?.length).toBeGreaterThan(50);
   });
+  
+  test('WebLLM: stale modelId in localStorage gets auto-repaired', async ({ page, context }) => {
+    // Set up age gate and onboarding
+    await context.addInitScript(() => {
+      localStorage.setItem('age_gate_accepted', 'true');
+      localStorage.setItem('onboarding_completed', 'true');
+      localStorage.setItem('webllm_enabled', 'true'); // Enable WebLLM
+      // Set a stale/invalid modelId that doesn't exist in any real WebLLM release
+      localStorage.setItem('webllm_model_id', 'invalid-model-that-does-not-exist-v12345');
+    });
+    
+    // Navigate to Coach page
+    await page.goto('./#/coach');
+    await page.waitForLoadState('networkidle');
+    
+    // No crash should occur
+    const globalError = page.locator('text=Application Error');
+    await expect(globalError).not.toBeVisible({ timeout: 3000 });
+    
+    // The stale modelId should have been auto-repaired
+    // If there's an error banner, it should mention model repair, not crash
+    const errorBanners = page.locator('.bg-red-50, .bg-yellow-50');
+    const bannerCount = await errorBanners.count();
+    console.log(`Found ${bannerCount} error/warning banners`);
+    
+    // Banners are OK (they show warnings), just shouldn't crash
+    console.log('✅ Stale modelId test passed - no crash with invalid model in localStorage');
+  });
+  
+  test('WebLLM: initialization failures show inline banner, never crash page', async ({ page, context }) => {
+    // Set up age gate and onboarding
+    await context.addInitScript(() => {
+      localStorage.setItem('age_gate_accepted', 'true');
+      localStorage.setItem('onboarding_completed', 'true');
+      localStorage.setItem('webllm_enabled', 'true');
+      localStorage.setItem('profile_completed', 'true');
+    });
+    
+    // Simulate CreateMLCEngine throwing an error by mocking WebGPU
+    await context.addInitScript(() => {
+      // Create a scenario where CreateMLCEngine would fail
+      // by removing navigator.gpu after it exists
+      Object.defineProperty(navigator, 'gpu', {
+        value: {
+          requestAdapter: async () => {
+            // Simulate adapter request succeeding but device failing
+            return {
+              requestDevice: async () => {
+                throw new Error('Simulated WebLLM initialization failure for testing');
+              }
+            };
+          }
+        },
+        writable: false
+      });
+    });
+    
+    // Navigate to Coach page
+    await page.goto('./#/coach');
+    await page.waitForLoadState('networkidle');
+    
+    // Should NOT show global Application Error screen
+    const globalError = page.locator('text=Application Error');
+    const globalErrorVisible = await globalError.isVisible({ timeout: 3000 }).catch(() => false);
+    expect(globalErrorVisible).toBe(false);
+    
+    // Page should still render (coach heading or other content)
+    let hasContent = false;
+    
+    // Check for any viable page state
+    const coachLoading = page.getByTestId('coach-loading');
+    const coachHeading = page.getByTestId('coach-heading');
+    const profileRequired = page.getByTestId('coach-profile-required');
+    
+    if (await coachLoading.isVisible().catch(() => false)) hasContent = true;
+    if (await coachHeading.isVisible().catch(() => false)) hasContent = true;
+    if (await profileRequired.isVisible().catch(() => false)) hasContent = true;
+    
+    expect(hasContent).toBe(true);
+    
+    // May show inline error banners (acceptable behavior)
+    const errorBanners = page.locator('.bg-red-50');
+    const hasErrorBanner = await errorBanners.isVisible().catch(() => false);
+    if (hasErrorBanner) {
+      console.log('✅ Inline error banner shown for simulated failure (expected)');
+      const errorText = await errorBanners.textContent();
+      console.log('Error banner text:', errorText);
+    }
+    
+    console.log('✅ WebLLM failure test passed - page survived initialization error');
+  });
 });

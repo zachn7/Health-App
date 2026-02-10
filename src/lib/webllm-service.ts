@@ -38,6 +38,23 @@ interface ChatMessage {
   content: string;
 }
 
+export type WebLLMInitErrorType = 
+  | 'webgpu_unavailable'
+  | 'adapter_not_found'
+  | 'device_not_found'
+  | 'model_fetch_failed'
+  | 'storage_quota_exceeded'
+  | 'wasm_init_failed'
+  | 'disabled_in_settings'
+  | 'unknown';
+
+export interface WebLLMInitError {
+  type: WebLLMInitErrorType;
+  message: string;
+  retryable: boolean;
+  suggestions?: string[];
+}
+
 export class WebLLMService {
   private static engine: webllm.MLCEngineInterface | null = null;
   private static isLoading = false;
@@ -47,7 +64,9 @@ export class WebLLMService {
   private static selectedModelId: string | null = null;
   private static initializationPromise: Promise<void> | null = null;
   private static initProgressCallback: ((progress: webllm.InitProgressReport) => void) | null = null;
-  private static lastError: Error | null = null;
+  private static lastError: WebLLMInitError | null = null;
+  private static abortController: AbortController | null = null;
+  private static isCancelled = false;
   
   /**
    * Get the engine initialization progress callback
@@ -78,8 +97,12 @@ export class WebLLMService {
     }
   }
 
-  static getLastError(): Error | null {
+  static getLastError(): WebLLMInitError | null {
     return this.lastError;
+  }
+  
+  static clearLastError(): void {
+    this.lastError = null;
   }
   
   static async getSelectedModelId(): Promise<string> {
@@ -135,55 +158,168 @@ export class WebLLMService {
   }
   
   /**
-   * Initialize WebLLM engine with lazy loading
+   * Initialize WebLLM engine with abort support
    */
-  static async initialize(): Promise<void> {
-    // If already initializing, wait for that to complete
-    if (this.initializationPromise) {
-      return this.initializationPromise;
-    }
-    
+  static async initialize(abortSignal?: AbortSignal): Promise<void> {
     // If already initialized, return
     if (this.isInitialized) {
       return;
     }
     
-    // Check if WebLLM is enabled
-    const enabled = await this.isWebLLMEnabled();
-    if (!enabled) {
-      throw new Error('WebLLM AI Coach is disabled in settings');
-    }
-    
-    // If already loading, wait for it to complete
+    // If already loading, wait for that to complete
     if (this.isLoading) {
       throw new Error('WebLLM model is currently loading');
     }
     
+    // Check if WebLLM is enabled
+    const enabled = await this.isWebLLMEnabled();
+    if (!enabled) {
+      throw this.classifyError('disabled_in_settings', 'WebLLM AI Coach is disabled in settings');
+    }
+    
+    // If already initializing, wait for that to complete (if not canceled)
+    if (this.initializationPromise) {
+      if (abortSignal?.aborted || this.isCancelled) {
+        throw this.createCancelError();
+      }
+      return this.initializationPromise;
+    }
+    
+    // Create abort controller if not provided
+    this.abortController = new AbortController();
+    this.isCancelled = false;
+    
+    // Wire up external abort signal if provided
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', () => {
+        this.abortController?.abort();
+        this.isCancelled = true;
+        this.lastError = {
+          type: 'unknown',
+          message: 'Initialization cancelled',
+          retryable: true
+        };
+      });
+    }
+    
     // Create initialization promise
-    this.initializationPromise = this._doInitialize();
+    this.initializationPromise = this._doInitialize(this.abortController.signal);
     return this.initializationPromise;
   }
   
-  private static async _doInitialize(): Promise<void> {
+  /**
+   * Cancel any ongoing initialization
+   */
+  static cancelInit(): void {
+    this.isCancelled = true;
+    this.abortController?.abort();
+    this.initializationPromise = null;
+    this.isLoading = false;
+  }
+  
+  /**
+   * Classify errors into user-friendly types with suggestions
+   */
+  private static classifyError(
+    type: WebLLMInitErrorType,
+    message: string
+  ): WebLLMInitError {
+    const suggestionsMap: Record<WebLLMInitErrorType, string[]> = {
+      webgpu_unavailable: [
+        'Use Chrome 113+, Edge 113+, or another WebGPU-enabled browser',
+        'Check chrome://flags/#enable-unsafe-webgpu if on Chrome',
+        'Hardware acceleration must be enabled in browser settings'
+      ],
+      adapter_not_found: [
+        'Update your graphics drivers',
+        'Try a different browser (Chrome or Edge)',
+        'Check if hardware acceleration is enabled'
+      ],
+      device_not_found: [
+        'Try a different model with lower VRAM requirements',
+        'Close other browser tabs that might be using GPU',
+        'Check for driver updates'
+      ],
+      model_fetch_failed: [
+        'Check your internet connection',
+        'Try again in a few moments',
+        'Some ISPs throttle large downloads - try a different network'
+      ],
+      storage_quota_exceeded: [
+        'Clear browser storage/cache',
+        'Click "Clear WebLLM Models" in Settings',
+        'Try a smaller model or free up disk space'
+      ],
+      wasm_init_failed: [
+        'Update your browser to the latest version',
+        'Try Chrome or Edge (best WebLLM support)',
+        'Disable browser extensions that might interfere'
+      ],
+      disabled_in_settings: [
+        'Enable WebLLM AI Coach in Settings',
+        'Check that your browser supports WebGPU'
+      ],
+      unknown: [
+        'Try reloading the page',
+        'Check browser console for details',
+        'Contact support if the issue persists'
+      ]
+    };
+    
+    return {
+      type,
+      message,
+      retryable: type !== 'disabled_in_settings' && type !== 'webgpu_unavailable',
+      suggestions: suggestionsMap[type]
+    };
+  }
+  
+  private static createCancelError(): Error {
+    const error = new Error('WebLLM initialization was cancelled');
+    error.name = 'CancelError';
+    return error;
+  }
+  
+  private static async _doInitialize(abortSignal: AbortSignal): Promise<void> {
     try {
+      // Check for cancellation at start
+      if (abortSignal.aborted) {
+        throw this.createCancelError();
+      }
+      
       // Check if GPU capabilities are available (use safe sync check)
       if (!isWebGPUAvailableSync()) {
-        throw new Error('WebGPU is not available in this browser. Try Chrome, Edge, or another WebGPU-enabled browser.');
+        throw this.classifyError('webgpu_unavailable', 'WebGPU is not available in this browser. Try Chrome, Edge, or another WebGPU-enabled browser.');
       }
       
       this.isLoading = true;
       
-      // Get the selected model ID (with fallback to first available)
+      // Get the selected model ID (with validation/repair)
       const selectedModelId = await this.getSelectedModelId();
-      console.log('Initializing WebLLM with model:', selectedModelId);
+      console.log('[WebLLM] Initializing with model:', selectedModelId);
+      
+      // Check for cancellation after async operations
+      if (abortSignal.aborted) {
+        throw this.createCancelError();
+      }
       
       // Load available models and cache them
       this.availableModels = await this.getAvailableModels();
-      console.log('Available models:', this.availableModels.length, 'models loaded');
+      console.log('[WebLLM] Available models:', this.availableModels.length, 'models loaded');
       
-      // Initialize the engine with selected model
-      const options = {
+      // Check for cancellation again
+      if (abortSignal.aborted) {
+        throw this.createCancelError();
+      }
+      
+      // Initialize the engine with selected model and abort support
+      const options: any = {
         initProgressCallback: (progress: any) => {
+          if (abortSignal.aborted || this.isCancelled) {
+            console.log('[WebLLM] Initialization cancelled during progress');
+            return;
+          }
+          
           if (this.initProgressCallback) {
             this.initProgressCallback(progress);
           }
@@ -191,18 +327,77 @@ export class WebLLMService {
         }
       };
       
-      this.engine = await webllm.CreateMLCEngine(selectedModelId, options) as webllm.MLCEngineInterface;
+      // Create engine with error classification
+      try {
+        this.engine = await webllm.CreateMLCEngine(selectedModelId, options) as webllm.MLCEngineInterface;
+      } catch (e: any) {
+        if (abortSignal.aborted || this.isCancelled) {
+          throw this.createCancelError();
+        }
+        
+        // Classify the error based on message content
+        const errorMsg = e?.message || String(e);
+        
+        if (errorMsg.includes('gpu') || errorMsg.includes('GPU') || errorMsg.includes('adapter')) {
+          if (errorMsg.includes('device') || errorMsg.includes('Device')) {
+            throw this.classifyError('device_not_found', `WebGPU device request failed: ${errorMsg}`);
+          } else {
+            throw this.classifyError('adapter_not_found', `WebGPU adapter request failed: ${errorMsg}`);
+          }
+        }
+        
+        if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('download')) {
+          throw this.classifyError('model_fetch_failed', `Failed to download model: ${errorMsg}`);
+        }
+        
+        if (errorMsg.includes('quota') || errorMsg.includes('storage') || errorMsg.includes('space')) {
+          throw this.classifyError('storage_quota_exceeded', `Storage quota exceeded: ${errorMsg}`);
+        }
+        
+        if (errorMsg.includes('wasm') || errorMsg.includes('WebAssembly')) {
+          throw this.classifyError('wasm_init_failed', `WASM initialization failed: ${errorMsg}`);
+        }
+        
+        // Unknown error
+        throw this.classifyError('unknown', `WebLLM initialization failed: ${errorMsg}`);
+      }
+      
+      // Check for cancellation one final time
+      if (abortSignal.aborted) {
+        throw this.createCancelError();
+      }
       
       this.isInitialized = true;
       this.isLoading = false;
       
-      // Initialize with system prompt
-      await this.setSystemPrompt();
+      // Initialize with system prompt (also check for cancellation)
+      try {
+        await this.setSystemPrompt();
+      } catch (e: any) {
+        console.warn('[WebLLM] System prompt setup failed:', e);
+        // Don't fail initialization for system prompt issues
+      }
+      
+      console.log('[WebLLM] Initialization complete');
     } catch (error) {
       this.isLoading = false;
-      this.lastError = error instanceof Error ? error : new Error(String(error));
-      console.error('Failed to initialize WebLLM:', error);
-      throw error;
+      
+      // Check if it's a cancel error (don't classify as real error)
+      if (error instanceof Error && error.name === 'CancelError') {
+        console.log('[WebLLM] Initialization cancelled');
+        throw error;
+      }
+      
+      // Classify the error if not already classified
+      if (error instanceof Error && 'type' in error && 'retryable' in error) {
+        this.lastError = error as WebLLMInitError;
+      } else {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.lastError = this.classifyError('unknown', errorMsg);
+      }
+      
+      console.error('[WebLLM] Failed to initialize:', this.lastError);
+      throw error instanceof Error ? error : new Error(String(error));
     } finally {
       this.initializationPromise = null;
     }
@@ -217,13 +412,17 @@ export class WebLLMService {
     hasEngine: boolean;
     selectedModelId: string | null;
     availableModelsCount: number;
+    lastError: WebLLMInitError | null;
+    isCancelled: boolean;
   } {
     return {
       isInitialized: this.isInitialized,
       isLoading: this.isLoading,
       hasEngine: !!this.engine,
       selectedModelId: this.selectedModelId,
-      availableModelsCount: this.availableModels.length
+      availableModelsCount: this.availableModels.length,
+      lastError: this.lastError,
+      isCancelled: this.isCancelled
     };
   }
   
@@ -231,11 +430,12 @@ export class WebLLMService {
    * Reset engine state (for debugging/recovery)
    */
   static reset(): void {
+    this.cancelInit();
     this.engine = null;
     this.isInitialized = false;
-    this.isLoading = false;
     this.initializationPromise = null;
     this.chatHistory = [];
+    this.lastError = null;
   }
   
   private static async setSystemPrompt(): Promise<void> {
