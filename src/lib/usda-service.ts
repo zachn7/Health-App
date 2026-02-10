@@ -8,6 +8,108 @@ import { FoodItem, FoodLogItem } from '@/types';
 const MIN_MATCHES = 20; // Minimum results needed after filtering
 const MAX_PAGE = 3; // Maximum pages to fetch when filtering yields too few
 
+/**
+ * Cache entry for USDA search results
+ */
+interface CacheEntry<T> {
+  results: T[];
+  timestamp: number;
+  remoteQuery: string; // The actual query sent to API
+}
+
+/**
+ * USDA search result cache
+ * Keyed by the ORIGINAL query, stores results from remote fetches
+ */
+class USDASearchCache {
+  private cache: Map<string, CacheEntry<any>> = new Map();
+  private maxAge: number = 30000; // 30 seconds cache TTL
+
+  /**
+   * Get cached results for a query if available and fresh
+   */
+  get(query: string): CacheEntry<any> | null {
+    const entry = this.cache.get(query);
+    if (!entry) return null;
+
+    const age = Date.now() - entry.timestamp;
+    if (age > this.maxAge) {
+      this.cache.delete(query);
+      return null;
+    }
+
+    return entry;
+  }
+
+  /**
+   * Store results in cache
+   */
+  set(originalQuery: string, remoteQuery: string, results: any[]): void {
+    this.cache.set(originalQuery, {
+      results,
+      timestamp: Date.now(),
+      remoteQuery
+    });
+  }
+
+  /**
+   * Get a broad query result by prefix search
+   * For 'white ric', check if we have 'white' cached
+   */
+  findBroadMatch(originalQuery: string): CacheEntry<any> | null {
+    // If query is empty or too short, no broad match possible
+    if (!originalQuery || originalQuery.trim().length < 2) {
+      return null;
+    }
+
+    const normalized = originalQuery.trim().toLowerCase();
+
+    // Check for exact match first
+    const exactMatch = this.get(normalized);
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    // For multi-token queries where last token is short (< 4 chars),
+    // look for cache entry with broader query (tokens except last)
+    const tokens = normalized.split(/\s+/).filter(t => t.length >= 2);
+    if (tokens.length > 1) {
+      const lastToken = tokens[tokens.length - 1];
+      if (lastToken.length < 4) {
+        // Broad query: drop the last token
+        const broadQuery = tokens.slice(0, -1).join(' ');
+        return this.get(broadQuery);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Clear all cache entries
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+
+  /**
+   * Remove stale entries
+   */
+  prune(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > this.maxAge) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+/**
+ * Global USDA search cache instance
+ */
+const globalUSDACache = new USDASearchCache();
+
 
 /**
  * Atwater general factors for estimating missing macros
@@ -938,8 +1040,9 @@ class USDAService {
   
   static async searchFoods(
     query: string, 
-    pageSize: number = 100
-  ): Promise<{ results: USDFoodSearchResult[]; diagnostics: SearchDiagnostics; queryUsed: string; wasRelaxed: boolean }> {
+    pageSize: number = 100,
+    abortSignal?: AbortSignal
+  ): Promise<{ results: USDFoodSearchResult[]; diagnostics: SearchDiagnostics; queryUsed: string; wasRelaxed: boolean; queryBroadened: boolean }> {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error('USDA API key not configured');
@@ -955,6 +1058,11 @@ class USDAService {
     
     // Helper to fetch a single page with filtering
     const fetchPage = async (searchQuery: string, pageNum: number): Promise<{ results: USDFoodSearchResult[] }> => {
+      // Check if request was aborted
+      if (abortSignal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
       const searchParams = new URLSearchParams({
         query: searchQuery,
         pageSize: pageSize.toString(),
@@ -967,7 +1075,7 @@ class USDAService {
       });
       
       const url = `${BASE_URL}/foods/search?${searchParams.toString()}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: abortSignal });
       
       if (!response.ok) {
         let errorMessage = `USDA API error: ${response.statusText}`;
@@ -1045,34 +1153,120 @@ class USDAService {
     };
     
     try {
-      // Import and use searchWithRelaxation for query relaxation
-      const { searchWithRelaxation, hybridRankUSDAFoods } = await import('./search/fuzzy');
-      
-      const relaxedResult = await searchWithRelaxation(performQuery, query, {
-        maxAttempts: 3,
-        minQueryLength: 4
-      });
-      
+      // Import search utilities
+      const { searchWithRelaxation } = await import('./search/fuzzy');
+      const { rerank } = await import('./search/searchPipeline');
+
+      const normalizedQuery = query.trim().toLowerCase();
+      const tokens = normalizedQuery.split(/\s+/).filter(t => t.length >= 2);
+
+      // Determine if we should use a broad query for progressive typing
+      // Condition: multi-token query with last token being short (< 4 chars)
+      let broadQuery: string | null = null;
+      let queryBroadened = false;
+
+      if (tokens.length > 1 && tokens[tokens.length - 1].length < 4) {
+        broadQuery = tokens.slice(0, -1).join(' ');
+        console.log(`[USDA] Progressive typing: using broad query "${broadQuery}" for "${query}" (last token < 4 chars)`);
+      }
+
+      // Perform the search with progressive strategy
+      let relaxedResult: { results: USDFoodSearchResult[]; queryUsed: string; wasRelaxed: boolean };
+
+      if (broadQuery) {
+        // Try broad query with larger page size to get more results to filter locally
+        const broadPageSize = Math.max(pageSize, 100); // Get more results for broader queries
+
+        try {
+          // Check cache first for broad query
+          const cachedBroad = globalUSDACache.get(broadQuery);
+          if (cachedBroad) {
+            console.log(`[USDA] Cache hit for broad query "${broadQuery}": ${cachedBroad.results.length} results`);
+            relaxedResult = {
+              results: cachedBroad.results,
+              queryUsed: cachedBroad.remoteQuery,
+              wasRelaxed: cachedBroad.remoteQuery !== broadQuery
+            };
+          } else {
+            // Fetch broad query with larger page size
+            console.log(`[USDA] Fetching broad query "${broadQuery}" with pageSize ${broadPageSize}`);
+            relaxedResult = await searchWithRelaxation(
+              (q) => performQuery(q),
+              broadQuery,
+              { maxAttempts: 3, minQueryLength: 4 }
+            );
+
+            // Cache the broad query results
+            globalUSDACache.set(broadQuery, relaxedResult.queryUsed, relaxedResult.results);
+          }
+
+          queryBroadened = true;
+        } catch (broadError) {
+          console.warn(`[USDA] Broad query "${broadQuery}" failed, falling back to exact query:`, broadError);
+          // Fall back to exact query if broad query fails
+          relaxedResult = await searchWithRelaxation(
+            (q) => performQuery(q),
+            query,
+            { maxAttempts: 3, minQueryLength: 4 }
+          );
+        }
+      } else {
+        // No broad_query needed, use exact query
+        // Check cache first
+        const cached = globalUSDACache.get(normalizedQuery);
+        if (cached) {
+          console.log(`[USDA] Cache hit for "${normalizedQuery}": ${cached.results.length} results`);
+          relaxedResult = {
+            results: cached.results,
+            queryUsed: cached.remoteQuery,
+            wasRelaxed: cached.remoteQuery !== normalizedQuery
+          };
+        } else {
+          // Fetch exact query
+          relaxedResult = await searchWithRelaxation(
+            (q) => performQuery(q),
+            query,
+            { maxAttempts: 3, minQueryLength: 4 }
+          );
+
+          // Cache the exact query results
+          globalUSDACache.set(normalizedQuery, relaxedResult.queryUsed, relaxedResult.results);
+        }
+      }
+
       // Update diagnostics with the query that actually worked
       diagnostics.url = `${BASE_URL}/foods/search?query=${encodeURIComponent(relaxedResult.queryUsed)}`;
-      
+
       let foods = relaxedResult.results as USDFoodSearchResult[];
       diagnostics.resultCount = foods.length;
-      
-      // Client-side reranking with hybrid MiniSearch + Fuse.js for better partial matches
-      // Always rerank with the ORIGINAL query, even if we used a relaxed query
-      // Hybrid ranking prioritizes prefix matches (70%) over fuzzy matches (30%)
+
+      // Client-side reranking: ALWAYS use the shared searchPipeline with ORIGINAL query
+      // This ensures progressive typing works: broad query fetch + orig query rerank
       if (query && query.trim() && foods.length > 0) {
-        console.log('[USDA] Reranking', foods.length, 'results queryUsed:', relaxedResult.queryUsed, 'for original:', query);
-        foods = hybridRankUSDAFoods(foods, query);
-        console.log('[USDA] Reranked to', foods.length, 'results using hybrid MiniSearch + Fuse.js');
+        console.log('[USDA] Reranking', foods.length, 'results from remote query:', relaxedResult.queryUsed, 'for original:', query, 'broadened:', queryBroadened);
+
+        // Use the shared search pipeline for consistent scoring
+        const scored = rerank(
+          foods,
+          (item) => [item.description, item.brandOwner || '', item.foodCategory || ''],
+          query
+        );
+
+        foods = scored.map(s => s.item);
+        console.log('[USDA] Reranked to', foods.length, 'results using searchPipeline rerank()');
+
+        // Cache the reranked results for the original query
+        if (!queryBroadened) {
+          globalUSDACache.set(normalizedQuery, relaxedResult.queryUsed, foods);
+        }
       }
-      
-      return { 
-        results: foods, 
+
+      return {
+        results: foods,
         diagnostics,
         queryUsed: relaxedResult.queryUsed,
-        wasRelaxed: relaxedResult.wasRelaxed
+        wasRelaxed: relaxedResult.wasRelaxed,
+        queryBroadened
       };
     } catch (error) {
       if (error instanceof Error) {

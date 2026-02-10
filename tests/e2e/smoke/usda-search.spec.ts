@@ -451,4 +451,101 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await expect(noResultsElement).toBeVisible();
     await expect(page.getByText(/No results found/i)).toBeVisible();
   });
+
+  test('should handle progressive typing with broad query', async ({ page }) => {
+    // Open USDA import dialog
+    await page.getByTestId('usda-search-button').click();
+    
+    // Mock specific responses for progressive typing test
+    await page.route('**/api.nal.usda.gov/fdc/v1/**', async (route) => {
+      const url = route.request().url();
+      
+      if (url.includes('/foods/search')) {
+        const searchQuery = new URL(url).searchParams.get('query');
+        
+        // For broad query "white" (when user types "white ric")
+        if (searchQuery === 'white') {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              foods: [
+                {
+                  fdcId: 170967,
+                  description: 'White rice, cooked',
+                  dataType: 'Foundation',
+                  foodCategory: 'Grains and Pasta',
+                  publishedDate: '2019-04-01',
+                  score: 987.5
+                },
+                {
+                  fdcId: 170968,
+                  description: 'White bread, enriched',
+                  dataType: 'Foundation',
+                  foodCategory: 'Baked Products',
+                  publishedDate: '2019-04-01',
+                  score: 900.0
+                },
+                {
+                  fdcId: 170969,
+                  description: 'White flour, all-purpose',
+                  dataType: 'Foundation',
+                  foodCategory: 'Grains and Pasta',
+                  publishedDate: '2019-04-01',
+                  score: 850.0
+                }
+              ],
+              totalPages: 1,
+              currentPage: 1
+            })
+          });
+          return;
+        }
+
+        // Default fallback - use standard mocked response
+        await route.continue();
+      } else {
+        await route.continue();
+      }
+    });
+
+    // Type progressive query "white ric":
+    // - Uses broad query "white" (last token "ric" is < 4 chars)
+    // - Reranks results with original query "white ric"
+    // - White rice should rank above white bread due to better match
+    const searchResponse = page.waitForResponse(
+      response => response.url().includes('/foods/search') && response.status() === 200
+    );
+
+    await page.getByTestId('usda-search-input').fill('white ric');
+    await searchResponse;
+    
+    // Wait for debounce (300ms) + state update
+    await page.waitForTimeout(600);
+    
+    // Should show search results
+    const resultsContainer = page.getByTestId('usda-results');
+    await expect(resultsContainer).toBeVisible();
+    
+    // Get all result rows
+    const resultRows = page.getByTestId('usda-result-row');
+    expect(await resultRows.count()).toBeGreaterThan(0);
+    
+    // Get text content of all result rows
+    const allResultsText = await resultsContainer.allTextContents();
+    const combinedText = allResultsText.join(' ').toLowerCase();
+    console.log('Results text for "white ric":', combinedText);
+    
+    // Should have white rice in results
+    expect(combinedText).toContain('white rice');
+    
+    // The first visible food text should contain "white rice" not "white bread"
+    // because the reranking prioritizes prefix matches (ric -> rice)
+    const firstFoodText = await resultRows.first().textContent();
+    console.log('First result:', firstFoodText);
+    expect(firstFoodText?.toLowerCase()).toContain('white rice');
+    
+    // Show refining hint for partial typing
+    await expect(page.getByText(/Refining results for partial typing/i)).toBeVisible();
+  });
 });

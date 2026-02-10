@@ -1,11 +1,9 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Download } from 'lucide-react';
 import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
-import { filterByTokenAwarePrefix } from '../lib/search/fuzzy';
-import { rerank } from '../lib/search/searchPipeline';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
@@ -40,6 +38,9 @@ export default function Nutrition() {
   const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
   const [usdaQueryUsed, setUSDAQueryUsed] = useState<string>(''); // The actual query that got results
   const [usdaWasRelaxed, setUSDAWasRelaxed] = useState(false); // Whether query relaxation was used
+  const [usdaQueryBroadened, setUSDAQueryBroadened] = useState(false); // Whether broad query was used for progressive typing
+  // Ref for abort controller to cancel in-flight requests
+  const abortControllerRef = useRef<AbortController | null>(null);
   // State for hydr...
   const [hydratedFoodDetails, setHydratedFoodDetails] = useState<Map<number, USDAFoodDetail>>(new Map());
   const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
@@ -238,61 +239,60 @@ export default function Nutrition() {
     }
   };
 
-  // Debounced search function
+  // Debounced search function with progressive typing support
   const searchUSDAFoods = useCallback(async () => {
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     if (!usdaSearchQuery.trim() || usdaSearchQuery.length < 2) {
       setUSDAReplies([]);
       setUSDASearchError(null);
       setUSDASearchDiagnostics(null);
       setUSDAQueryUsed('');
       setUSDAWasRelaxed(false);
+      setUSDAQueryBroadened(false);
       return;
     }
-    
+
     setUSDASearching(true);
     setUSDASearchError(null);
-    
+
     try {
-      const { results, diagnostics, queryUsed, wasRelaxed } = await usdaService.searchFoods(usdaSearchQuery);
-      
-      // Apply token-aware prefix filtering for multi-word queries
-      const filteredResults = filterByTokenAwarePrefix(
-        results,
-        usdaSearchQuery,
-        (item) => item.description || ''
-      );
-      
-      // Test new search pipeline: rerank with shared utility
-      // TODO: Replace filterByTokenAwarePrefix with rerank once validated
-      const testReranked = rerank(
-        filteredResults,
-        (item) => [item.description, item.brandOwner || '', item.foodCategory || ''],
-        usdaSearchQuery
-      );
-      
-      // Log for validation (development only)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[searchPipeline] Test rerank:', {
-          query: usdaSearchQuery,
-          inputCount: filteredResults.length,
-          outputCount: testReranked.length,
-          topScore: testReranked[0]?.score.toFixed(3) ?? 'N/A'
-        });
-      }
-      
-      setUSDAReplies(filteredResults);
+      const { results, diagnostics, queryUsed, wasRelaxed, queryBroadened } =
+        await usdaService.searchFoods(usdaSearchQuery, 100, abortController.signal);
+
+      // Results are already reranked by the service with the shared searchPipeline
+      // Just use them directly
+      setUSDAReplies(results);
       setUSDASearchDiagnostics(diagnostics);
       setUSDAQueryUsed(queryUsed);
       setUSDAWasRelaxed(wasRelaxed);
+      setUSDAQueryBroadened(queryBroadened);
     } catch (error) {
+      // Ignore abort errors (from cancelled requests)
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('[USDA] Search request cancelled');
+        return;
+      }
+
       console.error('USDA search failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to search USDA foods';
       setUSDASearchError(errorMessage);
       setUSDAReplies([]);
       setUSDAQueryUsed('');
       setUSDAWasRelaxed(false);
+      setUSDAQueryBroadened(false);
     } finally {
-      setUSDASearching(false);
+      // Only clear loading state if this is still the current request
+      if (abortControllerRef.current === abortController) {
+        setUSDASearching(false);
+      }
     }
   }, [usdaSearchQuery]);
 
@@ -945,7 +945,12 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-700">Search Results ({usdaSearchResults.length}):</h4>
-                    {usdaWasRelaxed && usdaQueryUsed !== usdaSearchQuery && (
+                    {usdaQueryBroadened && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        Refining results for partial typing...
+                      </p>
+                    )}
+                    {usdaWasRelaxed && usdaQueryUsed !== usdaSearchQuery && !usdaQueryBroadened && (
                       <p className="text-xs text-amber-600 mt-1">
                         Showing results for "{usdaQueryUsed}" instead of "{usdaSearchQuery}"
                       </p>
