@@ -5,6 +5,7 @@ import { repositories } from '../db';
 import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
 import { filterByTokenAwarePrefix } from '../lib/search/fuzzy';
+import { rerank } from '../lib/search/searchPipeline';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { testIds } from '../testIds';
@@ -260,6 +261,24 @@ export default function Nutrition() {
         usdaSearchQuery,
         (item) => item.description || ''
       );
+      
+      // Test new search pipeline: rerank with shared utility
+      // TODO: Replace filterByTokenAwarePrefix with rerank once validated
+      const testReranked = rerank(
+        filteredResults,
+        (item) => [item.description, item.brandOwner || '', item.foodCategory || ''],
+        usdaSearchQuery
+      );
+      
+      // Log for validation (development only)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[searchPipeline] Test rerank:', {
+          query: usdaSearchQuery,
+          inputCount: filteredResults.length,
+          outputCount: testReranked.length,
+          topScore: testReranked[0]?.score.toFixed(3) ?? 'N/A'
+        });
+      }
       
       setUSDAReplies(filteredResults);
       setUSDASearchDiagnostics(diagnostics);
