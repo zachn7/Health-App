@@ -96,6 +96,19 @@ export class ExerciseDBService {
     }
   }
   
+  static async getAllExercises(): Promise<ExerciseDBItem[]> {
+    await this.initialize();
+    
+    try {
+      const allExercises = await db.table('exercises').toArray();
+      console.log(`getAllExercises: returning ${allExercises.length} exercises`);
+      return allExercises;
+    } catch (error) {
+      console.error('Failed to get all exercises:', error);
+      return [];
+    }
+  }
+
   static async searchExercises(query: string): Promise<ExerciseDBItem[]> {
     await this.initialize();
     
@@ -104,9 +117,7 @@ export class ExerciseDBService {
     // Empty search - return all exercises
     if (!trimmedQuery) {
       console.log('Empty search, returning all exercises');
-      const allExercises = await db.table('exercises').toArray();
-      console.log(`Returning ${allExercises.length} exercises`);
-      return allExercises;
+      return this.getAllExercises();
     }
     
     try {

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { ExerciseDBService } from '@/lib/exercise-db';
+import { rerank } from '@/lib/search/searchPipeline';
 import type { ExerciseDBItem } from '@/types';
 
 interface ExercisePickerProps {
@@ -13,7 +14,6 @@ interface ExercisePickerProps {
 
 export default function ExercisePicker({ onSelect, onClose, excludeIds = [], allowCustom = false }: ExercisePickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [results, setResults] = useState<ExerciseDBItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCustomExerciseForm, setShowCustomExerciseForm] = useState(false);
   const [customExercise, setCustomExercise] = useState({
@@ -31,16 +31,40 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   const [selectedBodyPart, setSelectedBodyPart] = useState<string>('');
   const [selectedEquipment, setSelectedEquipment] = useState<string>('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
-  
+  const [visibleLimit, setVisibleLimit] = useState(30); // Initial items to show
+  const [allFilteredExercises, setAllFilteredExercises] = useState<ExerciseDBItem[]>([]);
+  const [displayedExercises, setDisplayedExercises] = useState<ExerciseDBItem[]>([]);
+  const resultsContainerRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     loadFilters();
-    // Auto-search on typing with debounce, or show initial results
-    const timer = setTimeout(() => {
-      searchExercises();
-    }, 300);
-    
-    return () => clearTimeout(timer);
+    // Immediately search when filters or query change
+    searchExercises();
   }, [searchQuery, selectedBodyPart, selectedEquipment, selectedDifficulty]);
+
+  // Infinite scroll: load more when sentinel is visible
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayedExercises.length < allFilteredExercises.length) {
+          setVisibleLimit(prev => Math.min(prev + 30, allFilteredExercises.length));
+        }
+      },
+      { threshold: 0.1, root: resultsContainerRef.current }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [displayedExercises.length, allFilteredExercises.length]);
+
+  // Update displayed exercises when visible limit or all filtered exercises change
+  useEffect(() => {
+    setDisplayedExercises(allFilteredExercises.slice(0, visibleLimit));
+  }, [visibleLimit, allFilteredExercises]);
   
   const loadFilters = async () => {
     try {
@@ -58,44 +82,62 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   const searchExercises = async () => {
     setLoading(true);
     try {
-      // Get base results: either from search or all exercises
-      let searchResults: ExerciseDBItem[] = [];
-      
-      if (searchQuery.trim()) {
-        searchResults = await ExerciseDBService.searchExercises(searchQuery);
-      } else {
-        // Show all exercises when no search query
-        searchResults = await ExerciseDBService.searchExercises('');
-      }
-      
-      // Apply all filters (AND logic across different filter categories)
+      // Step 1: Get all exercises from database
+      const allExercises = await ExerciseDBService.getAllExercises();
+
+      // Step 2: Apply filters first (reduce candidate set)
+      let candidates = allExercises;
+
       // Difficulty filter
       if (selectedDifficulty) {
-        searchResults = searchResults.filter(ex => ex.difficulty === selectedDifficulty);
+        candidates = candidates.filter(ex => ex.difficulty === selectedDifficulty);
       }
-      
-      // Body Part filter (case-sensitive match)
+
+      // Body Part filter (case-insensitive match)
       if (selectedBodyPart) {
-        searchResults = searchResults.filter(ex => ex.bodyPart === selectedBodyPart);
+        candidates = candidates.filter(ex => ex.bodyPart.toLowerCase() === selectedBodyPart.toLowerCase());
       }
-      
-      // Equipment filter (arrays, check if filter value is in the exercise's equipment array)
+
+      // Equipment filter (check if any equipment matches)
       if (selectedEquipment) {
-        searchResults = searchResults.filter(ex => {
-          // Exercise.equipment is an array of strings
-          // Check if the selected equipment value (from filter) is in the exercise's equipment array
-          return ex.equipment.some(eq => eq.toLowerCase() === selectedEquipment.toLowerCase());
-        });
+        candidates = candidates.filter(ex =>
+          ex.equipment.some(eq => eq.toLowerCase() === selectedEquipment.toLowerCase())
+        );
       }
-      
+
       // Exclude specified IDs
       if (excludeIds.length > 0) {
-        searchResults = searchResults.filter(ex => !excludeIds.includes(ex.id));
+        candidates = candidates.filter(ex => !excludeIds.includes(ex.id));
       }
-      
-      setResults(searchResults);
+
+      // Step 3: If query exists, apply searchPipeline.rerank() for consistent scoring
+      let finalResults: ExerciseDBItem[];
+      if (searchQuery.trim()) {
+        // Use shared searchPipeline for consistent scoring with USDA search
+        const scored = rerank(
+          candidates,
+          (exercise) => [
+            exercise.name,
+            exercise.bodyPart,
+            ...exercise.equipment,
+            ...exercise.targetMuscles,
+            ...exercise.synergistMuscles
+          ],
+          searchQuery
+        );
+        // Filter by score threshold to exclude non-matches (score > 0)
+        finalResults = scored.filter(s => s.score > 0).map(s => s.item);
+      } else {
+        // No query: sort alphabetically for browsing
+        finalResults = [...candidates].sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      // Update state with all filtered results (not just displayed ones)
+      setAllFilteredExercises(finalResults);
+      setVisibleLimit(30); // Reset to initial visible count
     } catch (error) {
       console.error('Failed to search exercises:', error);
+      setAllFilteredExercises([]);
     } finally {
       setLoading(false);
     }
@@ -144,8 +186,8 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
       // Get the saved exercise
       const savedExercise = await ExerciseDBService.getExerciseById(id);
       if (savedExercise) {
-        // Add to results
-        setResults([savedExercise, ...results]);
+        // Add to all filtered exercises (shows up in results)
+        setAllFilteredExercises([savedExercise, ...allFilteredExercises]);
         // Select it and close
         onSelect(savedExercise);
       }
@@ -508,25 +550,33 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
         )}
         
         {/* Results */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div
+          ref={resultsContainerRef}
+          className="flex-1 overflow-y-auto p-4"
+          data-testid="workouts-exercise-list"
+        >
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
               <p className="mt-2 text-gray-600">Searching exercises...</p>
             </div>
-          ) : results.length === 0 ? (
+          ) : allFilteredExercises.length === 0 ? (
             <div className="text-center py-8 text-gray-500" data-testid="exercise-search-empty-state">
               <p>No exercises found. Try adjusting your search or filters.</p>
+            </div>
+          ) : displayedExercises.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No matching exercises with current filters.</p>
             </div>
           ) : (
             <>
               {/* Results Count */}
               <div className="mb-4 text-sm text-gray-600" data-testid="exercise-results-count">
-                Showing {results.length} exercise{results.length !== 1 ? 's' : ''}
+                Showing {displayedExercises.length} of {allFilteredExercises.length} exercise{allFilteredExercises.length !== 1 ? 's' : ''}
               </div>
-              
+
               <div className="space-y-2" data-testid="exercise-results-list">
-                {results.map((exercise) => (
+                {displayedExercises.map((exercise) => (
                 <button
                   key={exercise.id}
                   onClick={() => handleSelect(exercise)}
@@ -558,8 +608,19 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
                     </div>
                   </div>
                 </button>
-              ))}
+                ))}
               </div>
+
+              {/* Load More Sentinel */}
+              {displayedExercises.length < allFilteredExercises.length && (
+                <div
+                  ref={sentinelRef}
+                  className="w-full text-center py-4 text-sm text-gray-500"
+                  data-testid="workouts-load-more-sentinel"
+                >
+                  Loading more exercises...
+                </div>
+              )}
             </>
           )}
         </div>

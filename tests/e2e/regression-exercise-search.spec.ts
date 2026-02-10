@@ -288,12 +288,12 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     const countText = await resultsCount.textContent();
     console.log('Results count text:', countText);
     
-    // Extract the number from text like "Showing 50 exercises"
-    const countMatch = countText?.match(/Showing (\d+) exercise/);
-    const totalCount = countMatch ? parseInt(countMatch[1], 10) : 0;
+    // Extract the total number from text like "Showing 30 of 873 exercises"
+    const totalMatch = countText?.match(/Showing \d+ of (\d+) exercise/);
+    const totalCount = totalMatch ? parseInt(totalMatch[1], 10) : 0;
     
-    console.log(`Total exercises shown: ${totalCount}`);
-    expect(totalCount).toBeGreaterThan(100); // Should show full dataset
+    console.log(`Total exercises in dataset: ${totalCount}`);
+    expect(totalCount).toBeGreaterThan(100); // Should have full dataset loaded
     
     // Get the first visible result
     const resultsList = page.getByTestId('exercise-results-list');
@@ -328,7 +328,8 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     const benchResultsCount = await page.getByTestId('exercise-results-count').textContent();
     console.log('Bench search results:', benchResultsCount);
     
-    const benchCountMatch = benchResultsCount?.match(/Showing (\d+) exercise/);
+    // Match "Showing X of Y exercises" - check if X > 0 (any results displayed)
+    const benchCountMatch = benchResultsCount?.match(/Showing (\d+) of/);
     const benchCount = benchCountMatch ? parseInt(benchCountMatch[1], 10) : 0;
     
     expect(benchCount).toBeGreaterThan(0);
@@ -368,7 +369,8 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     await expect(resultsCount).toBeVisible({ timeout: 5000 });
     
     const initialCountText = await resultsCount.textContent();
-    const initialCountMatch = initialCountText?.match(/Showing (\d+) exercise/);
+    // Extract total count from "Showing X of Y exercises"
+    const initialCountMatch = initialCountText?.match(/Showing \d+ of (\d+) exercise/);
     const initialCount = initialCountMatch ? parseInt(initialCountMatch[1], 10) : 0;
     
     console.log(`Initial exercise count: ${initialCount}`);
@@ -381,7 +383,8 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     
     // Get filtered results count
     const beginnerCountText = await resultsCount.textContent();
-    const beginnerCountMatch = beginnerCountText?.match(/Showing (\d+) exercise/);
+    // Extract total count from "Showing X of Y exercises"
+    const beginnerCountMatch = beginnerCountText?.match(/Showing \d+ of (\d+) exercise/);
     const beginnerCount = beginnerCountMatch ? parseInt(beginnerCountMatch[1], 10) : 0;
     
     console.log(`Beginner filter count: ${beginnerCount}`);
@@ -406,7 +409,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     
     // Verify results count returns to initial count
     const clearedCountText = await resultsCount.textContent();
-    const clearedCountMatch = clearedCountText?.match(/Showing (\d+) exercise/);
+    const clearedCountMatch = clearedCountText?.match(/Showing \d+ of (\d+) exercise/);
     const clearedCount = clearedCountMatch ? parseInt(clearedCountMatch[1], 10) : 0;
     
     console.log(`After clearing filters: ${clearedCount}`);
@@ -418,7 +421,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     await page.waitForTimeout(500);
     
     const benchOnlyCountText = await resultsCount.textContent();
-    const benchOnlyCountMatch = benchOnlyCountText?.match(/Showing (\d+) exercise/);
+    const benchOnlyCountMatch = benchOnlyCountText?.match(/Showing \d+ of (\d+) exercise/);
     const benchOnlyCount = benchOnlyCountMatch ? parseInt(benchOnlyCountMatch[1], 10) : 0;
     
     console.log(`Bench search count: ${benchOnlyCount}`);
@@ -429,7 +432,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     await page.waitForTimeout(500);
     
     const benchBeginnerCountText = await resultsCount.textContent();
-    const benchBeginnerCountMatch = benchBeginnerCountText?.match(/Showing (\d+) exercise/);
+    const benchBeginnerCountMatch = benchBeginnerCountText?.match(/Showing \d+ of (\d+) exercise/);
     const benchBeginnerCount = benchBeginnerCountMatch ? parseInt(benchBeginnerCountMatch[1], 10) : 0;
     
     console.log(`Bench + Beginner filter count: ${benchBeginnerCount}`);
