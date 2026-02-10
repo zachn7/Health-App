@@ -10,7 +10,7 @@ export interface SafeAdapterInfo {
   device: string;
   description: string;
   isFallback: boolean;
-  method: string; // 'info', 'requestAdapterInfo', or 'none'
+  method: string; // 'info' or 'none'
 }
 
 export interface WebGPUDiagnosticsResult {
@@ -114,30 +114,8 @@ export async function getWebGPUDiagnostics(): Promise<WebGPUDiagnosticsResult> {
 
     result.adapterAcquired = true;
 
-    // Step 3: Safely get adapter info (async methods)
-    try {
-      // Try requestAdapterInfo() legacy method (async)
-      if (typeof adapter.requestAdapterInfo === 'function') {
-        const legacyInfo = await adapter.requestAdapterInfo().catch(() => null);
-        if (legacyInfo) {
-          result.adapterInfo = {
-            vendor: legacyInfo.vendor || 'Unknown',
-            architecture: legacyInfo.architecture || 'Unknown',
-            device: legacyInfo.device || 'Unknown',
-            description: legacyInfo.description || '',
-            isFallback: false,
-            method: 'requestAdapterInfo'
-          };
-        }
-      }
-    } catch (e) {
-      // Silently ignore async errors and fall through
-    }
-
-    // If async method failed or not available, try sync method
-    if (!result.adapterInfo) {
-      result.adapterInfo = getSafeAdapterInfoSync(adapter);
-    }
+    // Step 3: Safely get adapter info (sync only - no deprecated async methods)
+    result.adapterInfo = getSafeAdapterInfoSync(adapter);
 
     if (result.adapterInfo?.isFallback) {
       result.errorType = 'adapter-info';

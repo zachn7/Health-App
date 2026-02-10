@@ -30,12 +30,6 @@ declare interface GPUAdapter {
     device?: string;
     description?: string;
   };
-  requestAdapterInfo?(): Promise<{
-    vendor?: string;
-    architecture?: string;
-    device?: string;
-    description?: string;
-  }>;
   requestDevice(): Promise<GPUDevice>;
   destroy?(): void;
 }

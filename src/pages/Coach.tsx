@@ -109,11 +109,17 @@ export default function Coach() {
   useEffect(() => {
     loadCoachData();
     loadWebLLMStatus();
-    checkWebGPUSupport();
     
     // Load chat history from localStorage
     loadChatHistory();
   }, []);
+  
+  useEffect(() => {
+    // Only run WebGPU diagnostics when user opts into WebLLM
+    if (webllmEnabled && !webGPUChecked) {
+      checkWebGPUSupport();
+    }
+  }, [webllmEnabled]);
   
   useEffect(() => {
     // Only load models when WebLLM is enabled AND WebGPU is available

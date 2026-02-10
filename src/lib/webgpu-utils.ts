@@ -14,14 +14,13 @@ export interface AdapterInfo {
 /**
  * Safely retrieve GPU adapter information without throwing errors.
  * 
- * This function handles both the modern GPUAdapter.info API and the legacy
- * requestAdapterInfo() method. If adapter info is unavailable, it returns
- * a fallback object rather than throwing.
+ * This function uses the modern GPUAdapter.info API only (Chrome 113+, Safari 18.2+).
+ * If adapter.info is unavailable, it returns a fallback object rather than throwing.
  * 
  * @param adapter - The GPUAdapter instance from navigator.gpu.requestAdapter()
  * @returns Adapter info object, or a fallback object if unavailable
  */
-export async function getAdapterInfo(adapter: GPUAdapter): Promise<AdapterInfo> {
+export function getAdapterInfo(adapter: GPUAdapter): AdapterInfo {
   if (!adapter) {
     return {
       vendor: 'Adapter unavailable',
@@ -33,7 +32,7 @@ export async function getAdapterInfo(adapter: GPUAdapter): Promise<AdapterInfo> 
   }
 
   try {
-    // Try the modern adapter.info API (Chrome 113+, Safari 18.2+)
+    // Try the modern adapter.info API (Chrome 113+, Safari 18.2+) - sync API only
     if ('info' in adapter) {
       const info = (adapter as any).info;
       return {
@@ -44,38 +43,18 @@ export async function getAdapterInfo(adapter: GPUAdapter): Promise<AdapterInfo> 
         isFallback: false
       };
     }
-
-    // Fallback to the legacy requestAdapterInfo() API
-    if (typeof adapter.requestAdapterInfo === 'function') {
-      const adapterInfo = await adapter.requestAdapterInfo();
-      return {
-        vendor: adapterInfo.vendor || 'Unknown',
-        architecture: adapterInfo.architecture || 'Unknown',
-        device: adapterInfo.device || 'Unknown',
-        description: adapterInfo.description || '',
-        isFallback: false
-      };
-    }
-
-    // No adapter info available - return non-fatal fallback
-    return {
-      vendor: ' Adapter info unavailable',
-      architecture: 'unknown',
-      device: 'unknown',
-      description: 'Adapter info not supported by this browser',
-      isFallback: true
-    };
   } catch (error: any) {
-    // Don't let adapter info retrieval crash the app
-    console.warn('Failed to get GPU adapter info:', error?.message || error);
-    return {
-      vendor: 'Adapter info unavailable',
-      architecture: 'unknown',
-      device: 'unknown',
-      description: `Error: ${error?.message || 'Unknown error'}`,
-      isFallback: true
-    };
+    // Silently fall through to fallback
   }
+
+  // No adapter info available - return non-fatal fallback
+  return {
+    vendor: 'Adapter info unavailable',
+    architecture: 'unknown',
+    device: 'unknown',
+    description: 'Adapter info not supported by this browser',
+    isFallback: true
+  };
 }
 
 /**
@@ -128,8 +107,13 @@ export async function checkWebGPUCapable(): Promise<{
 
     result.adapterAcquired = true;
 
-    // Safely get adapter info (non-fatal)
-    result.adapterInfo = await getAdapterInfo(adapter);
+    // Safely get adapter info (non-fatal, sync)
+    try {
+      result.adapterInfo = getAdapterInfo(adapter);
+    } catch (e) {
+      // Adapter info retrieval failed - continue anyway
+      console.warn('Failed to get adapter info:', e);
+    }
 
     // Try to request a device
     try {
