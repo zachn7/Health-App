@@ -6,8 +6,70 @@ import { webllmService } from '../lib/webllm-service';
 import { formatWeight } from '../lib/unit-conversions';
 import { getWebGPUDiagnostics } from '../ai/webgpu';
 import { validateAndRepairModelId, getAvailableModels } from '../ai/webllmConfig';
-import { Brain, Send, Loader2, AlertCircle } from 'lucide-react';
+import { Component, ErrorInfo, ReactNode } from 'react';
+import { Brain, Send, Loader2, AlertCircle, XCircle } from 'lucide-react';
 import type { Profile, WorkoutPlan } from '../types';
+
+// Local ErrorBoundary for AI widget only - shows inline error banner
+interface AIErrorBoundaryProps {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface AIErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class AIErrorBoundary extends Component<AIErrorBoundaryProps, AIErrorBoundaryState> {
+  constructor(props: AIErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): AIErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[AIErrorBoundary] Caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
+// Simple inline error banner for AI Coach section
+function InlineAIErrorBanner({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="card bg-red-50 border-red-200">
+      <div className="flex items-start">
+        <XCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5" />
+        <div className="flex-1">
+          <h3 className="font-medium text-red-900">AI Coach Failed to Load</h3>
+          <p className="text-sm text-red-700 mt-1">
+            The AI Coach encountered an error and couldn't initialize. This may be due to WebGPU compatibility or browser limitations.
+          </p>
+          <ul className="text-xs text-red-600 mt-2 list-disc list-inside space-y-1">
+            <li>Try using Chrome or Edge browser</li>
+            <li>Check if WebGPU is enabled in your browser (chrome://flags/#enable-unsafe-webgpu)</li>
+            <li>Disable and re-enable AI Coach in Settings</li>
+          </ul>
+          <button
+            onClick={onReset}
+            className="mt-3 text-sm text-red-600 hover:text-red-800 underline"
+          >
+            Reset AI Coach
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Coach() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -508,9 +570,10 @@ export default function Coach() {
           </div>
         )}
         
-        {/* AI Coach Section */}
+        {/* AI Coach Section - wrapped in AIErrorBoundary to prevent crashes */}
         {webllmEnabled && (
-          <div className="card">
+          <AIErrorBoundary fallback={<InlineAIErrorBanner onReset={() => setWebLLMError('AI Coach section was reset. Try reloading the model.')} />}>
+            <div className="card">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-medium text-gray-900">AI Coach Chat</h2>
               <div className="flex items-center space-x-2">
@@ -609,15 +672,19 @@ export default function Coach() {
                     <div className="flex justify-between"><span className="text-gray-400">modelIdFound:</span><span className={availableModels.some(m => m.model_id === selectedModelId) ? 'text-green-400' : 'text-red-400'}>{availableModels.some(m => m.model_id === selectedModelId) ? 'TRUE' : 'FALSE'}</span></div>
                     
                     {(() => {
-                      const engineState = webllmService.getEngineState();
-                      return (
-                        <>
-                          <div className="flex justify-between"><span className="text-gray-400">engineState.isInitialized:</span><span className={engineState.isInitialized ? 'text-green-400' : 'text-red-400'}>{engineState.isInitialized.toString()}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-400">engineState.isLoading:</span><span className={engineState.isLoading ? 'text-yellow-400' : 'text-green-400'}>{engineState.isLoading.toString()}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-400">engineState.hasEngine:</span><span className={engineState.hasEngine ? 'text-green-400' : 'text-red-400'}>{engineState.hasEngine.toString()}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-400">engineState.selectedModelId:</span><span className="text-blue-400">{engineState.selectedModelId || 'NULL'}</span></div>
-                        </>
-                      );
+                      try {
+                        const engineState = webllmService.getEngineState();
+                        return (
+                          <>
+                            <div className="flex justify-between"><span className="text-gray-400">engineState.isInitialized:</span><span className={engineState.isInitialized ? 'text-green-400' : 'text-red-400'}>{engineState.isInitialized.toString()}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-400">engineState.isLoading:</span><span className={engineState.isLoading ? 'text-yellow-400' : 'text-green-400'}>{engineState.isLoading.toString()}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-400">engineState.hasEngine:</span><span className={engineState.hasEngine ? 'text-green-400' : 'text-red-400'}>{engineState.hasEngine.toString()}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-400">engineState.selectedModelId:</span><span className="text-blue-400">{engineState.selectedModelId || 'NULL'}</span></div>
+                          </>
+                        );
+                      } catch (error) {
+                        return <div className="text-red-400 col-span-2">Error getting engine state</div>;
+                      }
                     })()}
                     
                     <div className="flex justify-between"><span className="text-gray-400">webllmModelReady:</span><span className={webllmModelReady ? 'text-green-400' : 'text-red-400'}>{webllmModelReady.toString()}</span></div>
@@ -777,6 +844,7 @@ export default function Coach() {
               </div>
             )}
           </div>
+          </AIErrorBoundary>
         )}
         
         {/* Fallback Coach UI when WebLLM is not available */}

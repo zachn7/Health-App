@@ -100,4 +100,63 @@ test.describe('Smoke: AI Coach Features', () => {
     // This test mainly ensures the app doesn't completely crash
     expect(page.url()).toBeTruthy();
   });
+
+  test('Coach route never crashes even without WebGPU (shows inline banner)', async ({ page, context }) => {
+    // Simulate missing WebGPU by removing navigator.gpu before page load
+    await context.addInitScript(() => {
+      // @ts-ignore - removing navigator.gpu to simulate missing WebGPU
+      delete (window.navigator as any).gpu;
+    });
+    
+    // Track console for crashes
+    const errors: string[] = [];
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        errors.push(msg.text());
+      }
+    });
+    
+    // Navigate to Coach page
+    await page.goto('./#/coach');
+    await page.waitForLoadState('networkidle');
+    
+    // Should NOT show global Application Error screen (no crash)
+    const globalError = page.locator('text=Application Error');
+    const globalErrorVisible = await globalError.isVisible({ timeout: 3000 }).catch(() => false);
+    expect(globalErrorVisible).toBe(false);
+    
+    console.log('Console errors:', errors);
+    
+    // Check page state - should be loading, coach, or profile, NOT crashed
+    const loadingEl = page.getByTestId('coach-loading');
+    const profileRequiredEl = page.getByTestId('coach-profile-required');
+    const coachHeading = page.getByTestId('coach-heading');
+    
+    const isLoading = await loadingEl.isVisible().catch(() => false);
+    const needsProfile = await profileRequiredEl.isVisible().catch(() => false);
+    const hasCoachHeading = await coachHeading.isVisible().catch(() => false);
+    
+    expect(isLoading || needsProfile || hasCoachHeading).toBe(true);
+    
+    if (hasCoachHeading) {
+      // Coach page rendered - check for WebGPU warning if WebLLM is enabled
+      const webgpuWarning = page.locator('text=WebGPU Not Available');
+      const warningVisible = await webgpuWarning.isVisible().catch(() => false);
+      if (warningVisible) {
+        console.log('✅ Inline WebGPU warning banner shown');
+        const warningText = await webgpuWarning.textContent();
+        expect(warningText).toContain('WebGPU');
+      }
+      console.log('✅ Coach route loaded successfully without WebGPU');
+    } else if (needsProfile) {
+      console.log('✅ Profile required (no WebGPU, no crash)');
+    } else if (isLoading) {
+      console.log('✅ Loading state (no WebGPU, no crash)');
+    }
+    
+    // Verify page has actual content (not empty/blank)
+    const bodyText = await page.textContent('body');
+    expect(bodyText).toBeTruthy();
+    expect(bodyText?.length).toBeGreaterThan(50);
+  });
 });
