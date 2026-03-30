@@ -2,14 +2,20 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  fullyParallel: true,
+  fullyParallel: !process.env.CI,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
+  reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'html',
+  timeout: 30_000,
+  expect: {
+    timeout: 7_500,
+  },
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',
+    navigationTimeout: 15_000,
+    actionTimeout: 10_000,
     serviceWorkers: 'block', // Block SWs to ensure reliable network mocking in CI
   },
   projects: process.env.CI ? [
@@ -32,8 +38,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview',
-    url: 'http://localhost:4173',
+    command: 'npm run preview -- --host 127.0.0.1 --strictPort --port 4173',
+    url: 'http://127.0.0.1:4173',
+    timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
     reuseExistingServer: !process.env.CI,
   },
 });

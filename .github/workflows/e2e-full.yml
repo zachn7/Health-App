@@ -22,6 +22,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Run unit tests
+        run: npm test
+      
       - name: Build application for testing
         run: npm run build
       
@@ -32,7 +35,9 @@ jobs:
         run: node scripts/assert-no-playwright-skips.mjs
       
       - name: Run full E2E test suite
-        run: npx playwright test
+        env:
+          CI: true
+        run: npx playwright test --project=chromium --reporter=line
       
       - name: Upload test results on failure
         if: failure()
