@@ -6,6 +6,7 @@ import { calculateTDEE } from '../lib/coach-engine';
 import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, batchFetchFoodDetails, buildLoggedItemPreviewFromDetail, type USDAFoodDetail } from '../lib/usda-service';
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
+import { rerank } from '../lib/search/searchPipeline';
 import { testIds } from '../testIds';
 import type { NutritionLog, FoodLogItem, Profile, FoodItem } from '../types';
 
@@ -46,6 +47,8 @@ export default function Nutrition() {
   const [usdaImporting, setUSDAImporting] = useState<Set<number>>(new Set());
   const [selectedUSDAFoods, setSelectedUSDAFoods] = useState<Set<number>>(new Set());
   const [savedFoods, setSavedFoods] = useState<FoodItem[]>([]);
+  const [savedFoodQuery, setSavedFoodQuery] = useState('');
+  const [showSavedFoodSearch, setShowSavedFoodSearch] = useState(false);
   const [savedMeals, setSavedMeals] = useState<any[]>([]);
   const [showSavedMealsModal, setShowSavedMealsModal] = useState(false);
   const [showServingSizeEdit, setShowServingSizeEdit] = useState<string | null>(null);
@@ -563,8 +566,21 @@ export default function Nutrition() {
       computedTotalGrams
     };
     
-    await saveFoodItem(foodLogItem, 'Uncategorized');
+    await saveFoodItem(foodLogItem, activeMealGroup || 'Uncategorized');
+    setShowSavedFoodSearch(false);
+    setSavedFoodQuery('');
   };
+
+  const filteredSavedFoods = savedFoodQuery.trim()
+    ? rerank(
+        savedFoods,
+        (food) => [food.name, food.servingSize, food.source],
+        savedFoodQuery
+      )
+        .filter((result) => result.score > 0)
+        .map((result) => result.item)
+        .slice(0, 12)
+    : savedFoods.slice(0, 12);
 
   const addSavedMeal = async (meal: any) => {
     // Add each food item from the meal to the log
@@ -808,25 +824,13 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
         )}
         
         {savedFoods.length > 0 && (
-          <div className="dropdown relative">
-            <button className="btn btn-outline-secondary dropdown-toggle">
-              Saved Foods ({savedFoods.length})
-            </button>
-            <div className="dropdown-content right-0 mt-1 w-80 max-h-64 overflow-y-auto">
-              {savedFoods.map((food) => (
-                <button
-                  key={food.id}
-                  onClick={() => addSavedFood(food)}
-                  className="dropdown-item text-left"
-                >
-                  <div className="font-medium">{food.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {food.servingSize} • {Math.round(food.calories)} cal
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+          <button
+            data-testid={testIds.nutrition.savedFoodSearchButton}
+            onClick={() => setShowSavedFoodSearch(true)}
+            className="btn btn-outline-secondary"
+          >
+            Saved Foods ({savedFoods.length})
+          </button>
         )}
         
         {savedMeals.length > 0 && (
@@ -850,6 +854,71 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
         )}
       </div>
       
+      {/* Saved Food Search */}
+      {showSavedFoodSearch && (
+        <div className="card mb-6" data-testid={testIds.nutrition.savedFoodSearchModal}>
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">Saved Foods</h3>
+              <p className="text-sm text-gray-600 mt-1">Type to instantly filter your saved foods, same as workout exercise picking but, you know, for food.</p>
+            </div>
+            <button
+              onClick={() => {
+                setShowSavedFoodSearch(false);
+                setSavedFoodQuery('');
+              }}
+              className="text-gray-400 hover:text-gray-600"
+              aria-label="Close saved food search"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="mb-4">
+            <input
+              data-testid={testIds.nutrition.savedFoodSearchInput}
+              type="text"
+              value={savedFoodQuery}
+              onChange={(e) => setSavedFoodQuery(e.target.value)}
+              className="input w-full"
+              placeholder="Type to filter saved foods..."
+              autoFocus
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Results update while you type. Revolutionary stuff, apparently.
+            </p>
+          </div>
+
+          {filteredSavedFoods.length > 0 ? (
+            <div data-testid={testIds.nutrition.savedFoodSearchResults} className="space-y-2 max-h-80 overflow-y-auto">
+              {filteredSavedFoods.map((food) => (
+                <button
+                  key={food.id}
+                  data-testid={testIds.nutrition.savedFoodResultRow(food.id)}
+                  onClick={() => addSavedFood(food)}
+                  className="w-full p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-left transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-medium text-gray-900">{food.name}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {food.servingSize} • {Math.round(food.calories)} cal • {food.proteinG.toFixed(1)}P / {food.carbsG.toFixed(1)}C / {food.fatG.toFixed(1)}F
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-blue-600 whitespace-nowrap">Add</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div data-testid={testIds.nutrition.savedFoodSearchEmpty} className="text-center py-8 text-gray-500">
+              <p>No saved foods match "{savedFoodQuery}".</p>
+              <p className="text-sm mt-1">Try a shorter term or add more foods from USDA first.</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Saved Meals Modal */}
       {showSavedMealsModal && (
         <div className="card mb-6" data-testid="nutrition-log-saved-meal-modal">

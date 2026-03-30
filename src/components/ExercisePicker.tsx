@@ -238,140 +238,19 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
           </div>
           
           {/* Search */}
-          <div className="flex gap-2">
+          <div className="space-y-2">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search exercises..."
-              className="input flex-1"
+              placeholder="Type to search exercises..."
+              className="input w-full"
               data-testid="exercise-search-input"
+              autoFocus
             />
-            <button
-              onClick={searchExercises}
-              disabled={loading}
-              className="btn btn-primary"
-            >
-              {loading ? 'Searching...' : 'Search'}
-            </button>
+            <p className="text-xs text-gray-500">Results update as you type. Wild concept, I know.</p>
           </div>
         </div>
-        
-        {/* Custom Exercise Form */}
-        {showCustomExerciseForm && (
-          <div className="p-6 bg-blue-50 border-b border-blue-200">
-            <h3 className="font-medium text-gray-900 mb-4">Create Custom Exercise</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="label">Exercise Name *</label>
-                <input
-                  type="text"
-                  value={customExercise.name}
-                  onChange={(e) => setCustomExercise({ ...customExercise, name: e.target.value })}
-                  className="input"
-                  placeholder="e.g., My Custom Bench Press"
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Body Part</label>
-                  <select
-                    value={customExercise.bodyPart}
-                    onChange={(e) => setCustomExercise({ ...customExercise, bodyPart: e.target.value })}
-                    className="input"
-                  >
-                    <option value="">Select...</option>
-                    {bodyParts.map(part => (
-                      <option key={part} value={part}>{part}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Equipment</label>
-                  <select
-                    value={customExercise.equipment[0]}
-                    onChange={(e) => setCustomExercise({ ...customExercise, equipment: [e.target.value] })}
-                    className="input"
-                  >
-                    {equipment.map(equip => (
-                      <option key={equip} value={equip}>{equip}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Category</label>
-                  <select
-                    value={customExercise.category}
-                    onChange={(e) => setCustomExercise({ ...customExercise, category: e.target.value })}
-                    className="input"
-                  >
-                    <option value="strength">Strength</option>
-                    <option value="powerlifting">Powerlifting</option>
-                    <option value="bodybuilding">Bodybuilding</option>
-                    <option value="strongman">Strongman</option>
-                    <option value="olympic weightlifting">Olympic Weightlifting</option>
-                    <option value="plyometrics">Plyometrics</option>
-                    <option value="stretching">Stretching</option>
-                    <option value="cardio">Cardio</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Difficulty</label>
-                  <select
-                    value={customExercise.difficulty}
-                    onChange={(e) => setCustomExercise({ ...customExercise, difficulty: e.target.value as 'beginner' | 'intermediate' | 'advanced' })}
-                    className="input"
-                  >
-                    <option value="beginner">Beginner</option>
-                    <option value="intermediate">Intermediate</option>
-                    <option value="advanced">Advanced</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label className="label">Instructions (one per line)</label>
-                <textarea
-                  value={customExercise.instructionsText}
-                  onChange={(e) => setCustomExercise({ ...customExercise, instructionsText: e.target.value })}
-                  className="input min-h-[100px]"
-                  placeholder="1. Step one&#10;2. Step two&#10;3. Step three"
-                />
-              </div>
-              
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSaveCustomExercise}
-                  disabled={savingCustom}
-                  className="btn btn-primary flex-1"
-                >
-                  {savingCustom ? 'Saving...' : 'Save Exercise'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCustomExerciseForm(false);
-                    setCustomExercise({
-                      name: '',
-                      bodyPart: '',
-                      equipment: ['body only'],
-                      category: 'strength',
-                      difficulty: 'beginner',
-                      instructions: [],
-                      instructionsText: ''
-                    });
-                  }}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         
         {/* Filters */}
         <div className="p-4 border-b border-gray-200 bg-gray-50">

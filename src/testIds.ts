@@ -137,7 +137,13 @@ export const testIds = {
     foodCarbs: 'food-carbs',
     foodFat: 'food-fat',
     
-    // Add saved meal
+    // Saved food + meals
+    savedFoodSearchButton: 'nutrition-saved-food-search-btn',
+    savedFoodSearchModal: 'nutrition-saved-food-search-modal',
+    savedFoodSearchInput: 'nutrition-saved-food-search-input',
+    savedFoodSearchResults: 'nutrition-saved-food-search-results',
+    savedFoodSearchEmpty: 'nutrition-saved-food-search-empty',
+    savedFoodResultRow: (id: string | number) => `nutrition-saved-food-result-${id}`,
     addSavedMealBtn: 'nutrition-log-add-saved-meal-btn',
     savedMealModal: 'nutrition-log-saved-meal-modal',
     savedMealRow: (id: string | number) => `nutrition-log-saved-meal-row-${id}`,

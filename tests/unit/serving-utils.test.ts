@@ -200,7 +200,9 @@ describe('serving-utils', () => {
           carbsG: qty * 0.25,
           fatG: qty * 0.1,
           baseUnit: 'grams',
-          servingGrams: 1,
+          // Preserve the canonical serving gram weight even in grams mode.
+          // That mirrors how the app stores USDA/manual items so toggling back works.
+          servingGrams: gramWeight,
           computedTotalGrams: qty
         };
       } else {
@@ -273,9 +275,22 @@ describe('serving-utils', () => {
       expect(toServings.newTotalGrams).toBe(60); // 1.5 * 40
       expect(toServings.newCalories).toBe(120); // 60 * 2 (rounded from 122)
       
-      // Now in servings mode, toggle to grams mode using 60g (preserved)
+      // Now in servings mode, toggle to grams mode using a persisted food-log shape
+      const persistedServingsItem: FoodLogItem = {
+        id: 'test-id',
+        name: 'Test Food',
+        servingSize: toServings.newDisplayServingSize,
+        quantidade: toServings.newQuantity,
+        calories: toServings.newCalories,
+        proteinG: toServings.newProteinG,
+        carbsG: toServings.newCarbsG,
+        fatG: toServings.newFatG,
+        baseUnit: toServings.newBaseUnit,
+        servingGrams: toServings.newServingGrams,
+        computedTotalGrams: toServings.newTotalGrams
+      };
       const backToGrams = computeServingsChange({
-        originalItem: toServings as FoodLogItem,
+        originalItem: persistedServingsItem,
         editedQuantity: 60, // current grams preserved
         editedUnit: 'grams'
       });
@@ -335,7 +350,7 @@ describe('serving-utils', () => {
       expect(result.newTotalGrams).toBe(60);
       expect(result.newQuantity).toBe(60); // In grams mode, quantity = grams
       expect(result.newBaseUnit).toBe('grams');
-      expect(result.newCalories).toBe(160); // macrosPerGram (2) * 60 = 120; ratio of 60/40=1.5 yields 80*1.5=120
+      expect(result.newCalories).toBe(120); // 60g at 2 cal/g = 120
     });
   });
   
