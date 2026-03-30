@@ -1,7 +1,5 @@
 import { db } from '@/db';
 import type { ExerciseDBItem, ExperienceLevel } from '@/types';
-// @ts-ignore
-import exercisesData from '@/assets/data/exercises.json';
 
 // Map the external exercise data to our internal format
 const mapExerciseToInternal = (externalExercise: any): ExerciseDBItem => {
@@ -55,6 +53,16 @@ const mapExerciseToInternal = (externalExercise: any): ExerciseDBItem => {
 
 export class ExerciseDBService {
   private static initialized = false;
+  private static exercisesDatasetPromise: Promise<any[]> | null = null;
+
+  private static async loadExercisesDataset(): Promise<any[]> {
+    if (!this.exercisesDatasetPromise) {
+      this.exercisesDatasetPromise = import('@/assets/data/exercises.json')
+        .then((module) => module.default as any[]);
+    }
+
+    return this.exercisesDatasetPromise;
+  }
   
   static async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -67,7 +75,9 @@ export class ExerciseDBService {
       if (existingCount === 0) {
         console.log('Loading exercise database...');
         
-        // Map and load external exercise data
+        // Map and load external exercise data on demand so non-workout routes
+        // don't pay the JSON cost at startup like suckers.
+        const exercisesData = await this.loadExercisesDataset();
         const mappedExercises = exercisesData.map(mapExerciseToInternal);
         console.log(`Mapped ${mappedExercises.length} exercises from JSON`);
         

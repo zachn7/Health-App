@@ -1,21 +1,21 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
-// Pages
-import Dashboard from './pages/Dashboard';
-import Onboarding from './pages/Onboarding';
-import Profile from './pages/Profile';
-import Coach from './pages/Coach';
-import Workouts from './pages/Workouts';
-import WorkoutLogger from './pages/WorkoutLogger';
-import Nutrition from './pages/Nutrition';
-import Meals from './pages/Meals';
-import Progress from './pages/Progress';
-import Injury from './pages/Injury';
-import Settings from './pages/Settings';
-import Privacy from './pages/Privacy';
-import PrivacyPolicy from './pages/legal/PrivacyPolicy';
-import TermsOfUse from './pages/legal/TermsOfUse';
-import MedicalDisclaimer from './pages/legal/MedicalDisclaimer';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Coach = lazy(() => import('./pages/Coach'));
+const Workouts = lazy(() => import('./pages/Workouts'));
+const WorkoutLogger = lazy(() => import('./pages/WorkoutLogger'));
+const Nutrition = lazy(() => import('./pages/Nutrition'));
+const Meals = lazy(() => import('./pages/Meals'));
+const Progress = lazy(() => import('./pages/Progress'));
+const Injury = lazy(() => import('./pages/Injury'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const PrivacyPolicy = lazy(() => import('./pages/legal/PrivacyPolicy'));
+const TermsOfUse = lazy(() => import('./pages/legal/TermsOfUse'));
+const MedicalDisclaimer = lazy(() => import('./pages/legal/MedicalDisclaimer'));
 
 // Components
 import Layout from './components/Layout';
@@ -26,6 +26,17 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 // Hooks
 import { useLocalStorage } from './hooks/useLocalStorage';
+
+function RouteFallback() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="card text-center py-10">
+        <div className="text-lg font-medium text-gray-900">Loading page...</div>
+        <p className="mt-2 text-sm text-gray-600">Hang tight, the app is fetching only what this route actually needs.</p>
+      </div>
+    </div>
+  );
+}
 
 function AppContent() {
   const navigate = useNavigate();
@@ -56,33 +67,35 @@ function AppContent() {
 
   return (
     <Layout>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            hasCompletedOnboarding ? <Dashboard /> : <Navigate to="/onboarding" replace />
-          }
-        />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/coach" element={
-          <ErrorBoundary>
-            <Coach />
-          </ErrorBoundary>
-        } />
-        <Route path="/workouts" element={<Workouts />} />
-        <Route path="/log/workout" element={<WorkoutLogger />} />
-        <Route path="/nutrition" element={<Nutrition />} />
-        <Route path="/meals" element={<Meals />} />
-        <Route path="/progress" element={<Progress />} />
-        <Route path="/injury" element={<Injury />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/legal/privacy" element={<PrivacyPolicy />} />
-        <Route path="/legal/terms" element={<TermsOfUse />} />
-        <Route path="/legal/disclaimer" element={<MedicalDisclaimer />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              hasCompletedOnboarding ? <Dashboard /> : <Navigate to="/onboarding" replace />
+            }
+          />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/coach" element={
+            <ErrorBoundary>
+              <Coach />
+            </ErrorBoundary>
+          } />
+          <Route path="/workouts" element={<Workouts />} />
+          <Route path="/log/workout" element={<WorkoutLogger />} />
+          <Route path="/nutrition" element={<Nutrition />} />
+          <Route path="/meals" element={<Meals />} />
+          <Route path="/progress" element={<Progress />} />
+          <Route path="/injury" element={<Injury />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+          <Route path="/legal/terms" element={<TermsOfUse />} />
+          <Route path="/legal/disclaimer" element={<MedicalDisclaimer />} />
+        </Routes>
+      </Suspense>
     </Layout>
   );
 }

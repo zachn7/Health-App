@@ -127,23 +127,29 @@ test.describe('Smoke: AI Coach Features', () => {
     
     console.log('Console errors:', errors);
     
-    // Verify page has actual content (not empty/blank)
-    const bodyText = await page.textContent('body');
-    expect(bodyText).toBeTruthy();
-    expect(bodyText?.length).toBeGreaterThan(50);
-
     // Coach route may be loading, may require profile, or may render coach content.
-    // We only care that it doesn't crash and shows a meaningful state.
+    // Wait for *any* meaningful non-crash state instead of sampling body text too early.
     const loadingEl = page.getByTestId('coach-loading');
     const profileRequiredEl = page.getByTestId('coach-profile-required');
     const coachHeading = page.getByTestId('coach-heading');
 
+    await expect
+      .poll(async () => {
+        const isLoading = await loadingEl.isVisible().catch(() => false);
+        const needsProfile = await profileRequiredEl.isVisible().catch(() => false);
+        const hasCoachHeading = await coachHeading.isVisible().catch(() => false);
+        const bodyText = await page.textContent('body');
+        const hasMeaningfulCoachText = /AI Coach|Profile Required|Loading coach data|Go to Profile/i.test(bodyText || '');
+        return isLoading || needsProfile || hasCoachHeading || hasMeaningfulCoachText;
+      }, { timeout: 10000 })
+      .toBe(true);
+
+    const bodyText = await page.textContent('body');
+    expect(bodyText).toBeTruthy();
+
     const isLoading = await loadingEl.isVisible().catch(() => false);
     const needsProfile = await profileRequiredEl.isVisible().catch(() => false);
     const hasCoachHeading = await coachHeading.isVisible().catch(() => false);
-    const hasMeaningfulCoachText = /AI Coach|Profile Required|Loading coach data|Go to Profile/i.test(bodyText || '');
-
-    expect(isLoading || needsProfile || hasCoachHeading || hasMeaningfulCoachText).toBe(true);
 
     if (hasCoachHeading) {
       const webgpuWarning = page.locator('text=WebGPU Not Available');

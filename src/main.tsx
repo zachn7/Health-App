@@ -16,8 +16,6 @@ if (import.meta.env.DEV) {
   }
 }
 
-// Initialize exercise database on app startup
-import { ExerciseDBService } from '@/lib/exercise-db'
 import { initDatabase } from '@/db'
 
 // Service Worker registration with better error handling and security context check
@@ -96,11 +94,9 @@ const registerServiceWorker = async () => {
 // Initialize app and database
 const initializeApp = async () => {
   try {
-    // Initialize database first
+    // Initialize core database only. Heavy route-specific data like the exercise
+    // library now loads on demand instead of bloating every first paint.
     await initDatabase();
-    
-    // Initialize exercise database
-    await ExerciseDBService.initialize();
     
     console.log('App initialization complete');
   } catch (error) {
