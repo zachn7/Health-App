@@ -1,12 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('Regression: Nutrition Log Saved Meals', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
-    });
+  test.beforeEach(async ({ context }) => {
+    await bootstrapAppState(context, { completeOnboarding: true });
   });
 
   test('should add saved meal to nutrition log with correct quantity display', async ({ page }) => {

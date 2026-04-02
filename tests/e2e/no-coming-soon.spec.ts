@@ -1,14 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('No Coming Soon Text (F05)', () => {
   test.beforeEach(async ({ page, context }) => {
-    // Set age gate to pass BEFORE page loads (runs on all page navigations)
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
-    });
-    
-    // Navigate to app
+    await bootstrapAppState(context);
     await page.goto('./');
   });
 

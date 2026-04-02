@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { testIds } from '../../src/testIds';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('Regression: Nutrition saved food search is predictive', () => {
   test.beforeEach(async ({ page, context }) => {
-    await context.addInitScript(() => {
-      localStorage.clear();
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
+    await bootstrapAppState(context, {
+      clearStorage: true,
+      completeOnboarding: true,
     });
 
     await page.goto('./#/nutrition');

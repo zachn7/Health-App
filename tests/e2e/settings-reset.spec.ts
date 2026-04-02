@@ -1,43 +1,22 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('Settings: Reset App Data', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Set up age gate and onboarding with a mock profile
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
-      
-      // Create a mock profile so we have data to reset
-      const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
-      if (profiles.length === 0) {
-        profiles.push({
-          id: 'test-reset-profile',
-          name: 'Reset Test User',
-          sex: 'male',
-          age: 30,
-          weightKg: 80,
-          heightCm: 180,
-          activityLevel: 'moderate',
-          experienceLevel: 'intermediate',
-          goals: [{
-            id: 'goal-reset',
-            type: 'strength',
-            isPrimary: true
-          }],
-          equipment: ['barbell', 'dumbbell'],
-          schedule: {
-            monday: true,
-            tuesday: false,
-            wednesday: true,
-            thursday: false,
-            friday: true,
-            saturday: false,
-            sunday: false
-          },
-          preferredUnits: 'metric'
-        });
-        localStorage.setItem('profiles', JSON.stringify(profiles));
-      }
+  test.beforeEach(async ({ context }) => {
+    await bootstrapAppState(context, {
+      clearStorage: true,
+      completeOnboarding: true,
+      seedProfile: true,
+      profile: {
+        age: 30,
+        sex: 'male',
+        activityLevel: 'moderate',
+        experienceLevel: 'intermediate',
+        equipment: ['barbell', 'dumbbell'],
+        schedule: ['monday', 'wednesday', 'friday'],
+        heightCm: 180,
+        weightKg: 80,
+      },
     });
   });
 

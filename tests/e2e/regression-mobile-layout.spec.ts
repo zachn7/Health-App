@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { testIds } from '../../src/testIds';
+import { bootstrapAppState, gotoApp } from './helpers/bootstrap';
 
 /**
  * Mobile Layout Regression Test
@@ -15,33 +16,17 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
   const mobileViewport = { width: 390, height: 844 };
 
   test.beforeEach(async ({ page, context }) => {
-    // Set age gate to pass BEFORE page loads
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
-      // Set onboarding as completed so we can navigate freely
-      localStorage.setItem('onboarding_completed', 'true');
-      // Set minimal profile so pages load correctly
-      localStorage.setItem('user_profile', JSON.stringify({
-        age: 30,
-        sex: 'male',
-        activityLevel: 'moderate',
-        experienceLevel: 'beginner',
-        equipment: ['bodyweight'],
-        schedule: ['monday'],
-        heightCm: 175,
-        weightKg: 75,
-        macros: { protein: 0.3, carbs: 0.4, fat: 0.3 }
-      }));
+    await bootstrapAppState(context, {
+      completeOnboarding: true,
+      seedProfile: true,
     });
 
-    // Set mobile viewport
     await page.setViewportSize(mobileViewport);
   });
 
   test('should display page content without overlap when menu is closed', async ({ page }) => {
     // Navigate to Dashboard
-    await page.goto('./#/');
+    await gotoApp(page);
 
     // Wait for page to load
     await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible();
@@ -71,7 +56,7 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
   });
 
   test('should open mobile sidebar as overlay when toggle is clicked', async ({ page }) => {
-    await page.goto('./#/');
+    await gotoApp(page);
 
     // Wait for page load
     await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible();
@@ -115,7 +100,7 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
   });
 
   test('should close mobile drawer when navigating', async ({ page }) => {
-    await page.goto('./#/');
+    await gotoApp(page);
 
     // Wait for page load
     await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible();
@@ -147,7 +132,7 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
 
   test('should maintain responsive layout across multiple pages', async ({ page }) => {
     // Test Dashboard
-    await page.goto('./#/');
+    await gotoApp(page);
     await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible();
     await expect(page.getByTestId(testIds.nav.toggleBtn)).toBeVisible();
 
@@ -201,25 +186,7 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
     await expect(drawer).not.toBeVisible();
   });
 
-  test('sidebar should not overlap content on any page', async ({ page, context }) => {
-    // Set up profile (already done in beforeEach, but being explicit here for clarity)
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
-      localStorage.setItem('onboarding_completed', 'true');
-      localStorage.setItem('user_profile', JSON.stringify({
-        age: 30,
-        sex: 'male',
-        activityLevel: 'moderate',
-        experienceLevel: 'beginner',
-        equipment: ['bodyweight'],
-        schedule: ['monday'],
-        heightCm: 175,
-        weightKg: 75,
-        macros: { protein: 0.3, carbs: 0.4, fat: 0.3 }
-      }));
-    });
-
+  test('sidebar should not overlap content on any page', async ({ page }) => {
     const pages = ['./#/', './#/profile', './#/workouts', './#/progress', './#/settings'];
 
     for (const url of pages) {

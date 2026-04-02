@@ -1,14 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapAppState } from './helpers/bootstrap';
 import { setupTestProfile } from './helpers/setupProfile';
 import { testIds } from '../../src/testIds';
 
 test.describe('Regression: Workout Plan Generator (R07)', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
-    });
+  test.beforeEach(async ({ context }) => {
+    await bootstrapAppState(context, { completeOnboarding: true });
   });
 
   test('should generate a workout plan with exercises without AI', async ({ page }) => {
@@ -19,7 +16,7 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     await page.waitForLoadState('networkidle');
     
     // Click "Generate Workout Plan" button to open mode selection modal
-    const generateButton = page.getByTestId('generate-workout-plan-btn');
+    const generateButton = page.getByTestId('generate-empty-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     
     // Click generate button to open mode selection modal
@@ -77,7 +74,7 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     // Generate a plan first
     page.on('dialog', dialog => dialog.accept());
     
-    const generateButton = page.getByTestId('generate-workout-plan-btn');
+    const generateButton = page.getByTestId('generate-empty-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     await generateButton.click();
     await page.waitForTimeout(500); // Wait for modal to appear
@@ -163,7 +160,7 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
     // Generate a plan
     page.on('dialog', dialog => dialog.accept());
     
-    const generateButton = page.getByTestId('generate-workout-plan-btn');
+    const generateButton = page.getByTestId('generate-empty-workout-plan-btn');
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     await generateButton.click();
     await page.waitForTimeout(500); // Wait for modal to appear
@@ -401,31 +398,39 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
   });
 
   test('should generate workout plan successfully in offline mode', async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
-    });
-
-    // Setup a test profile first (must be done online)
     await setupTestProfile(page);
     console.log('✓ Profile created online');
 
-    // Navigate to Workouts page
     await page.goto('./#/workouts');
     await page.waitForLoadState('networkidle');
     console.log('✓ Navigated to workouts page');
 
-    // Set offline mode before generating
+    const generateButton = page.getByTestId('generate-empty-workout-plan-btn');
+    await expect(generateButton).toBeVisible({ timeout: 5000 });
+
+    // Warm the lazy-loaded generator path while online first.
+    page.on('dialog', dialog => dialog.accept());
+    await generateButton.click();
+    await page.waitForTimeout(500);
+
+    const warmProfileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
+    await expect(warmProfileModeButton).toBeVisible({ timeout: 3000 });
+    await warmProfileModeButton.click();
+    await page.waitForTimeout(300);
+
+    const warmGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
+    await expect(warmGenerateButton).toBeVisible({ timeout: 3000 });
+    await warmGenerateButton.click();
+
+    const plans = page.locator('[data-testid^="workout-plan-"]');
+    await expect(plans.first()).toBeVisible({ timeout: 15000 });
+    const existingPlanCount = await plans.count();
+    console.log('✓ Warmed workout generator online');
+
     await context.setOffline(true);
     console.log('✓ Browser set to offline mode');
 
     try {
-      // Click "Generate Workout Plan" button
-      const generateButton = page.getByTestId('generate-workout-plan-btn');
-      await expect(generateButton).toBeVisible({ timeout: 5000 });
-
-      // Capture any console errors during generation
       const consoleErrors: string[] = [];
       page.on('console', msg => {
         if (msg.type() === 'error') {
@@ -433,32 +438,20 @@ test.describe('Regression: Workout Plan Generator (R07)', () => {
         }
       });
 
-      // Click generate button to open mode selection modal
       await generateButton.click();
       console.log('✓ Clicked generate button');
-      await page.waitForTimeout(500); // Wait for modal to appear
+      await page.waitForTimeout(500);
       
-      // Select "Based on Profile" mode
       const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
       await expect(profileModeButton).toBeVisible({ timeout: 3000 });
       await profileModeButton.click();
-      await page.waitForTimeout(300); // Wait for state update
+      await page.waitForTimeout(300);
       
-      // Click the generate button in the modal
       const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
       await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
       await modalGenerateButton.click();
 
-      // Handle the success dialog
-      let dialogMessage = '';
-      page.on('dialog', async dialog => {
-        dialogMessage = dialog.message();
-        console.log('Dialog message:', dialogMessage);
-        await dialog.accept();
-      });
-
-      // Wait for plan to appear
-      const planCard = page.locator('[data-testid^="workout-plan-"]').first();
+      const planCard = plans.nth(existingPlanCount);
       await expect(planCard).toBeVisible({ timeout: 15000 });
       console.log('✓ Workout plan appeared offline');
 

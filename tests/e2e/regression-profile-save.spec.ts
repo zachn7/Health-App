@@ -1,15 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
   
   test.beforeEach(async ({ page, context }) => {
-    // Set age gate to pass BEFORE page loads (runs on all page navigations)
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
-    });
-    
-    // Navigate to profile
+    await bootstrapAppState(context);
     await page.goto('./#/profile');
   });
 
@@ -46,45 +41,7 @@ test.describe('Regression: Profile Save -> Dashboard Update (R01)', () => {
     // Dashboard is loaded - profile data will be shown once loaded
     await expect(page.getByTestId('dashboard-status-title')).toBeVisible();
   });
-  
-  test('should update dashboard immediately after saving profile', async ({ page }) => {
-    // Should need to create profile first
-    await expect(page.getByText('No Profile Found')).toBeVisible();
-    await page.getByRole('button', { name: 'Create Profile' }).click();
-    
-    // Fill out profile form
-    await page.getByTestId('profile-age-input').fill('25');
-    await page.getByTestId('profile-sex-select').selectOption('male');
-    await page.getByTestId('profile-activity-level-select').selectOption('moderate');
-    await page.getByTestId('profile-experience-level-select').selectOption('beginner');
-    
-    // Fill health metrics
-    await page.getByPlaceholder(/100.*250/).fill('175'); // Height in cm
-    await page.getByPlaceholder(/30.*300/).fill('75'); // Weight in kg
-    
-    // Select equipment and workout day
-    await page.getByTestId('equipment-bodyweight').check();
-    await page.getByTestId('schedule-monday').check();
-    
-    // Save profile
-    await page.getByRole('button', { name: 'Save Profile' }).click();
-    
-    // Should show success message
-    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
-    
-    // Navigate to onboarding to complete it
-    await page.goto('./#/onboarding');
-    await page.getByTestId('onboarding-skip').click();
-    
-    // Navigate to dashboard
-    await page.goto('./#/dashboard');
-    
-    // Check we're on dashboard (using role to be specific)
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
-    
-    // Dashboard is loaded - profile information will show
-    await expect(page.getByTestId('dashboard-status-title')).toBeVisible();
-  });
+
 
   test('should persist profile changes across page refreshes', async ({ page }) => {
     // Create and save profile

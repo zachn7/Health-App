@@ -1,13 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { testIds } from '../../src/testIds';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('Regression: Workout Logger Always Editable (R10)', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
-    });
+  test.beforeEach(async ({ context }) => {
+    await bootstrapAppState(context, { completeOnboarding: true });
   });
   test('should allow editing sets/reps after finishing workout', async ({ page }) => {
     // Navigate to workout logger

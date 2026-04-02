@@ -1,12 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapAppState } from './helpers/bootstrap';
 
 test.describe('Regression: Meal Save Persistence (R05)', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
-    });
+  test.beforeEach(async ({ context }) => {
+    await bootstrapAppState(context, { completeOnboarding: true });
   });
 
   test('should show macros on meal rows without needing to click Edit', async ({ page }) => {
