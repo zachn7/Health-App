@@ -385,7 +385,11 @@ export interface Settings {
   // WebLLM AI Coach
   enableWebLLMCoach: boolean;
   webllmModelId?: string;
-  // Future settings can be added here
+  // AI Assistant provider configuration
+  aiProvider?: 'deterministic' | 'webllm' | 'openrouter';
+  aiApiKey?: string;
+  aiModelId?: string;
+  aiAllowLoggingActions?: boolean;
 }
 
 // Exercise DB Types

@@ -1,5 +1,6 @@
 import { db } from '../index';
 import type { WeightLog, WeeklyCheckIn } from '@/types';
+import { summarizeWeightTrend } from '@/lib/weight-trends';
 
 export class ProgressRepository {
   // Weight Logs
@@ -81,33 +82,22 @@ export class ProgressRepository {
   // Analytics helpers
   async getWeightTrend(days: number = 30): Promise<{
     current: number | null;
+    currentScale: number | null;
     previous: number | null;
     trend: 'up' | 'down' | 'stable' | null;
     trendAmount: number;
     average: number;
   }> {
     const logs = await this.getWeightLogs();
-    if (logs.length === 0) {
-      return { current: null, previous: null, trend: null, trendAmount: 0, average: 0 };
-    }
-
-    const sortedLogs = logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const current = sortedLogs[sortedLogs.length - 1].weightKg;
-    
-    const previousIndex = Math.max(0, sortedLogs.length - Math.min(days, sortedLogs.length));
-    const previous = sortedLogs[previousIndex].weightKg;
-
-    const trendAmount = current - previous;
-    const trend = Math.abs(trendAmount) < 0.1 ? 'stable' : trendAmount > 0 ? 'up' : 'down';
-    
-    const average = sortedLogs.reduce((sum, log) => sum + log.weightKg, 0) / sortedLogs.length;
+    const summary = summarizeWeightTrend(logs, days);
 
     return {
-      current,
-      previous,
-      trend,
-      trendAmount,
-      average
+      current: summary.currentTrendWeightKg,
+      currentScale: summary.currentScaleWeightKg,
+      previous: summary.previousTrendWeightKg,
+      trend: summary.trend,
+      trendAmount: summary.trendAmountKg,
+      average: summary.averageScaleWeightKg,
     };
   }
 

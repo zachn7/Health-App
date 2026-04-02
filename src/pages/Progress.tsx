@@ -2,10 +2,11 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { repositories } from '../db';
-import { formatWeight, lbsToKg, kgToLbs } from '../lib/unit-conversions';
+import { formatWeight, kgToLbs, lbsToKg } from '../lib/unit-conversions';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate, formatWeightToOneDecimal } from '../lib/date-utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { WeightLog, Profile, WorkoutLog } from '../types';
+import { summarizeWeightTrend } from '../lib/weight-trends';
 
 export default function Progress() {
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -120,33 +121,22 @@ export default function Progress() {
 
   const calculateWeightStats = () => {
     if (weightLogs.length === 0) return null;
-    
-    const weights = weightLogs.map(log => log.weightKg);
-    const currentWeight = weights[0];
-    const startingWeight = weights[weights.length - 1];
-    const weightChange = currentWeight - startingWeight;
-    const averageWeight = weights.reduce((sum, w) => sum + w, 0) / weights.length;
-    
-    // Calculate trends from last 7 entries if available
-    const recentWeights = weights.slice(0, Math.min(7, weights.length));
-    let trend = 'stable';
-    if (recentWeights.length >= 3) {
-      const firstHalf = recentWeights.slice(0, Math.floor(recentWeights.length / 2));
-      const secondHalf = recentWeights.slice(Math.floor(recentWeights.length / 2));
-      const firstAvg = firstHalf.reduce((sum, w) => sum + w, 0) / firstHalf.length;
-      const secondAvg = secondHalf.reduce((sum, w) => sum + w, 0) / secondHalf.length;
-      
-      if (secondAvg < firstAvg - 0.5) trend = 'decreasing';
-      else if (secondAvg > firstAvg + 0.5) trend = 'increasing';
-    }
-    
+
+    const sortedAscending = [...weightLogs].sort((a, b) => a.date.localeCompare(b.date));
+    const trendSummary = summarizeWeightTrend(sortedAscending, Math.min(7, sortedAscending.length));
+    const startingWeight = sortedAscending[0].weightKg;
+    const scaleWeightChange = (trendSummary.currentScaleWeightKg ?? startingWeight) - startingWeight;
+
     return {
-      currentWeight,
+      currentScaleWeight: trendSummary.currentScaleWeightKg ?? sortedAscending[sortedAscending.length - 1].weightKg,
+      currentTrendWeight: trendSummary.currentTrendWeightKg ?? sortedAscending[sortedAscending.length - 1].weightKg,
       startingWeight,
-      weightChange,
-      averageWeight,
-      trend,
-      totalEntries: weightLogs.length
+      scaleWeightChange,
+      averageWeight: trendSummary.averageScaleWeightKg,
+      trend: trendSummary.trend,
+      trendAmount: trendSummary.trendAmountKg,
+      totalEntries: weightLogs.length,
+      chartPoints: trendSummary.points,
     };
   };
 
@@ -202,13 +192,13 @@ export default function Progress() {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Scale Weight</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Trend Weight</h3>
           <div className="text-2xl font-bold text-blue-600" data-testid="current-weight-display">
-            {weightStats ? formatWeight(weightStats.currentWeight, profile?.preferredUnits || 'metric') : '—'}
+            {weightStats ? formatWeight(weightStats.currentTrendWeight, profile?.preferredUnits || 'metric') : '—'}
           </div>
-          {weightStats && weightStats.weightChange !== 0 && (
-            <div className={`text-sm ${weightStats.weightChange > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {weightStats.weightChange > 0 ? '+' : ''}{formatWeight(Math.abs(weightStats.weightChange), profile?.preferredUnits || 'metric')}
+          {weightStats && weightStats.trendAmount !== 0 && (
+            <div className={`text-sm ${weightStats.trendAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {weightStats.trendAmount > 0 ? '+' : ''}{formatWeight(Math.abs(weightStats.trendAmount), profile?.preferredUnits || 'metric')} vs recent trend
             </div>
           )}
         </div>
@@ -236,7 +226,7 @@ export default function Progress() {
           <div className="text-2xl font-bold text-orange-600">
             {weightStats ? formatWeight(weightStats.averageWeight, profile?.preferredUnits || 'metric') : '—'}
           </div>
-          <div className="text-sm text-gray-600">Over all logged days</div>
+          <div className="text-sm text-gray-600">Average scale weight across all logged days</div>
         </div>
       </div>
       
@@ -374,29 +364,19 @@ export default function Progress() {
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={(() => {
-                  const recentLogs = weightLogs.slice(0, 30).reverse();
-                  return recentLogs.map((log, index) => {
-                    // Calculate 7-day rolling average
-                    const rollingPeriod = 7;
-                    const startIdx = Math.max(0, index - Math.floor(rollingPeriod / 2));
-                    const endIdx = Math.min(recentLogs.length - 1, index + Math.floor(rollingPeriod / 2));
-                    
-                    const periodLogs = recentLogs.slice(startIdx, endIdx + 1);
-                    const rollingAverage = periodLogs.reduce((sum, l) => sum + l.weightKg, 0) / periodLogs.length;
-                    
+                  const recentPoints = (weightStats?.chartPoints ?? []).slice(-30);
+                  return recentPoints.map((point) => {
                     const displayWeight = formatWeightToOneDecimal(
-                      profile?.preferredUnits === 'imperial' ? (log.weightKg * 2.20462) : log.weightKg
+                      profile?.preferredUnits === 'imperial' ? kgToLbs(point.scaleWeightKg) : point.scaleWeightKg
                     );
-                    const displayAverage = formatWeightToOneDecimal(
-                      profile?.preferredUnits === 'imperial' ? (rollingAverage * 2.20462) : rollingAverage
+                    const displayTrend = formatWeightToOneDecimal(
+                      profile?.preferredUnits === 'imperial' ? kgToLbs(point.trendWeightKg) : point.trendWeightKg
                     );
-                    
+
                     return {
-                      date: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                      date: formatLocalDate(point.date, { month: 'short', day: 'numeric' }),
                       weight: displayWeight,
-                      weightKg: log.weightKg,
-                      average: displayAverage,
-                      averageKg: rollingAverage
+                      average: displayTrend,
                     };
                   });
                 })()}>
@@ -417,8 +397,8 @@ export default function Progress() {
                     formatter={(value: any, name: string) => {
                       if (name === 'Actual Weight') {
                         return [`${value} ${getWeightUnit()}`, 'Actual Weight'];
-                      } else if (name === '7-Day Average') {
-                        return [`${value} ${getWeightUnit()}`, '7-Day Average'];
+                      } else if (name === 'Trend Weight') {
+                        return [`${value} ${getWeightUnit()}`, 'Trend Weight'];
                       }
                       return [`${value} ${getWeightUnit()}`, name];
                     }}
@@ -439,7 +419,7 @@ export default function Progress() {
                     strokeWidth={2}
                     strokeDasharray="5 5"
                     dot={false}
-                    name="7-Day Average"
+                    name="Trend Weight"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -462,7 +442,7 @@ export default function Progress() {
               <tbody>
                 {weightLogs.slice(0, 10).map((log, index) => {
                   const prevWeight = index < weightLogs.length - 1 ? weightLogs[index + 1].weightKg : null;
-                  const change = prevWeight ? log.weightKg - prevWeight : null;
+                  const change = prevWeight !== null ? log.weightKg - prevWeight : null;
                   
                   return (
                     <tr key={log.id} className="border-b">
@@ -470,7 +450,7 @@ export default function Progress() {
                       <td className="py-2 font-medium">{formatWeight(log.weightKg, profile?.preferredUnits || 'metric')}</td>
                       <td className="py-2">{log.bodyFat ? `${log.bodyFat.toFixed(1)}%` : '—'}</td>
                       <td className="py-2">
-                        {change && (
+                        {change !== null && (
                           <span className={change > 0 ? 'text-red-600' : change < 0 ? 'text-green-600' : 'text-gray-600'}>
                             {change > 0 ? '+' : ''}{formatWeight(Math.abs(change), profile?.preferredUnits || 'metric')}
                           </span>

@@ -1790,7 +1790,7 @@ export default function Workouts() {
                                       `${exercise.sets.sets} sets of ${exercise.sets.repsRange.min}-${exercise.sets.repsRange.max} reps` :
                                       `${exercise.sets.sets} sets of ${exercise.sets.reps} reps`
                                     }
-                                    {exercise.sets.weight && ` • ${formatWeight(exercise.sets.weight, profile?.preferredUnits || 'metric')}${getWeightUnit()}`}
+                                    {exercise.sets.weight && ` • ${formatWeight(exercise.sets.weight, profile?.preferredUnits || 'metric')}`}
                                     {exercise.sets.restTime && ` • ${exercise.sets.restTime}s rest`}
                                   </div>
                                   {exercise.sets.notes && (

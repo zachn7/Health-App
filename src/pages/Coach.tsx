@@ -8,7 +8,9 @@ import { getWebGPUDiagnostics } from '../ai/webgpu';
 import { validateAndRepairModelId, getAvailableModels } from '../ai/webllmConfig';
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { Brain, Send, Loader2, AlertCircle, XCircle, RefreshCw, Info } from 'lucide-react';
-import type { Profile, WorkoutPlan } from '../types';
+import type { MealPlan, Profile, WorkoutPlan } from '../types';
+import { assistantService } from '../ai/assistant-service';
+import type { AssistantActionSuggestion } from '../ai/types';
 
 // Local ErrorBoundary for AI widget only - shows inline error banner
 interface AIErrorBoundaryProps {
@@ -89,6 +91,8 @@ export default function Coach() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'assistant'; content: string}[]>([]);
+  const [suggestedMealPlan, setSuggestedMealPlan] = useState<MealPlan | null>(null);
+  const [assistantActions, setAssistantActions] = useState<AssistantActionSuggestion[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [webllmError, setWebLLMError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<any[]>([]);
@@ -509,33 +513,76 @@ export default function Coach() {
   
   const clearChatHistory = () => {
     setChatMessages([]);
+    setSuggestedMealPlan(null);
+    setAssistantActions([]);
     setShowAIChat(false);
     localStorage.removeItem('ai-coach-chat-history');
   };
+
+  const handleAssistantAction = async (action: AssistantActionSuggestion) => {
+    try {
+      if (action.type === 'accept_workout_plan' && generatedPlan) {
+        await saveGeneratedPlan();
+        return;
+      }
+
+      if (action.type === 'accept_meal_plan' && suggestedMealPlan) {
+        await repositories.nutrition.createMealPlan({
+          name: suggestedMealPlan.name,
+          startDate: suggestedMealPlan.startDate,
+          endDate: suggestedMealPlan.endDate,
+          days: suggestedMealPlan.days,
+          generationType: suggestedMealPlan.generationType,
+          constraintsSnapshot: suggestedMealPlan.constraintsSnapshot,
+          notes: suggestedMealPlan.notes,
+        });
+
+        const successDiv = document.createElement('div');
+        successDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50';
+        successDiv.innerHTML = '✓ Meal plan saved successfully!';
+        document.body.appendChild(successDiv);
+        setTimeout(() => document.body.removeChild(successDiv), 3000);
+        return;
+      }
+
+      if (action.type === 'open_page' && action.payload?.path && typeof action.payload.path === 'string') {
+        window.location.hash = `#${action.payload.path}`;
+      }
+    } catch (error) {
+      console.error('Failed to execute assistant action:', error);
+    }
+  };
   
   const sendMessage = async () => {
-    if (!chatMessage.trim() || !webllmModelReady) return;
-    
+    if (!chatMessage.trim() || !profile) return;
+
     const userMessage = chatMessage;
     setChatMessage('');
     setChatLoading(true);
-    
-    // Add user message to chat
+
     const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMessage }];
     setChatMessages(updatedMessages);
     saveChatHistory(updatedMessages);
-    
+
     try {
-      const response = await webllmService.sendMessage(userMessage, profile!, currentPlan || undefined);
-      const finalMessages = [...updatedMessages, { role: 'assistant' as const, content: response }];
+      const response = await assistantService.sendMessage(userMessage, profile);
+      if (response.suggestedWorkoutPlan) {
+        setGeneratedPlan(response.suggestedWorkoutPlan);
+      }
+      if (response.suggestedMealPlan) {
+        setSuggestedMealPlan(response.suggestedMealPlan);
+      }
+      setAssistantActions(response.actions || []);
+
+      const finalMessages = [...updatedMessages, { role: 'assistant' as const, content: response.message }];
       setChatMessages(finalMessages);
       saveChatHistory(finalMessages);
     } catch (error) {
-      console.error('Failed to send message to AI:', error);
+      console.error('Failed to send message to assistant:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorMessages = [...updatedMessages, { 
-        role: 'assistant' as const, 
-        content: `I apologize, but I encountered an error: ${errorMessage}. Please try again or check if WebGPU is available.`
+      const errorMessages = [...updatedMessages, {
+        role: 'assistant' as const,
+        content: `I hit an error while thinking: ${errorMessage}. Rude, honestly. Please try again.`
       }];
       setChatMessages(errorMessages);
       saveChatHistory(errorMessages);
@@ -545,19 +592,20 @@ export default function Coach() {
   };
   
   const generateWithWebLLM = async () => {
-    if (!profile || !webllmModelReady) return;
-    
+    if (!profile) return;
+
     setGenerating(true);
     setGenerationError(null);
     try {
-      const newPlan = await webllmService.generateWorkoutPlan(profile);
-      if (newPlan) {
-        setGeneratedPlan(newPlan);
+      const result = await assistantService.generateWorkoutPlan(profile);
+      if (result.workoutPlan) {
+        setGeneratedPlan(result.workoutPlan);
+        setAssistantActions(result.actions || []);
       } else {
-        throw new Error('AI failed to generate a valid workout plan');
+        throw new Error('Assistant failed to generate a valid workout plan');
       }
     } catch (error) {
-      console.error('Failed to generate plan with WebLLM:', error);
+      console.error('Failed to generate plan with assistant service:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setGenerationError(`AI plan generation failed: ${errorMessage}`);
     } finally {
@@ -839,6 +887,26 @@ export default function Coach() {
                     >
                       Start Chatting
                     </button>
+                    <button
+                      onClick={async () => {
+                        if (!profile) return;
+                        setGenerating(true);
+                        try {
+                          const result = await assistantService.generateMealPlan(profile);
+                          setSuggestedMealPlan(result.mealPlan || null);
+                          setAssistantActions(result.actions || []);
+                          setShowAIChat(true);
+                          const seededMessages = [{ role: 'assistant' as const, content: result.rationale }];
+                          setChatMessages(seededMessages);
+                          saveChatHistory(seededMessages);
+                        } finally {
+                          setGenerating(false);
+                        }
+                      }}
+                      className="btn btn-secondary ml-3"
+                    >
+                      Draft Meal Plan
+                    </button>
                   </div>
                 ) : (
                   <div className="border rounded-lg">
@@ -908,11 +976,13 @@ export default function Coach() {
                       </div>
                       <div className="mt-2 flex justify-between">
                         <p className="text-xs text-gray-500">
-                          Specialized for fitness coaching only
+                          Specialized for fitness coaching, planning, and action suggestions
                         </p>
                         <button
                           onClick={() => {
                             setChatMessages([]);
+                            setSuggestedMealPlan(null);
+                            setAssistantActions([]);
                             webllmService.clearChatHistory();
                           }}
                           className="text-xs text-gray-500 hover:text-gray-700"
@@ -920,6 +990,38 @@ export default function Coach() {
                           Clear Chat
                         </button>
                       </div>
++
+                      {(assistantActions.length > 0 || suggestedMealPlan || generatedPlan) && (
+                        <div className="mt-4 space-y-3 border-t pt-4">
+                          {assistantActions.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {assistantActions.map((action) => (
+                                <button
+                                  key={action.id}
+                                  onClick={() => handleAssistantAction(action)}
+                                  className="btn btn-secondary text-sm"
+                                >
+                                  {action.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {suggestedMealPlan && (
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+                              <div className="font-medium">Suggested meal plan ready</div>
+                              <div>{suggestedMealPlan.name} • {suggestedMealPlan.days.length} days • {suggestedMealPlan.constraintsSnapshot.calories} kcal/day target</div>
+                            </div>
+                          )}
+
+                          {generatedPlan && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                              <div className="font-medium">Suggested workout plan ready</div>
+                              <div>{generatedPlan.name} • {generatedPlan.weeks.length} weeks</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

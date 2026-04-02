@@ -1,5 +1,6 @@
 import { db } from '../index';
 import type { Settings } from '@/types';
+import type { AIProviderId } from '@/ai/types';
 
 class SettingsRepository {
   async getSettings(): Promise<Settings | null> {
@@ -64,6 +65,42 @@ class SettingsRepository {
   
   async setWebLLMModelId(modelId: string | null): Promise<void> {
     await this.updateSettings({ webllmModelId: modelId || undefined });
+  }
+
+  async getAIProviderId(): Promise<AIProviderId> {
+    const settings = await this.getSettings();
+    return settings?.aiProvider || 'deterministic';
+  }
+
+  async setAIProviderId(providerId: AIProviderId): Promise<void> {
+    await this.updateSettings({ aiProvider: providerId });
+  }
+
+  async getAIApiKey(): Promise<string | undefined> {
+    const settings = await this.getSettings();
+    return settings?.aiApiKey;
+  }
+
+  async setAIApiKey(apiKey: string | null): Promise<void> {
+    await this.updateSettings({ aiApiKey: apiKey || undefined });
+  }
+
+  async getAIModelId(): Promise<string | undefined> {
+    const settings = await this.getSettings();
+    return settings?.aiModelId;
+  }
+
+  async setAIModelId(modelId: string | null): Promise<void> {
+    await this.updateSettings({ aiModelId: modelId || undefined });
+  }
+
+  async getAIAllowLoggingActions(): Promise<boolean> {
+    const settings = await this.getSettings();
+    return settings?.aiAllowLoggingActions || false;
+  }
+
+  async setAIAllowLoggingActions(enabled: boolean): Promise<void> {
+    await this.updateSettings({ aiAllowLoggingActions: enabled });
   }
 }
 

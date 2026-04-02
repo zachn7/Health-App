@@ -80,7 +80,9 @@ export default function Settings() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           enableUSDALookups: false,
-          enableWebLLMCoach: false
+          enableWebLLMCoach: false,
+          aiProvider: 'deterministic',
+          aiAllowLoggingActions: false,
         };
         await db.settings.add(defaultSettings);
         setSettings(defaultSettings);
@@ -275,6 +277,8 @@ export default function Settings() {
         ...settings,
         fdcApiKey: tempApiKey || undefined,
         enableUSDALookups: !!(tempApiKey && tempApiKey.trim()),
+        aiProvider: settings.aiProvider || 'deterministic',
+        aiAllowLoggingActions: settings.aiAllowLoggingActions || false,
         updatedAt: new Date().toISOString()
       };
       
@@ -507,6 +511,47 @@ export default function Settings() {
           </div>
         </div>
         
+        {/* AI Assistant Provider Settings */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className="h-5 w-5 text-primary-600" />
+              <h2 className="text-xl font-semibold text-gray-900">AI Assistant Provider</h2>
+            </div>
+            <p className="text-gray-600 text-sm">
+              Choose how the in-app assistant should respond. Deterministic is fully local and stable. Hosted providers can be added later with an API key.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
+              <select
+                value={settings?.aiProvider || 'deterministic'}
+                onChange={(e) => setSettings(settings ? { ...settings, aiProvider: e.target.value as SettingsType['aiProvider'], updatedAt: new Date().toISOString() } : settings)}
+                className="input max-w-sm"
+              >
+                <option value="deterministic">Deterministic Assistant (recommended default)</option>
+                <option value="webllm">WebLLM Assistant (experimental)</option>
+                <option value="openrouter">OpenRouter Hosted Assistant (API key later)</option>
+              </select>
+            </div>
+
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={!!settings?.aiAllowLoggingActions}
+                onChange={(e) => setSettings(settings ? { ...settings, aiAllowLoggingActions: e.target.checked, updatedAt: new Date().toISOString() } : settings)}
+                className="mt-1"
+              />
+              <div>
+                <div className="font-medium text-gray-900">Allow assistant logging actions</div>
+                <div className="text-sm text-gray-600">Prepares the app for assistant-driven logging flows. Currently this exposes safe action suggestions and navigation hooks.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
         {/* AI Diagnostics Panel */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">

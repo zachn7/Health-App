@@ -231,8 +231,12 @@ export default function Dashboard() {
           {weightTrend && weightTrend.current ? (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Current:</span>
+                <span className="text-gray-600">Trend Weight:</span>
                 <span className="font-medium">{formatWeight(weightTrend.current, profile?.preferredUnits || 'metric')}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Scale Weight:</span>
+                <span>{formatWeight(weightTrend.currentScale, profile?.preferredUnits || 'metric')}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Trend:</span>

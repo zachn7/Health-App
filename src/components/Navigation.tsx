@@ -96,6 +96,7 @@ const navItems: NavItem[] = [
 export default function Navigation() {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const appVersion = typeof __BUILD_INFO__ !== 'undefined' ? __BUILD_INFO__.appVersion : 'dev';
 
   // Close mobile menu when route changes
   React.useEffect(() => {
@@ -188,7 +189,7 @@ export default function Navigation() {
               <div className="border-t border-gray-200 p-4">
                 <div className="text-xs text-gray-500 space-y-1">
                   <p>🔒 Offline-first • Private</p>
-                  <p>Version 0.1.0</p>
+                  <p>Version {appVersion}</p>
                 </div>
               </div>
             </div>
@@ -239,7 +240,7 @@ export default function Navigation() {
         <div className="border-t border-gray-200 p-4">
           <div className="text-xs text-gray-500 space-y-1">
             <p>🔒 Offline-first • Private</p>
-            <p>Version 0.1.0</p>
+            <p>Version {appVersion}</p>
             <div className="pt-2 space-x-2">
               <a
                 href="#/legal/privacy"
