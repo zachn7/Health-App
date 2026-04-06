@@ -7,6 +7,7 @@ export type AssistantIntent =
   | 'mobility'
   | 'workout_plan'
   | 'meal_plan'
+  | 'progress_analysis'
   | 'logging'
   | 'plan_review'
   | 'general_coaching'

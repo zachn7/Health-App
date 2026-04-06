@@ -20,8 +20,28 @@ function makeAction(
 
 function inferIntent(message: string): AssistantResponse['intent'] {
   const normalized = message.toLowerCase()
+  const isProgressAnalysis = (
+    normalized.includes('trend')
+    || normalized.includes('progress')
+    || normalized.includes('analy')
+    || normalized.includes('summary')
+    || normalized.includes('stats')
+    || normalized.includes('what should i adjust')
+    || normalized.includes('what should i do next')
+  ) && (
+    normalized.includes('weight')
+    || normalized.includes('workout')
+    || normalized.includes('nutrition')
+    || normalized.includes('calories')
+    || normalized.includes('protein')
+    || normalized.includes('progress')
+    || normalized.includes('trend')
+    || normalized.includes('stats')
+  )
+
   if (normalized.includes('stretch') || normalized.includes('tight') || normalized.includes('mobility')) return 'mobility'
   if (normalized.includes('form') || normalized.includes('how do i do') || normalized.includes('how should i do')) return 'workout_form'
+  if (isProgressAnalysis) return 'progress_analysis'
   if (normalized.includes('meal') || normalized.includes('eat') || normalized.includes('nutrition')) return 'meal_plan'
   if (normalized.includes('log') || normalized.includes('track') || normalized.includes('record')) return 'logging'
   if (normalized.includes('accept') || normalized.includes('approve') || normalized.includes('review')) return 'plan_review'
@@ -164,6 +184,44 @@ function buildFormGuidance(message: string): string {
   return 'For exercise form: use a controlled tempo, keep joints stacked, prioritize full pain-free range of motion, and stop the set when technique degrades. If you want, ask me about a specific lift and I can get less generic and more useful.'
 }
 
+function buildProgressAnalysis(context: AssistantRequest['context']): { message: string; actions: ReturnType<typeof makeAction>[] } {
+  const { preferenceSignals, progressSignals } = context
+  const consistencyPercent = (preferenceSignals.consistencyScore * 100).toFixed(0)
+  const trendDirection = progressSignals.trendDirection || 'not established yet'
+  const workoutsPerWeek = progressSignals.workoutsPerWeek.toFixed(1)
+  const calories = progressSignals.averageCaloriesLast14 === null
+    ? 'not enough calorie data yet'
+    : `${Math.round(progressSignals.averageCaloriesLast14)} kcal/day`
+  const protein = progressSignals.averageProteinLast14 === null
+    ? 'not enough protein data yet'
+    : `${Math.round(progressSignals.averageProteinLast14)} g/day`
+
+  const observations = [
+    `Consistency score: ${consistencyPercent}%.`,
+    `Workout frequency: ${workoutsPerWeek} sessions/week.`,
+    `Weight trend: ${trendDirection}.`,
+    `Average calories: ${calories}.`,
+    `Average protein: ${protein}.`,
+  ]
+
+  const nextStep = progressSignals.workoutsPerWeek < 2
+    ? 'Biggest lever: tighten workout consistency first. Even two repeatable sessions per week will beat a theoretical perfect plan you never run.'
+    : progressSignals.averageProteinLast14 !== null && progressSignals.averageProteinLast14 < Math.max(90, context.profile.weightKg * 1.4)
+      ? 'Biggest lever: bring protein up more consistently so recovery and body-composition progress stop relying on wishful thinking.'
+      : progressSignals.averageCaloriesLast14 === null
+        ? 'Biggest lever: log nutrition more consistently for a week so the app can stop coaching off vibes and start coaching off data.'
+        : 'Biggest lever: keep the boring basics stable—training frequency, protein intake, and recovery—then adjust plan details only after the trend actually earns it.'
+
+  return {
+    message: `${observations.join(' ')} ${nextStep}`,
+    actions: [
+      makeAction('open_page', 'Open Progress', 'Review your weight trend and workout stats in Progress.', { path: '/progress' }),
+      makeAction('log_weight', 'Log weight', 'Add a new bodyweight entry.', { path: '/progress' }),
+      makeAction('log_workout', 'Log workout', 'Open the workout logger to improve adherence.', { path: '/log/workout' }),
+    ],
+  }
+}
+
 function buildMobilityGuidance(message: string): string {
   const normalized = message.toLowerCase()
   if (normalized.includes('hip')) {
@@ -205,6 +263,16 @@ export class DeterministicAssistantProvider implements AssistantProvider {
         provider: this.id,
         intent,
         message: buildMobilityGuidance(request.message),
+      }
+    }
+
+    if (intent === 'progress_analysis') {
+      const analysis = buildProgressAnalysis(request.context)
+      return {
+        provider: this.id,
+        intent,
+        message: analysis.message,
+        actions: analysis.actions,
       }
     }
 

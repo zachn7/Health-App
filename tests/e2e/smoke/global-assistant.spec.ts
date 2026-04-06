@@ -34,8 +34,9 @@ test.describe('Smoke: Global Assistant Drawer', () => {
     await page.getByTestId(testIds.assistant.starter('analyze-trends')).click()
 
     await expect(page.getByTestId(testIds.assistant.drawer)).toBeVisible()
-    await expect(page.getByText(/I drafted a meal plan scaffold you can review and accept/i)).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('button', { name: 'Accept meal plan' })).toBeVisible()
+    await expect(page.getByText(/Consistency score:/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/Biggest lever:/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open Progress' })).toBeVisible()
   })
 
   test('refuses out-of-domain requests with domain-locked guidance', async ({ page }) => {
