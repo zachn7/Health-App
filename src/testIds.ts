@@ -286,6 +286,17 @@ export const testIds = {
     mainContent: 'main-content',
   },
 
+  // Global assistant
+  assistant: {
+    fab: 'assistant-fab',
+    drawer: 'assistant-drawer',
+    input: 'assistant-input',
+    send: 'assistant-send',
+    trendSummary: 'assistant-trend-summary',
+    starter: (id: string) => `assistant-starter-${id}`,
+    action: (id: string) => `assistant-action-${id}`,
+  },
+
   // Shared Presets (for both workouts and meals)
   presets: {
     searchInput: 'presets-search-input',

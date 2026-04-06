@@ -2,6 +2,7 @@ import { repositories } from '@/db'
 import type { NutritionLog, Profile, WorkoutLog } from '@/types'
 import type { UserContextSnapshot, UserPreferenceSignals, UserProgressSignals } from './types'
 import { summarizeWeightTrend } from '@/lib/weight-trends'
+import { getDietaryRestrictions, getMovementLimitations } from '@/lib/profile-constraints'
 
 const WORKOUT_LOOKBACK_DAYS = 30
 const NUTRITION_LOOKBACK_DAYS = 14
@@ -58,6 +59,8 @@ function buildPreferenceSignals(workouts: WorkoutLog[], nutritionLogs: Nutrition
   return {
     preferredWorkoutDays: collectPreferredWorkoutDays(workouts),
     preferredMealLabels: collectPreferredMealLabels(nutritionLogs),
+    dietaryRestrictions: [],
+    movementLimitations: [],
     consistencyScore,
     loggedWorkoutDaysLast30,
     loggedNutritionDaysLast14,
@@ -100,9 +103,15 @@ export async function buildUserContextSnapshot(profile: Profile): Promise<UserCo
   const recentWorkoutLogs = workoutLogs.filter((log) => log.date >= workoutCutoff)
   const recentNutritionLogs = nutritionLogs.filter((log) => log.date >= nutritionCutoff)
 
+  const preferenceSignals = buildPreferenceSignals(recentWorkoutLogs, recentNutritionLogs)
+
   return {
     profile,
-    preferenceSignals: buildPreferenceSignals(recentWorkoutLogs, recentNutritionLogs),
+    preferenceSignals: {
+      ...preferenceSignals,
+      dietaryRestrictions: getDietaryRestrictions(profile),
+      movementLimitations: getMovementLimitations(profile),
+    },
     progressSignals: buildProgressSignals(weightLogs, recentNutritionLogs, recentWorkoutLogs),
     latestWorkoutPlan: workoutPlans[0] || null,
     latestMealPlan: mealPlans[0] || null,

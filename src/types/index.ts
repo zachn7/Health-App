@@ -102,6 +102,7 @@ export interface Profile {
   equipment: string[];
   schedule: Schedule;
   limitations?: string;
+  dietaryRestrictions?: string;
   macroSplit?: {
     protein: number;
     carbs: number;
@@ -285,6 +286,7 @@ export interface MealPlanConstraints {
   excludedFoods?: string[];
   budget?: 'low' | 'medium' | 'high';
   timeAvailable?: 'minimal' | 'moderate' | 'flexible';
+  movementLimitations?: string[];
 }
 
 export interface MealPlanFood {

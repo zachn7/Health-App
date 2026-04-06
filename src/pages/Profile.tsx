@@ -137,6 +137,7 @@ export default function Profile() {
         sunday: false
       },
       limitations: '',
+      dietaryRestrictions: '',
       macroSplit: {
         protein: 30,
         carbs: 40,
@@ -494,11 +495,24 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Limitations Card */}
-          {profile.limitations && (
+          {/* Constraints Card */}
+          {(profile.limitations || profile.dietaryRestrictions) && (
             <div className="card md:col-span-2 lg:col-span-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Injury Limitations</h3>
-              <p className="text-sm text-gray-600">{profile.limitations}</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Constraints</h3>
+              <div className="space-y-3 text-sm text-gray-600">
+                {profile.limitations && (
+                  <div>
+                    <div className="font-medium text-gray-900">Injuries & movement limitations</div>
+                    <p>{profile.limitations}</p>
+                  </div>
+                )}
+                {profile.dietaryRestrictions && (
+                  <div>
+                    <div className="font-medium text-gray-900">Dietary restrictions</div>
+                    <p>{profile.dietaryRestrictions}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1067,16 +1081,34 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Limitations */}
+        {/* Constraints */}
         <div className="card">
-          <h2 className="text-xl font-medium text-gray-900 mb-6">Injury Limitations</h2>
-          <textarea
-            value={profile.limitations || ''}
-            onChange={(e) => updateField('limitations', e.target.value)}
-            className="input"
-            rows={3}
-            placeholder="Any injuries, physical limitations, or areas to avoid..."
-          />
+          <h2 className="text-xl font-medium text-gray-900 mb-6">Injuries, Movement Limitations & Diet</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="label">Injuries / Movement Limitations</label>
+              <textarea
+                value={profile.limitations || ''}
+                onChange={(e) => updateField('limitations', e.target.value)}
+                className="input"
+                rows={3}
+                placeholder="Examples: shoulder impingement, knee pain on deep flexion, avoid overhead pressing, lower-back sensitivity..."
+              />
+              <p className="mt-1 text-xs text-gray-500">Used by plan generation and the assistant to avoid movements that are a bad fit.</p>
+            </div>
+
+            <div>
+              <label className="label">Dietary Restrictions / Foods To Avoid</label>
+              <textarea
+                value={profile.dietaryRestrictions || ''}
+                onChange={(e) => updateField('dietaryRestrictions', e.target.value)}
+                className="input"
+                rows={3}
+                placeholder="Examples: vegetarian, dairy-free, peanut allergy, avoid shellfish, gluten-free..."
+              />
+              <p className="mt-1 text-xs text-gray-500">Used by meal planning and assistant suggestions so it stops recommending food you literally do not eat.</p>
+            </div>
+          </div>
         </div>
 
         {/* Save Button */}

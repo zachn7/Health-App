@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from './Navigation';
 import BuildInfoFooter from './BuildInfoFooter';
+import GlobalAssistantLauncher from './GlobalAssistantLauncher';
 import { testIds } from '../testIds';
 
 interface LayoutProps {
@@ -20,6 +21,7 @@ export default function Layout({ children }: LayoutProps) {
         {children || <Outlet />}
       </main>
       <BuildInfoFooter />
+      <GlobalAssistantLauncher />
     </div>
   );
 }

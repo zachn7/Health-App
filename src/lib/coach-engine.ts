@@ -2,6 +2,7 @@ import type { Profile, WorkoutPlan, MacroTargets, ExerciseSet, ExerciseDBItem } 
 import { ActivityLevel, GoalType, ExperienceLevel } from '../types';
 import { ExerciseDBService } from './exercise-db';
 import { db } from '@/db';
+import { getMovementLimitations } from './profile-constraints';
 
 // ============================================
 // SEEDED RANDOM NUMBER GENERATOR (Mulberry32)
@@ -171,6 +172,39 @@ function getWorkoutSplitType(totalDays: number): 'full-body' | 'upper-lower' | '
   return 'push-pull-legs';
 }
 
+function getMovementPattern(exercise: ExerciseDBItem): 'push' | 'pull' | 'squat' | 'hinge' | 'lunge' | 'core' | 'carry' | 'other' {
+  const text = `${exercise.name} ${exercise.bodyPart} ${exercise.category} ${(exercise.targetMuscles || []).join(' ')}`.toLowerCase()
+  if (text.includes('squat') || text.includes('leg press')) return 'squat'
+  if (text.includes('deadlift') || text.includes('hip hinge') || text.includes('romanian')) return 'hinge'
+  if (text.includes('lunge') || text.includes('split squat') || text.includes('step-up')) return 'lunge'
+  if (text.includes('row') || text.includes('pull') || text.includes('pulldown')) return 'pull'
+  if (text.includes('press') || text.includes('push') || text.includes('dip')) return 'push'
+  if (text.includes('plank') || text.includes('crunch') || text.includes('rotation') || text.includes('raise')) return 'core'
+  if (text.includes('carry')) return 'carry'
+  return 'other'
+}
+
+function isExerciseLimited(exercise: ExerciseDBItem, limitations: string[]): boolean {
+  if (limitations.length === 0) return false
+  const text = `${exercise.name} ${exercise.bodyPart} ${exercise.category} ${exercise.instructions.join(' ')}`.toLowerCase()
+  return limitations.some((item) => {
+    const normalized = item.toLowerCase()
+    if (normalized.includes('shoulder') || normalized.includes('overhead')) {
+      return text.includes('overhead') || text.includes('shoulder press') || text.includes('upright row')
+    }
+    if (normalized.includes('knee')) {
+      return text.includes('squat') || text.includes('lunge') || text.includes('step-up')
+    }
+    if (normalized.includes('back') || normalized.includes('spine')) {
+      return text.includes('deadlift') || text.includes('good morning') || text.includes('back extension')
+    }
+    if (normalized.includes('wrist')) {
+      return text.includes('barbell curl') || text.includes('push-up') || text.includes('front rack')
+    }
+    return text.includes(normalized)
+  })
+}
+
 // Get body part focus for a given day index
 function getDayBodyPartFocus(dayIndex: number, totalDays: number): BodyPartFocus[] {
   const splitType = getWorkoutSplitType(totalDays);
@@ -272,6 +306,7 @@ export async function generateWorkoutPlan(
   seed?: number
 ): Promise<WorkoutPlan> {
   const { experienceLevel, goals, equipment, schedule } = profile;
+  const movementLimitations = getMovementLimitations(profile)
   const selectedGoal = goals.find(g => g.id === goalId) || goals.find(g => g.isPrimary) || goals[0];
   const primaryGoal = selectedGoal?.type || GoalType.GENERAL_FITNESS;
   
@@ -309,7 +344,7 @@ export async function generateWorkoutPlan(
   
   // Filter exercises by available equipment using normalized names
   const availableExercises = allExercises.filter((exercise: ExerciseDBItem) => 
-    exercise.equipment.some((eq: string) => normalizedEquipment.includes(eq.toLowerCase()))
+    exercise.equipment.some((eq: string) => normalizedEquipment.includes(eq.toLowerCase())) && !isExerciseLimited(exercise, movementLimitations)
   );
   
   console.log(`Found ${allExercises.length} total exercises, ${availableExercises.length} match equipment`);
@@ -391,7 +426,7 @@ export async function generateWorkoutPlan(
     name: generatePlanName(primaryGoal, experienceLevel),
     weeks,
     generatedBy: 'coach' as const,
-    notes: generatePlanNotes(primaryGoal, experienceLevel),
+    notes: generatePlanNotes(primaryGoal, experienceLevel, movementLimitations),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     generationSeed // Store seed for reproducibility
@@ -514,14 +549,33 @@ async function generateDayWorkout(
   // Create a copy of usedExerciseIds for the selection
   const selectionUsedIds = new Set(usedExerciseIds);
   
-  // Select exercises using weighted random selection based on scoring
-  const selectedExercises = selectExercisesWeighted(
-    candidateExercises,
-    targetExerciseCount,
-    seed,
-    selectionUsedIds,
-    equipmentPrefs // Pass equipment preferences for scoring bonus
-  );
+  const movementBuckets = new Map<string, ExerciseDBItem[]>()
+  for (const exercise of candidateExercises) {
+    const bucket = getMovementPattern(exercise)
+    movementBuckets.set(bucket, [...(movementBuckets.get(bucket) || []), exercise])
+  }
+
+  const prioritizedPatterns = ['squat', 'hinge', 'push', 'pull', 'lunge', 'core']
+  const patternSeedOffset = prioritizedPatterns.length * 97
+  const selectedExercises: ExerciseDBItem[] = []
+
+  prioritizedPatterns.forEach((pattern, index) => {
+    const bucket = movementBuckets.get(pattern) || []
+    if (bucket.length === 0 || selectedExercises.length >= targetExerciseCount) return
+    const picked = selectExercisesWeighted(bucket, 1, seed + (index * 101), selectionUsedIds, equipmentPrefs)
+    selectedExercises.push(...picked)
+  })
+
+  if (selectedExercises.length < targetExerciseCount) {
+    const filler = selectExercisesWeighted(
+      candidateExercises,
+      targetExerciseCount - selectedExercises.length,
+      seed + patternSeedOffset,
+      selectionUsedIds,
+      equipmentPrefs
+    )
+    selectedExercises.push(...filler)
+  }
   
   console.log(`Selected ${selectedExercises.length} exercises for day ${dayIndex}`);
   
@@ -596,7 +650,7 @@ function generatePlanName(goal: GoalType, experienceLevel: ExperienceLevel): str
   return `${goalNames[goal]} ${levelNames[experienceLevel]} Plan`;
 }
 
-function generatePlanNotes(primaryGoal: GoalType, experienceLevel: ExperienceLevel): string {
+function generatePlanNotes(primaryGoal: GoalType, experienceLevel: ExperienceLevel, movementLimitations: string[] = []): string {
   const tips = [];
   
   if (experienceLevel === 'beginner') {
@@ -612,6 +666,11 @@ function generatePlanNotes(primaryGoal: GoalType, experienceLevel: ExperienceLev
     tips.push('Control the negative portion of each rep');
   }
   
+  if (movementLimitations.length > 0) {
+    tips.push(`Exercise selection filtered around these constraints: ${movementLimitations.join(', ')}`)
+  }
+
+  tips.push('Exercise selection prioritizes balanced movement patterns instead of random body-part spam')
   tips.push('Listen to your body and rest when needed');
   tips.push('Stay hydrated and fuel properly');
   

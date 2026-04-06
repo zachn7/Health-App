@@ -1,6 +1,7 @@
 import { calculateMacroTargets, calculateTDEE, generateWorkoutPlan } from '@/lib/coach-engine'
 import type { AssistantProvider, AssistantRequest, AssistantResponse, PlanGenerationResult } from '@/ai/types'
 import type { MealPlan, MealPlanDay, MealPlanMeal, MealPlanFood, MealTemplate } from '@/types'
+import { buildProfileConstraintSummary, filterFoodsForProfile } from '@/lib/profile-constraints'
 
 function makeAction(
   type: 'accept_workout_plan' | 'accept_meal_plan' | 'log_weight' | 'log_workout' | 'log_meal' | 'open_page',
@@ -71,7 +72,7 @@ function buildMealPlanFromTemplates(context: AssistantRequest['context'], templa
       const label = mealLabels[mealIndex] || `Meal ${mealIndex + 1}`
       const template = safeTemplates[mealIndex % Math.max(safeTemplates.length, 1)]
       const foods = template
-        ? buildMealFoodsFromTemplate(template, targetMealCalories)
+        ? filterFoodsForProfile(buildMealFoodsFromTemplate(template, targetMealCalories), context.profile)
         : [
             {
               id: crypto.randomUUID(),
@@ -139,6 +140,8 @@ function buildMealPlanFromTemplates(context: AssistantRequest['context'], templa
       carbsG: macros.carbsG,
       fatG: macros.fatG,
       mealsPerDay,
+      dietaryPreferences: context.preferenceSignals.dietaryRestrictions,
+      movementLimitations: context.preferenceSignals.movementLimitations,
     },
     notes: 'Deterministic meal plan scaffold based on saved meals, calorie targets, and recent adherence patterns.',
     createdAt: new Date().toISOString(),
@@ -253,7 +256,7 @@ export class DeterministicAssistantProvider implements AssistantProvider {
 
     return {
       provider: this.id,
-      rationale: `Built from your profile, available equipment, goal priority, recent consistency (${(context.preferenceSignals.consistencyScore * 100).toFixed(0)}%), and preferred workout days: ${context.preferenceSignals.preferredWorkoutDays.join(', ') || 'not enough data yet'}.`,
+      rationale: `Built from your profile, available equipment, goal priority, recent consistency (${(context.preferenceSignals.consistencyScore * 100).toFixed(0)}%), preferred workout days: ${context.preferenceSignals.preferredWorkoutDays.join(', ') || 'not enough data yet'}, and constraints: ${buildProfileConstraintSummary(context.profile)}.`,
       workoutPlan,
       actions: [
         makeAction('accept_workout_plan', 'Accept workout plan', 'Save this workout plan to My Programs.', { planId: workoutPlan.id }),
@@ -268,7 +271,7 @@ export class DeterministicAssistantProvider implements AssistantProvider {
 
     return {
       provider: this.id,
-      rationale: `Built from your calorie and macro targets, saved meals, recent nutrition logging, and preferred meal groups: ${context.preferenceSignals.preferredMealLabels.join(', ') || 'not enough data yet'}.`,
+      rationale: `Built from your calorie and macro targets, saved meals, recent nutrition logging, preferred meal groups: ${context.preferenceSignals.preferredMealLabels.join(', ') || 'not enough data yet'}, and nutrition constraints: ${buildProfileConstraintSummary(context.profile)}.`,
       mealPlan,
       actions: [
         makeAction('accept_meal_plan', 'Accept meal plan', 'Save this meal plan to your library.', { planId: mealPlan.id }),

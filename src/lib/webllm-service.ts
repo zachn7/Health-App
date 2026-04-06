@@ -3,6 +3,8 @@ import { settingsRepository } from '@/db/repositories/settings.repository';
 import { z } from 'zod';
 import { safeJSONParse } from './schemas';
 import type { WorkoutPlan, Profile } from '@/types';
+import { generateWorkoutPlan as generateDeterministicWorkoutPlan } from './coach-engine';
+import { mergeWorkoutPlanDraft, parseWebLLMWorkoutPlanResponse } from '@/ai/webllm-workout-schema';
 import {
   getAvailableModels,
   validateAndRepairModelId,
@@ -441,28 +443,27 @@ export class WebLLMService {
   private static async setSystemPrompt(): Promise<void> {
     if (!this.engine) return;
     
-    const systemPrompt = `You are CodePuppy Trainer, an experienced fitness coach specializing in workout plan creation and modification. 
+    const systemPrompt = `You are CodePuppy Trainer, a fitness-and-nutrition assistant.
 
-Your expertise is strictly limited to fitness, exercise, nutrition, and training advice. You must refuse any non-fitness related requests. 
+Your scope is STRICTLY limited to:
+- workout programming
+- exercise technique
+- recovery
+- sports nutrition
+- body composition trends
+- safe fitness planning
 
-Core responsibilities:
-1. Generate or modify workout plans based on user goals, experience level, equipment, and limitations
-2. Provide exercise technique guidance and injury prevention advice
-3. Help with nutrition tracking and macro calculations for fitness goals
-4. Answer questions about workout programming, periodization, and recovery
-
-When users ask for plan modifications, respond with structured JSON patches following this schema:
-${JSON.stringify(workoutPlanPatchSchema.shape, null, 2)}
+You must refuse requests outside fitness/health coaching, including homework, general coding, finance, politics, or unrelated advice.
 
 Rules:
-- Always prioritize safety and proper form
-- Consider user's equipment, experience level, and limitations
-- Request clarification if information is insufficient
-- Keep responses concise and actionable
-- For structural changes to workouts, provide JSON patches
-- For nutrition questions, focus on fitness-related nutrition only
+- Prioritize safety, realistic programming, and respect for limitations/restrictions.
+- Never invent unavailable equipment or unsupported exercise IDs.
+- If asked for a structured plan, respond with valid JSON only.
+- If you are unsure, say so briefly instead of bluffing.
+- Keep advice practical, concise, and evidence-aligned.
 
-If a request falls outside your fitness expertise, politely refuse and suggest asking a domain expert.`;
+When users ask for workout modifications, structured patches must follow this schema:
+${JSON.stringify(workoutPlanPatchSchema.shape, null, 2)}`;
     
     await this.engine.resetChat();
     await this.engine.chat.completions.create({
@@ -525,76 +526,66 @@ If a request falls outside your fitness expertise, politely refuse and suggest a
     if (!this.isInitialized) {
       await this.initialize();
     }
-    
-    try {
-      const primaryGoal = userProfile.goals.find(g => g.isPrimary)?.type || 'general_fitness';
-      const daysPerWeek = Object.values(userProfile.schedule).filter(Boolean).length;
-      
-      const prompt = `Generate a ${daysPerWeek}-day workout plan for:
-- Goal: ${primaryGoal}
-- Experience: ${userProfile.experienceLevel}
-- Available equipment: ${userProfile.equipment.join(', ') || 'bodyweight only'}
-- Limitations: ${userProfile.limitations || 'none'}
 
-Respond with a structured workout plan in JSON format. Each day should include appropriate exercises for the goal and experience level.`;
-      
+    try {
       if (!this.engine) {
         throw new Error('Engine not initialized');
       }
-      
+
+      const primaryGoal = userProfile.goals.find(g => g.isPrimary)?.type || 'general_fitness';
+      const daysPerWeek = Object.values(userProfile.schedule).filter(Boolean).length;
+      const basePlan = await generateDeterministicWorkoutPlan(userProfile)
+      const allowedExerciseCatalog = basePlan.weeks[0].workouts.map((workout) => ({
+        day: workout.day,
+        allowedExercises: workout.exercises.map((exercise) => ({
+          exerciseId: exercise.exerciseId,
+          currentSets: exercise.sets,
+        })),
+        notes: workout.notes,
+      }))
+
+      const prompt = `You are revising a safe deterministic workout scaffold into a more tailored coach-style draft.
+
+User profile:
+- Goal: ${primaryGoal}
+- Experience: ${userProfile.experienceLevel}
+- Days per week: ${daysPerWeek}
+- Equipment: ${userProfile.equipment.join(', ') || 'bodyweight only'}
+- Movement limitations: ${userProfile.limitations || 'none'}
+
+IMPORTANT:
+- Only use exerciseId values from the allowed exercise catalog.
+- Do not add new exercises outside the catalog.
+- Keep workout count the same.
+- Prefer realistic set/rep prescriptions and brief rationale notes.
+- Respond with JSON only using this shape:
+{
+  "name": string,
+  "notes": string,
+  "workouts": [{ "day": string, "notes": string, "exercises": [{ "exerciseId": string, "sets": { "sets": number, "reps"?: number, "repsRange"?: { "min": number, "max": number }, "restTime"?: number, "notes"?: string } }] }]
+}
+
+Allowed exercise catalog:
+${JSON.stringify(allowedExerciseCatalog, null, 2)}`;
+
       const response = await this.engine.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }]
-      });
-      
-      const aiResponse = response.choices?.[0]?.message?.content;
+        messages: [{ role: 'user', content: prompt }],
+      })
+
+      const aiResponse = response.choices?.[0]?.message?.content
       if (!aiResponse) {
-        throw new Error('No response from AI');
+        throw new Error('No response from AI')
       }
-      
-      // Try to extract JSON from response
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in AI response');
+
+      const parsedDraft = parseWebLLMWorkoutPlanResponse(aiResponse)
+      if (!parsedDraft) {
+        throw new Error('WebLLM response was not valid structured workout JSON')
       }
-      
-      // Use safe JSON parsing with validation
-      const workoutPlanSchema: any = { safeParse: (data: any) => ({ success: true, data }) };
-      const parseResult = safeJSONParse(jsonMatch[0], workoutPlanSchema, 'WebLLM AI response');
-      
-      if (!parseResult.success || !parseResult.data) {
-        console.error('Failed to parse AI response JSON:', parseResult.error);
-        console.error('Raw JSON string:', jsonMatch[0]);
-        throw new Error(`Invalid JSON format in AI response: ${parseResult.error || 'Unknown error'}`);
-      }
-      
-      const planData = parseResult.data;
-      
-      // Convert to our format (simplified for now)
-      const workoutPlan: WorkoutPlan = {
-        id: `ai-plan-${Date.now()}`,
-        name: `AI Generated Plan - ${primaryGoal}`,
-        weeks: [
-          {
-            week: 1,
-            workouts: [
-              {
-                day: 'Full Body',
-                exercises: (planData as any).exercises || [],
-                notes: (planData as any).notes || ''
-              }
-            ]
-          }
-        ],
-        generatedBy: 'coach',
-        notes: 'Workout plan generated by AI',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      return workoutPlan;
+
+      return mergeWorkoutPlanDraft(basePlan, parsedDraft)
     } catch (error) {
-      console.error('Failed to generate workout plan:', error);
-      return null;
+      console.error('Failed to generate workout plan:', error)
+      return null
     }
   }
   

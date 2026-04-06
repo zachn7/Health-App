@@ -565,6 +565,11 @@ export default function Coach() {
     saveChatHistory(updatedMessages);
 
     try {
+      const preferredProvider = await assistantService.getSelectedProviderId();
+      if (preferredProvider === 'webllm' && !webllmEnabled) {
+        setWebLLMError('AI provider is set to WebLLM, but the WebLLM coach toggle is off in Settings. Either enable WebLLM Coach or switch the assistant provider back to deterministic.');
+      }
+
       const response = await assistantService.sendMessage(userMessage, profile);
       if (response.suggestedWorkoutPlan) {
         setGeneratedPlan(response.suggestedWorkoutPlan);
@@ -597,6 +602,12 @@ export default function Coach() {
     setGenerating(true);
     setGenerationError(null);
     try {
+      const preferredProvider = await assistantService.getSelectedProviderId();
+      if (preferredProvider !== 'webllm') {
+        setGenerationError('AI Assistant Provider is not set to WebLLM in Settings. Switch provider to WebLLM if you want local model-backed generation.');
+        return;
+      }
+
       const result = await assistantService.generateWorkoutPlan(profile);
       if (result.workoutPlan) {
         setGeneratedPlan(result.workoutPlan);
@@ -674,7 +685,7 @@ export default function Coach() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-medium text-gray-900">AI Coach Chat</h2>
               <div className="flex items-center space-x-2">
-                {!webllmModelReady && !webllmModelLoading && (
+                {!webllmModelReady && !webllmModelLoading && hasWebGPU !== false && (
                   <>
                     <select
                       value={selectedModelId}
@@ -696,7 +707,7 @@ export default function Coach() {
                     <button
                       onClick={initializeWebLLM}
                       className="btn btn-primary text-sm"
-                      disabled={availableModels.length === 0}
+                      disabled={availableModels.length === 0 || !hasWebGPU}
                     >
                       <Brain className="w-4 h-4 mr-1" />
                       Load AI Coach
@@ -749,6 +760,12 @@ export default function Coach() {
               </div>
             )}
             
+            {hasWebGPU && !webllmModelReady && !webllmError && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                WebLLM is enabled, but the model is not loaded yet. The page should stay functional, and assistant requests will fall back safely when needed instead of faceplanting.
+              </div>
+            )}
+
             {/* WebLLM Error Banner */}
             {webllmError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">

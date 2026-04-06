@@ -10,10 +10,13 @@ export type AssistantIntent =
   | 'logging'
   | 'plan_review'
   | 'general_coaching'
+  | 'out_of_domain'
 
 export interface UserPreferenceSignals {
   preferredWorkoutDays: string[]
   preferredMealLabels: string[]
+  dietaryRestrictions: string[]
+  movementLimitations: string[]
   consistencyScore: number
   loggedWorkoutDaysLast30: number
   loggedNutritionDaysLast14: number
