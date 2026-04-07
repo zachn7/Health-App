@@ -16,12 +16,22 @@ interface SeedProfileOptions {
   }
 }
 
+interface SeedSettingsOptions {
+  enableUSDALookups?: boolean
+  enableWebLLMCoach?: boolean
+  aiProvider?: 'deterministic' | 'webllm' | 'openrouter'
+  aiAllowLoggingActions?: boolean
+  webllmModelId?: string | null
+}
+
 interface BootstrapOptions {
   clearStorage?: boolean
   acceptAgeGate?: boolean
   completeOnboarding?: boolean
   seedProfile?: boolean
   profile?: SeedProfileOptions
+  seedSettings?: boolean
+  settings?: SeedSettingsOptions
 }
 
 const defaultProfile: Required<SeedProfileOptions> = {
@@ -40,6 +50,14 @@ const defaultProfile: Required<SeedProfileOptions> = {
   },
 }
 
+const defaultSettings: Required<SeedSettingsOptions> = {
+  enableUSDALookups: false,
+  enableWebLLMCoach: false,
+  aiProvider: 'deterministic',
+  aiAllowLoggingActions: false,
+  webllmModelId: null,
+}
+
 const DB_NAME = 'CodePuppyTrainerDB'
 const DB_VERSION = 5
 
@@ -50,6 +68,8 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
     completeOnboarding = false,
     seedProfile = false,
     profile = {},
+    seedSettings = false,
+    settings = {},
   } = options
 
   const seededProfile = {
@@ -61,8 +81,13 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
     },
   }
 
+  const seededSettings = {
+    ...defaultSettings,
+    ...settings,
+  }
+
   await context.addInitScript(
-    ({ clearStorage, acceptAgeGate, completeOnboarding, seedProfile, seededProfile }) => {
+    ({ clearStorage, acceptAgeGate, completeOnboarding, seedProfile, seededProfile, seedSettings, seededSettings }) => {
       if (clearStorage) {
         localStorage.clear()
       }
@@ -76,7 +101,7 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         localStorage.setItem('onboarding_completed', 'true')
       }
 
-      if (!seedProfile) {
+      if (!seedProfile && !seedSettings) {
         return
       }
 
@@ -126,25 +151,63 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         if (!db.objectStoreNames.contains('profiles')) {
           db.createObjectStore('profiles', { keyPath: 'id' })
         }
+        if (!db.objectStoreNames.contains('settings')) {
+          db.createObjectStore('settings', { keyPath: 'id' })
+        }
       }
 
       request.onsuccess = () => {
         const db = request.result
-        if (!db.objectStoreNames.contains('profiles')) {
+        const storeNames = [] as string[]
+        if (seedProfile && db.objectStoreNames.contains('profiles')) {
+          storeNames.push('profiles')
+        }
+        if (seedSettings && db.objectStoreNames.contains('settings')) {
+          storeNames.push('settings')
+        }
+
+        if (storeNames.length === 0) {
           db.close()
           return
         }
 
-        const tx = db.transaction('profiles', 'readwrite')
-        const store = tx.objectStore('profiles')
-        const writeProfile = () => store.put(seededDbProfile)
+        const tx = db.transaction(storeNames, 'readwrite')
 
-        if (clearStorage) {
-          const clearRequest = store.clear()
-          clearRequest.onsuccess = writeProfile
-          clearRequest.onerror = writeProfile
-        } else {
-          writeProfile()
+        if (seedProfile) {
+          const profileStore = tx.objectStore('profiles')
+          const writeProfile = () => profileStore.put(seededDbProfile)
+
+          if (clearStorage) {
+            const clearRequest = profileStore.clear()
+            clearRequest.onsuccess = writeProfile
+            clearRequest.onerror = writeProfile
+          } else {
+            writeProfile()
+          }
+        }
+
+        if (seedSettings) {
+          const now = new Date().toISOString()
+          const settingsStore = tx.objectStore('settings')
+          const seededDbSettings = {
+            id: 'user-settings',
+            createdAt: now,
+            updatedAt: now,
+            enableUSDALookups: seededSettings.enableUSDALookups,
+            enableWebLLMCoach: seededSettings.enableWebLLMCoach,
+            aiProvider: seededSettings.aiProvider,
+            aiAllowLoggingActions: seededSettings.aiAllowLoggingActions,
+            webllmModelId: seededSettings.webllmModelId || undefined,
+          }
+          const writeSettings = () => settingsStore.put(seededDbSettings)
+
+          if (clearStorage) {
+            const clearRequest = settingsStore.clear()
+            clearRequest.onsuccess = writeSettings
+            clearRequest.onerror = writeSettings
+          } else {
+            writeSettings()
+          }
         }
 
         tx.oncomplete = () => db.close()
@@ -152,7 +215,7 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         tx.onerror = () => db.close()
       }
     },
-    { clearStorage, acceptAgeGate, completeOnboarding, seedProfile, seededProfile },
+    { clearStorage, acceptAgeGate, completeOnboarding, seedProfile, seededProfile, seedSettings, seededSettings },
   )
 }
 
