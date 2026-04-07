@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor, GitBranch, Clock, Package, Activity, Cpu, Zap, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
-import { webllmService } from '@/lib/webllm-service';
+import { getWebLLMService, peekWebLLMService } from '@/lib/webllm-service-loader';
 import { getWebGPUDiagnostics } from '@/ai/webgpu';
 import { getWebLLMVersion, validateAndRepairModelId, getAvailableModels } from '@/ai/webllmConfig';
 
@@ -128,10 +128,11 @@ export default function Settings() {
 
     // WebLLM status
     try {
+      const webllmService = await getWebLLMService();
       const enabled = await webllmService.isWebLLMEnabled();
-      const lastError = webllmService.getLastError();
+      const lastError = peekWebLLMService()?.getLastError() || null;
       const selectedModel = await webllmService.getSelectedModelId();
-      const availableModels = getAvailableModels();
+      const availableModels = await getAvailableModels();
       
       setWebLLMStatus({
         enabled,
@@ -142,11 +143,11 @@ export default function Settings() {
 
       // Collect debug info
       setAiDebugInfo({
-        webllmVersion: getWebLLMVersion(),
+        webllmVersion: await getWebLLMVersion(),
         selectedModelId: selectedModel,
         availableModelsCount: availableModels.length,
         availableModelIds: availableModels.slice(0, 5).map(m => m.model_id), // Show first 5
-        modelValidation: validateAndRepairModelId(selectedModel),
+        modelValidation: await validateAndRepairModelId(selectedModel),
         lastError: lastError?.message || null,
         checkedAt: new Date().toISOString()
       });

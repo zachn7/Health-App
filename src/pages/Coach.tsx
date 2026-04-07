@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { repositories, db } from '../db';
+import { settingsRepository } from '../db/repositories/settings.repository';
 import { calculateTDEE, calculateMacroTargets } from '../lib/coach-engine';
 import { ExerciseDBService } from '../lib/exercise-db';
-import { webllmService } from '../lib/webllm-service';
+import { getWebLLMService, peekWebLLMService } from '../lib/webllm-service-loader';
 import { formatWeight } from '../lib/unit-conversions';
 import { getWebGPUDiagnostics } from '../ai/webgpu';
 import { validateAndRepairModelId, getAvailableModels } from '../ai/webllmConfig';
@@ -141,7 +142,7 @@ export default function Coach() {
   useEffect(() => {
     return () => {
       console.log('[Coach] Unmounting, canceling WebLLM initialization if in progress');
-      webllmService.cancelInit();
+      peekWebLLMService()?.cancelInit();
     };
   }, []);
 
@@ -169,7 +170,7 @@ export default function Coach() {
 
   const loadWebLLMStatus = async () => {
     try {
-      const enabled = await webllmService.isWebLLMEnabled();
+      const enabled = await settingsRepository.isWebLLMCoachEnabled();
       setWebLLMEnabled(enabled);
     } catch (error) {
       console.error('Failed to load WebLLM status:', error);
@@ -179,16 +180,22 @@ export default function Coach() {
 
   const loadWebLLMModels = async () => {
     try {
-      const models = getAvailableModels();
+      const models = await getAvailableModels();
       setAvailableModels(models);
       console.log('[Coach] Available models:', models.length, 'models loaded');
       
       // Get and validate the selected model ID (with auto-repair)
-      const currentModel = await webllmService.getSelectedModelId();
+      const savedModelId = await settingsRepository.getWebLLMModelId();
+      const validation = await validateAndRepairModelId(savedModelId);
+
+      if (validation.wasRepaired && validation.selectedModelId) {
+        await settingsRepository.setWebLLMModelId(validation.selectedModelId);
+      }
+
+      const currentModel = validation.selectedModelId || '';
       setSelectedModelId(currentModel);
       
       // Validate model and check if it was auto-repaired
-      const validation = validateAndRepairModelId(currentModel);
       if (validation.wasRepaired) {
         console.warn('[Coach] Model ID was auto-repaired:', validation.error);
         setModelValidationWarning(`AI model selection was reset to a supported default (${validation.selectedModelId}).`);
@@ -212,7 +219,7 @@ export default function Coach() {
       }
       
       setModelValidationWarning(null);
-      await webllmService.setSelectedModelId(modelId);
+      await settingsRepository.setWebLLMModelId(modelId);
       setSelectedModelId(modelId);
       console.log('Model changed to:', modelId);
       
@@ -412,9 +419,11 @@ export default function Coach() {
     setWebLLMModelLoading(true);
     setWebLLMError(null);
     setModelValidationWarning(null);
-    webllmService.clearLastError();
     
     try {
+      const webllmService = await getWebLLMService();
+      webllmService.clearLastError();
+
       // Set up progress callback for better UX
       webllmService.setInitProgressCallback((progress) => {
         console.log('[Coach] WebLLM init progress:', progress);
@@ -441,7 +450,7 @@ export default function Coach() {
       console.error('[Coach] Failed to initialize WebLLM:', error);
       
       // Use WebLLM service's error classification if available
-      const classifiedError = webllmService.getLastError();
+      const classifiedError = peekWebLLMService()?.getLastError() || null;
       
       if (classifiedError) {
         // Build user-friendly error message
@@ -482,7 +491,7 @@ export default function Coach() {
       // Ensure model loading state is reset on error
       setWebLLMModelReady(false);
     } finally {
-      webllmService.clearInitProgressCallback();
+      peekWebLLMService()?.clearInitProgressCallback();
       setWebLLMModelLoading(false);
     }
   };
@@ -820,7 +829,11 @@ export default function Coach() {
                     
                     {(() => {
                       try {
-                        const engineState = webllmService.getEngineState();
+                        const engineState = peekWebLLMService()?.getEngineState();
+
+                        if (!engineState) {
+                          return <div className="text-gray-400 col-span-2">Engine not loaded</div>;
+                        }
                         return (
                           <>
                             <div className="flex justify-between"><span className="text-gray-400">engineState.isInitialized:</span><span className={engineState.isInitialized ? 'text-green-400' : 'text-red-400'}>{engineState.isInitialized.toString()}</span></div>
@@ -842,7 +855,7 @@ export default function Coach() {
                     <div className="pt-2 border-t border-gray-700">
                       <button
                         onClick={() => {
-                          webllmService.reset();
+                          peekWebLLMService()?.reset();
                           setWebLLMModelReady(false);
                           setWebLLMModelLoading(false);
                           setWebLLMError(null);
@@ -1000,14 +1013,14 @@ export default function Coach() {
                             setChatMessages([]);
                             setSuggestedMealPlan(null);
                             setAssistantActions([]);
-                            webllmService.clearChatHistory();
+                            peekWebLLMService()?.clearChatHistory();
                           }}
                           className="text-xs text-gray-500 hover:text-gray-700"
                         >
                           Clear Chat
                         </button>
                       </div>
-+
+
                       {(assistantActions.length > 0 || suggestedMealPlan || generatedPlan) && (
                         <div className="mt-4 space-y-3 border-t pt-4">
                           {assistantActions.length > 0 && (

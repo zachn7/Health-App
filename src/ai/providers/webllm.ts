@@ -1,4 +1,4 @@
-import { webllmService } from '@/lib/webllm-service'
+import { getWebLLMService } from '@/lib/webllm-service-loader'
 import type { AssistantProvider, AssistantRequest, AssistantResponse, PlanGenerationResult } from '@/ai/types'
 import type { MealPlan } from '@/types'
 import { DeterministicAssistantProvider } from './deterministic'
@@ -16,6 +16,7 @@ export class WebLLMAssistantProvider implements AssistantProvider {
   }
 
   async isAvailable(): Promise<boolean> {
+    const webllmService = await getWebLLMService()
     return await webllmService.isWebLLMEnabled()
   }
 
@@ -25,6 +26,7 @@ export class WebLLMAssistantProvider implements AssistantProvider {
     }
 
     try {
+      const webllmService = await getWebLLMService()
       await webllmService.initialize()
       const reply = await webllmService.sendMessage(request.message, request.context.profile)
       return {
@@ -44,6 +46,7 @@ export class WebLLMAssistantProvider implements AssistantProvider {
     }
 
     try {
+      const webllmService = await getWebLLMService()
       await webllmService.initialize()
       const workoutPlan = await webllmService.generateWorkoutPlan(context.profile)
       if (!workoutPlan) {

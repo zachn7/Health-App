@@ -83,7 +83,7 @@ export class WebLLMService {
   
   static async getAvailableModels(): Promise<WebLLMModelRecord[]> {
     try {
-      return getAvailableModels();
+      return await getAvailableModels();
     } catch (error) {
       console.error('Failed to get available models:', error);
       return [];
@@ -117,7 +117,7 @@ export class WebLLMService {
       const savedModelId = await settingsRepository.getWebLLMModelId();
       
       // Validate and repair the model ID if needed
-      const validation = validateAndRepairModelId(savedModelId);
+      const validation = await validateAndRepairModelId(savedModelId);
       
       if (validation.wasRepaired) {
         console.warn('[WebLLMService] Model ID auto-repaired:', validation.error);
@@ -142,7 +142,7 @@ export class WebLLMService {
   static async setSelectedModelId(modelId: string): Promise<void> {
     try {
       // Validate the model ID using the centralized config
-      if (!isModelIdValid(modelId)) {
+      if (!(await isModelIdValid(modelId))) {
         throw new Error(`Model "${modelId}" not found in available models`);
       }
       

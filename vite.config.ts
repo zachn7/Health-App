@@ -111,7 +111,8 @@ export default defineConfig({
           router: ['react-router-dom'],
           charts: ['recharts'],
           forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
-          storage: ['dexie']
+          storage: ['dexie'],
+          webllmRuntime: ['@mlc-ai/web-llm']
         }
       }
     }

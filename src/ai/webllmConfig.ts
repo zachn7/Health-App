@@ -3,8 +3,6 @@
  * Handles model validation, auto-repair of stale model IDs, and default model selection.
  */
 
-import * as webllm from '@mlc-ai/web-llm';
-
 export interface WebLLMModelRecord {
   model_id: string;
   model_lib: string;
@@ -24,17 +22,29 @@ export interface ModelValidationResult {
   wasRepaired: boolean;
 }
 
+type WebLLMPackage = typeof import('@mlc-ai/web-llm')
+
+let webllmPackagePromise: Promise<WebLLMPackage> | null = null
+
+async function getWebLLMPackage(): Promise<WebLLMPackage> {
+  if (!webllmPackagePromise) {
+    webllmPackagePromise = import('@mlc-ai/web-llm')
+  }
+
+  return await webllmPackagePromise
+}
+
 /**
  * Get the full list of available WebLLM models.
  * This is sourced from the webllm package's built-in configuration.
  */
-export function getAvailableModels(): WebLLMModelRecord[] {
+export async function getAvailableModels(): Promise<WebLLMModelRecord[]> {
   try {
-    const models = (webllm as any).prebuiltAppConfig?.model_list || [];
-    return models;
-  } catch (e) {
-    console.warn('Failed to get WebLLM model list:', e);
-    return [];
+    const webllm = await getWebLLMPackage()
+    return (webllm as any).prebuiltAppConfig?.model_list || []
+  } catch (error) {
+    console.warn('Failed to get WebLLM model list:', error)
+    return []
   }
 }
 
@@ -45,34 +55,31 @@ export function getAvailableModels(): WebLLMModelRecord[] {
  * 2. Models that don't require low resources and have no special features
  * 3. First available model in the list
  */
-export function getDefaultModelId(): string | null {
+export async function getDefaultModelId(): Promise<string | null> {
   try {
-    const models = getAvailableModels();
-    
+    const models = await getAvailableModels()
+
     if (models.length === 0) {
-      console.warn('No WebLLM models available');
-      return null;
+      console.warn('No WebLLM models available')
+      return null
     }
 
-    // Prefer -MLC models (standard naming convention)
-    const mlcModel = models.find(m => m.model_id.endsWith('-MLC'));
+    const mlcModel = models.find((model) => model.model_id.endsWith('-MLC'))
     if (mlcModel) {
-      return mlcModel.model_id;
+      return mlcModel.model_id
     }
 
-    // Prefer safe models (no special requirements)
     const safeModels = models.filter(
-      m => !m.low_resource_required && m.required_features.length === 0
-    );
+      (model) => !model.low_resource_required && model.required_features.length === 0,
+    )
     if (safeModels.length > 0) {
-      return safeModels[0].model_id;
+      return safeModels[0].model_id
     }
 
-    // Fallback to first model
-    return models[0].model_id;
-  } catch (e) {
-    console.error('Failed to get default model ID:', e);
-    return null;
+    return models[0].model_id
+  } catch (error) {
+    console.error('Failed to get default model ID:', error)
+    return null
   }
 }
 
@@ -80,17 +87,17 @@ export function getDefaultModelId(): string | null {
  * Validate that a model ID exists in the available models list.
  * This is used to check against stale or invalid stored model selections.
  */
-export function isModelIdValid(modelId: string | null): boolean {
+export async function isModelIdValid(modelId: string | null): Promise<boolean> {
   if (!modelId) {
-    return false;
+    return false
   }
 
   try {
-    const models = getAvailableModels();
-    return models.some(m => m.model_id === modelId);
-  } catch (e) {
-    console.error('Failed to validate model ID:', e);
-    return false;
+    const models = await getAvailableModels()
+    return models.some((model) => model.model_id === modelId)
+  } catch (error) {
+    console.error('Failed to validate model ID:', error)
+    return false
   }
 }
 
@@ -98,49 +105,46 @@ export function isModelIdValid(modelId: string | null): boolean {
  * Validate the current selected model ID and auto-repair if invalid.
  * Returns the validated (and potentially repaired) model ID.
  */
-export function validateAndRepairModelId(selectedModelId: string | null): ModelValidationResult {
+export async function validateAndRepairModelId(selectedModelId: string | null): Promise<ModelValidationResult> {
   const result: ModelValidationResult = {
     isValid: false,
-    selectedModelId: selectedModelId,
+    selectedModelId,
     defaultModelId: null,
     availableModelIds: [],
     error: null,
-    wasRepaired: false
-  };
+    wasRepaired: false,
+  }
 
   try {
-    const models = getAvailableModels();
-    result.availableModelIds = models.map(m => m.model_id);
-    result.defaultModelId = getDefaultModelId();
+    const models = await getAvailableModels()
+    result.availableModelIds = models.map((model) => model.model_id)
+    result.defaultModelId = await getDefaultModelId()
 
     if (models.length === 0) {
-      result.error = 'No WebLLM models available';
-      return result;
+      result.error = 'No WebLLM models available'
+      return result
     }
 
-    // Check if selected model is valid
-    if (selectedModelId && isModelIdValid(selectedModelId)) {
-      result.isValid = true;
-      result.selectedModelId = selectedModelId;
-      return result;
+    if (selectedModelId && (await isModelIdValid(selectedModelId))) {
+      result.isValid = true
+      result.selectedModelId = selectedModelId
+      return result
     }
 
-    // Model is invalid or null - repair it
     if (selectedModelId) {
-      result.wasRepaired = true;
-      result.error = `Model "${selectedModelId}" not found in available models`;
+      result.wasRepaired = true
+      result.error = `Model "${selectedModelId}" not found in available models`
     } else {
-      result.error = 'No model selected';
+      result.error = 'No model selected'
     }
 
-    // Repair to default
-    result.selectedModelId = result.defaultModelId;
-    result.isValid = !!result.selectedModelId;
+    result.selectedModelId = result.defaultModelId
+    result.isValid = !!result.selectedModelId
 
-    return result;
-  } catch (e: any) {
-    result.error = `Failed to validate model: ${e?.message || 'Unknown error'}`;
-    return result;
+    return result
+  } catch (error: any) {
+    result.error = `Failed to validate model: ${error?.message || 'Unknown error'}`
+    return result
   }
 }
 
@@ -148,36 +152,25 @@ export function validateAndRepairModelId(selectedModelId: string | null): ModelV
  * Get human-readable model information for display.
  */
 export function getModelDisplayName(modelId: string): string {
-  try {
-    const models = getAvailableModels();
-    const model = models.find(m => m.model_id === modelId);
-    
-    if (!model) {
-      return modelId;
-    }
-
-    // Extract a clean name from model_id
-    return modelId
-      .replace(/-MLC$/, '')
-      .replace(/-q4f16/, '')
-      .replace(/-q4f32/, '')
-      .replace(/-int4/, '')
-      .split('-')
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
-  } catch (e) {
-    return modelId;
-  }
+  return modelId
+    .replace(/-MLC$/, '')
+    .replace(/-q4f16/, '')
+    .replace(/-q4f32/, '')
+    .replace(/-int4/, '')
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 /**
  * Get WebLLM package version for diagnostics.
  */
-export function getWebLLMVersion(): string {
+export async function getWebLLMVersion(): Promise<string> {
   try {
-    const pkg = webllm as any;
-    return pkg.VERSION || pkg.version || 'unknown';
-  } catch (e) {
-    return 'unknown';
+    const webllm = await getWebLLMPackage()
+    const pkg = webllm as any
+    return pkg.VERSION || pkg.version || 'unknown'
+  } catch (error) {
+    return 'unknown'
   }
 }
