@@ -53,6 +53,8 @@ test.describe('Smoke: AI Coach + WebLLM UI paths', () => {
     await expect(page.getByText('WebLLM Status')).toBeVisible()
     await expect(page.getByText(/AI Coach:/i)).toBeVisible()
     await expect(page.getByText(/ENABLED/i)).toBeVisible()
+    await expect(page.getByText(/Browser support:/i)).toBeVisible()
+    await expect(page.getByText(/Runtime ready:/i)).toBeVisible()
     await expect(page.getByText(/Selected Model:/i)).toBeVisible()
     await expect(page.getByText(/invalid-model-that-should-be-repaired|Qwen|Llama|Phi/i)).toBeVisible()
 
@@ -81,9 +83,12 @@ test.describe('Smoke: AI Coach + WebLLM UI paths', () => {
 
     await expect(page.getByText('Application Error')).not.toBeVisible()
     await expect(page.getByTestId(testIds.coach.heading)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: 'Generate Offline Plan' })).toBeVisible()
+    await expect(page.getByText(/Local AI optimization is inactive/i)).toBeVisible()
+    await expect(page.getByText(/offline coach engine/i)).toBeVisible()
 
     const bodyText = await page.textContent('body')
-    expect(bodyText).toMatch(/AI Coach|Generate Your Workout Plan|Initialize AI Coach|WebGPU/i)
+    expect(bodyText).toMatch(/AI Coach|Generate New Workout Plan|Load AI Coach|WebGPU|offline/i)
   })
 
   test('Global assistant still responds when webllm provider is selected but WebLLM coach is disabled', async ({ page, context }) => {

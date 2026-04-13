@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { bootstrapAppState } from './helpers/bootstrap';
+import { bootstrapAppState, gotoApp } from './helpers/bootstrap';
 
 test.describe('Regression: Exercise Search Improvements (R06)', () => {
   test.beforeEach(async ({ context }) => {
@@ -8,7 +8,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should show sample exercises when search is empty', async ({ page }) => {
     // Navigate to Workout Logger
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click "Log Exercises Manually" or "Add Another Exercise" button
@@ -53,7 +53,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should perform substring matching for single word queries', async ({ page }) => {
     // Navigate to Workout Logger
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click "Log Exercises Manually" or "Add Another Exercise" button
@@ -104,7 +104,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should perform token-based matching for multi-word queries', async ({ page }) => {
     // Navigate to Workout Logger
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click "Log Exercises Manually" or "Add Another Exercise" button
@@ -158,7 +158,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should allow selecting an exercise from search results', async ({ page }) => {
     // Navigate to Workout Logger
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click "Log Exercises Manually" or "Add Another Exercise" button
@@ -205,7 +205,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should show empty state when no results found', async ({ page }) => {
     // Navigate to Workout Logger
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click "Log Exercises Manually" or "Add Another Exercise" button
@@ -227,20 +227,19 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     // Search for something that definitely won't exist
     const searchInput = page.getByTestId('exercise-search-input');
     await searchInput.fill('xyz123nonexistentexercise');
-    await page.waitForTimeout(500);
-    
-    // Wait a moment for search to complete
-    await page.waitForTimeout(1000);
-    
-    // Should show empty state
+    await expect(searchInput).toHaveValue('xyz123nonexistentexercise');
+
+    const loadingState = page.getByText('Searching exercises...');
+    await expect(loadingState).not.toBeVisible({ timeout: 10000 });
+
+    // Should show empty state once the debounced search settles
     const emptyState = page.getByTestId('exercise-search-empty-state');
-    await expect(emptyState).toBeVisible({ timeout: 5000 });
-    
+    await expect(emptyState).toBeVisible({ timeout: 10000 });
+
     // Should NOT show any results
     const results = page.locator('[data-testid^="exercise-result-"]');
-    const resultCount = await results.count();
-    expect(resultCount).toBe(0);
-    
+    await expect(results).toHaveCount(0, { timeout: 5000 });
+
     // Verify empty state message
     await expect(emptyState.getByText('No exercises found')).toBeVisible({ timeout: 3000 });
     
@@ -251,7 +250,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should show full exercise dataset on empty search and allow scrolling', async ({ page }) => {
     // Navigate to Workout Logger
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click "Log Exercises Manually" button
@@ -341,7 +340,7 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
 
   test('should apply filters and narrow results correctly', async ({ page }) => {
     // Navigate to Workout Logger to open exercise picker
-    await page.goto('./#/log/workout');
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Click to open exercise picker

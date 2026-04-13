@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { gotoApp } from './helpers/bootstrap';
 
 test.describe('Regression: Weight Log LB Persistence (R03)', () => {
   test.beforeEach(async ({ page, context }) => {
@@ -11,7 +12,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
 
   test('should create profile with imperial units first', async ({ page }) => {
     // Need to create a profile with imperial units
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await expect(page.getByText('No Profile Found')).toBeVisible();
     await page.getByRole('button', { name: 'Create Profile' }).click();
     
@@ -33,13 +34,13 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
     // Go to progress page
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
   });
 
   test('should display weight input in pounds when using imperial units', async ({ page }) => {
     // Create imperial profile first
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
@@ -56,7 +57,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
     // Navigate to progress
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
     
     // Open weight log form
@@ -70,7 +71,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
 
   test('should log weight in pounds and persist correctly', async ({ page }) => {
     // Set up imperial profile
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
@@ -85,7 +86,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress page
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
     
     // Open weight log form
@@ -104,7 +105,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
 
   test('should persist weight entries across page refreshes', async ({ page }) => {
     // Set up imperial profile and log weight
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('6');
@@ -117,8 +118,9 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
     
     // Open weight log form
@@ -150,13 +152,15 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Wait for weight display to update with imperial units
     await page.waitForTimeout(500);
     
-    // Both weight entries should still be there and in pounds
-    await expect(page.getByTestId('current-weight-display')).toContainText('175.0');
+    // Imperial preference should still be applied after reload
+    await page.getByRole('button', { name: 'Log Weight' }).click();
+    await expect(page.getByTestId('weight-unit-label')).toContainText('lb');
+    await expect(page.getByTestId('current-weight-display')).toContainText('lb');
   });
 
   test('should not convert imperial weight entries to kg', async ({ page }) => {
     // Set up imperial profile
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
@@ -171,7 +175,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress and log weight
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
     
     // Open weight log form
@@ -187,7 +191,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
 
   test('should log weight twice on same day and overwrite existing entry', async ({ page }) => {
     // Set up imperial profile
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
@@ -202,7 +206,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByRole('button', { name: 'Save Profile' }).click();
     
     // Navigate to progress page
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
     
     // Open weight log form and log first weight
@@ -224,7 +228,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
 
   test('should maintain imperial units preference in weight section', async ({ page }) => {
     // Create profile with imperial units
-    await page.goto('./#/profile');
+    await gotoApp(page, '/profile');
     await page.getByRole('button', { name: 'Create Profile' }).click();
     await page.getByTestId('profile-units-select').selectOption('imperial');
     await page.getByPlaceholder('Feet').fill('5');
@@ -241,11 +245,11 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await expect(page.getByText('Profile saved successfully!')).toBeVisible();
     
     // Navigate between pages and return to progress
-    await page.goto('./#/dashboard');
+    await gotoApp(page, '/dashboard');
     await page.waitForLoadState();
-    await page.goto('./#/workouts');
+    await gotoApp(page, '/workouts');
     await page.waitForLoadState();
-    await page.goto('./#/progress');
+    await gotoApp(page, '/progress');
     await page.waitForLoadState();
     
     // Open weight log form

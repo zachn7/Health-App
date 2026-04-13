@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { bootstrapAppState } from './helpers/bootstrap';
+import { bootstrapAppState, gotoApp } from './helpers/bootstrap';
 
 test.describe('Settings: Reset App Data', () => {
   test.beforeEach(async ({ context }) => {
@@ -22,7 +22,7 @@ test.describe('Settings: Reset App Data', () => {
 
   test('should reset app data and reload the page', async ({ page }) => {
     // Navigate to Settings
-    await page.goto('./#/settings');
+    await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
     
@@ -64,7 +64,7 @@ test.describe('Settings: Reset App Data', () => {
   });
 
   test('should show confirmation dialog before reset', async ({ page }) => {
-    await page.goto('./#/settings');
+    await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
     
@@ -97,7 +97,7 @@ test.describe('Settings: Reset App Data', () => {
   test('should NOT reset when dialog is cancelled', async ({ page }) => {
     const initialUrl = await page.url();
     
-    await page.goto('./#/settings');
+    await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
     
@@ -123,7 +123,7 @@ test.describe('Settings: Reset App Data', () => {
   });
 
   test('should have reset button visible in settings', async ({ page }) => {
-    await page.goto('./#/settings');
+    await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
     
@@ -138,7 +138,7 @@ test.describe('Settings: Reset App Data', () => {
   });
 
   test('should show detailed explanation near reset button', async ({ page }) => {
-    await page.goto('./#/settings');
+    await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
     

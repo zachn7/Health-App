@@ -219,6 +219,17 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
   )
 }
 
-export async function gotoApp(page: Page, hashPath = '/') {
-  await page.goto(`./#${hashPath}`)
+function buildAppUrl(hashPath: string, cacheBust: boolean): string {
+  const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`
+  const cacheBustQuery = cacheBust ? `?e2e_nav=${Date.now()}` : ''
+  return `./${cacheBustQuery}#${normalizedHashPath}`
+}
+
+export async function gotoApp(
+  page: Page,
+  hashPath = '/',
+  options: { cacheBust?: boolean } = {},
+) {
+  const { cacheBust = true } = options
+  await page.goto(buildAppUrl(hashPath, cacheBust), { waitUntil: 'domcontentloaded' })
 }

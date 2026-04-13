@@ -8,7 +8,7 @@ import { formatWeight } from '../lib/unit-conversions';
 import { getWebGPUDiagnostics } from '../ai/webgpu';
 import { validateAndRepairModelId, getAvailableModels } from '../ai/webllmConfig';
 import { Component, ErrorInfo, ReactNode } from 'react';
-import { Brain, Send, Loader2, AlertCircle, XCircle, RefreshCw, Info } from 'lucide-react';
+import { Brain, Send, Loader2, AlertCircle, XCircle, Info, MessageSquare } from 'lucide-react';
 import type { MealPlan, Profile, WorkoutPlan } from '../types';
 import { assistantService } from '../ai/assistant-service';
 import type { AssistantActionSuggestion } from '../ai/types';
@@ -110,6 +110,15 @@ export default function Coach() {
     soreness: 3,
     notes: ''
   });
+
+  const aiCoachInactive = !webllmEnabled || hasWebGPU === false || !!webllmError || !webllmModelReady;
+  const aiCoachInactiveMessage = !webllmEnabled
+    ? 'AI Coach is turned off in Settings. You can still generate a full offline plan with the built-in coach engine below.'
+    : hasWebGPU === false
+      ? 'AI Coach is still inactive because this browser cannot provide WebGPU for the on-device model. The offline coach engine still works normally.'
+      : webllmError
+        ? `AI Coach is still inactive right now: ${webllmError}`
+        : 'AI Coach is enabled but the local model is not ready yet. You can keep using the offline coach engine while WebLLM gets sorted.';
 
   useEffect(() => {
     loadCoachData();
@@ -768,38 +777,31 @@ export default function Coach() {
                 </div>
               </div>
             )}
-            
-            {hasWebGPU && !webllmModelReady && !webllmError && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                WebLLM is enabled, but the model is not loaded yet. The page should stay functional, and assistant requests will fall back safely when needed instead of faceplanting.
-              </div>
-            )}
 
-            {/* WebLLM Error Banner */}
-            {webllmError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start">
-                  <XCircle className="w-4 h-4 mt-0.5 text-red-600 mr-2 flex-shrink-0" />
-                  <div className="text-sm text-red-800 flex-1">
-                    <div className="font-medium mb-1">AI Coach Error</div>
-                    <div className="text-xs mb-2">{webllmError}</div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setWebLLMError(null);
-                          initializeWebLLM();
-                        }}
-                        className="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded flex items-center"
-                      >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Retry
-                      </button>
-                      <button
-                        onClick={() => setWebLLMError(null)}
-                        className="text-xs text-red-600 hover:text-red-800 underline"
-                      >
-                        Dismiss
-                      </button>
+            {aiCoachInactive && (
+              <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-600" />
+                  <div className="flex-1 text-sm text-orange-900">
+                    <div className="font-medium">AI Coach is inactive</div>
+                    <p className="mt-1 text-orange-800">{aiCoachInactiveMessage}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {webllmEnabled && hasWebGPU !== false && !webllmModelReady && (
+                        <button
+                          onClick={initializeWebLLM}
+                          disabled={webllmModelLoading || availableModels.length === 0}
+                          className="btn btn-secondary text-sm"
+                        >
+                          {webllmModelLoading ? (
+                            <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Loading AI...</>
+                          ) : (
+                            <><Brain className="w-4 h-4 mr-1" />Try loading local AI</>
+                          )}
+                        </button>
+                      )}
+                      <a href="#/settings" className="btn btn-secondary text-sm">
+                        Review AI Settings
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -869,24 +871,6 @@ export default function Coach() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-            
-            {webllmError && (
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-start">
-                  <AlertCircle className="w-4 h-4 mt-0.5 text-yellow-600 mr-2" />
-                  <div className="text-sm text-yellow-800">
-                    <div className="font-medium">AI Model Error</div>
-                    <div>{webllmError}</div>
-                    <button
-                      onClick={() => setWebLLMError(null)}
-                      className="text-xs text-yellow-600 hover:text-yellow-800 underline mt-1"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
             
@@ -1244,8 +1228,11 @@ export default function Coach() {
         {/* Generate New Plan */}
         <div className="card">
           <h2 className="text-xl font-medium text-gray-900 mb-4">Generate New Workout Plan</h2>
-          <p className="text-gray-600 mb-6">
-            Create a personalized 4-week workout plan based on your current profile
+          <p className="text-gray-600 mb-3">
+            Create a personalized 4-week workout plan based on your current profile.
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            The built-in coach engine always works offline. The smarter local AI layer is optional and only appears when WebLLM is actually ready.
           </p>
           
           {profile.goals.length > 1 && (
@@ -1265,16 +1252,16 @@ export default function Coach() {
             </div>
           )}
           
-          <div className="flex space-x-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={generateNewPlan}
               disabled={generating}
               data-testid="coach-generate-plan-btn"
               className="btn btn-primary"
             >
-              {generating ? 'Generating...' : 'Generate with Coach Engine'}
+              {generating ? 'Generating...' : 'Generate Offline Plan'}
             </button>
-            
+
             {webllmModelReady && (
               <button
                 onClick={generateWithWebLLM}
@@ -1282,24 +1269,22 @@ export default function Coach() {
                 className="btn btn-secondary"
               >
                 <Brain className="w-4 h-4 mr-1" />
-                {generating ? 'Generating...' : 'Generate with AI'}
-              </button>
-            )}
-            
-            {webllmEnabled && !webllmModelReady && (
-              <button
-                onClick={initializeWebLLM}
-                disabled={webllmModelLoading}
-                className="btn btn-secondary"
-              >
-                {webllmModelLoading ? (
-                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Loading AI...</>
-                ) : (
-                  <><Brain className="w-4 h-4 mr-1" />Enable AI Generation</>
-                )}
+                {generating ? 'Generating...' : 'Generate with Local AI'}
               </button>
             )}
           </div>
+
+          {aiCoachInactive && (
+            <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <MessageSquare className="mt-0.5 h-4 w-4 text-gray-500" />
+                <div>
+                  <div className="font-medium text-gray-900">Local AI optimization is inactive</div>
+                  <div className="mt-1">You can still generate workouts right now with the offline coach engine. That path does not need an API key.</div>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Error Display */}
           {generationError && (

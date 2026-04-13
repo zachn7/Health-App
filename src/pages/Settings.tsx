@@ -4,7 +4,7 @@ import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
 import { getWebLLMService, peekWebLLMService } from '@/lib/webllm-service-loader';
 import { getWebGPUDiagnostics } from '@/ai/webgpu';
-import { getWebLLMVersion, validateAndRepairModelId, getAvailableModels } from '@/ai/webllmConfig';
+import { getWebLLMVersion, validateAndRepairModelId, getAvailableModels, getDefaultModelId } from '@/ai/webllmConfig';
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -22,6 +22,7 @@ export default function Settings() {
   const [webLLMStatus, setWebLLMStatus] = useState<any>(null);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [aiDebugInfo, setAiDebugInfo] = useState<any>(null);
+  const [webllmActionLoading, setWebllmActionLoading] = useState<'recommend' | 'test' | null>(null);
   
   useEffect(() => {
     loadSettings();
@@ -129,15 +130,36 @@ export default function Settings() {
     // WebLLM status
     try {
       const webllmService = await getWebLLMService();
-      const enabled = await webllmService.isWebLLMEnabled();
-      const lastError = peekWebLLMService()?.getLastError() || null;
+      const configured = await webllmService.isWebLLMEnabled();
+      const engineState = peekWebLLMService()?.getEngineState() || null;
+      const lastError = engineState?.lastError || peekWebLLMService()?.getLastError() || null;
       const selectedModel = await webllmService.getSelectedModelId();
       const availableModels = await getAvailableModels();
+      const selectedModelRecord = availableModels.find((model) => model.model_id === selectedModel) || null;
+      const recommendedModelId = await getDefaultModelId();
+      const browserSupported = diagnostics.navigatorGpuExists && diagnostics.adapterAcquired && diagnostics.deviceAcquired;
+      const runtimeReady = !!engineState?.isInitialized;
+      const modelIsLowResource = !!selectedModelRecord?.low_resource_required;
+      const statusLabel = !configured
+        ? 'disabled'
+        : runtimeReady
+          ? 'ready'
+          : browserSupported
+            ? 'configured_inactive'
+            : 'unsupported';
       
       setWebLLMStatus({
-        enabled,
+        enabled: configured,
+        configured,
+        browserSupported,
+        runtimeReady,
+        statusLabel,
         lastError: lastError?.message || null,
+        lastErrorType: lastError?.type || null,
         selectedModel,
+        selectedModelIsLowResource: modelIsLowResource,
+        selectedModelNeedsFeatures: selectedModelRecord?.required_features?.length || 0,
+        recommendedModelId,
         checkedAt: new Date().toISOString()
       });
 
@@ -145,16 +167,26 @@ export default function Settings() {
       setAiDebugInfo({
         webllmVersion: await getWebLLMVersion(),
         selectedModelId: selectedModel,
+        selectedModelIsLowResource: modelIsLowResource,
+        recommendedModelId,
         availableModelsCount: availableModels.length,
         availableModelIds: availableModels.slice(0, 5).map(m => m.model_id), // Show first 5
         modelValidation: await validateAndRepairModelId(selectedModel),
+        runtimeReady,
+        browserSupported,
+        engineState,
         lastError: lastError?.message || null,
         checkedAt: new Date().toISOString()
       });
     } catch (error: any) {
       setWebLLMStatus({
         enabled: false,
+        configured: false,
+        browserSupported: false,
+        runtimeReady: false,
+        statusLabel: 'error',
         lastError: error?.message || 'Failed to check WebLLM status',
+        lastErrorType: null,
         selectedModel: null,
         checkedAt: new Date().toISOString()
       });
@@ -163,6 +195,55 @@ export default function Settings() {
 
   const refreshAIDiagnostics = async () => {
     await loadAIDiagnostics();
+  };
+
+  const showToastMessage = (message: string) => {
+    setSaveMessage(message);
+    setShowSaveToast(true);
+    setTimeout(() => setShowSaveToast(false), 4000);
+  };
+
+  const applyRecommendedWebLLMModel = async () => {
+    setWebllmActionLoading('recommend');
+    try {
+      const recommendedModelId = await getDefaultModelId();
+      if (!recommendedModelId) {
+        throw new Error('No recommended WebLLM model is currently available');
+      }
+
+      const webllmService = await getWebLLMService();
+      await webllmService.setSelectedModelId(recommendedModelId);
+      await loadSettings();
+      await loadAIDiagnostics();
+      showToastMessage(`Recommended WebLLM model applied: ${recommendedModelId}`);
+    } catch (error: any) {
+      console.error('Failed to apply recommended WebLLM model:', error);
+      showToastMessage(error?.message || 'Failed to apply recommended WebLLM model');
+    } finally {
+      setWebllmActionLoading(null);
+    }
+  };
+
+  const testWebLLMReadiness = async () => {
+    setWebllmActionLoading('test');
+    try {
+      const webllmService = await getWebLLMService();
+      const result = await webllmService.runReadinessCheck();
+      await loadAIDiagnostics();
+
+      if (result.ok) {
+        showToastMessage(`Local AI is ready with model: ${result.selectedModelId}`);
+        return;
+      }
+
+      const fallbackMessage = result.error?.message || 'Local AI is still not ready on this browser/device';
+      showToastMessage(fallbackMessage);
+    } catch (error: any) {
+      console.error('Failed to test WebLLM readiness:', error);
+      showToastMessage(error?.message || 'Failed to test local AI readiness');
+    } finally {
+      setWebllmActionLoading(null);
+    }
   };
 
   const resetAppData = async () => {
@@ -261,7 +342,9 @@ export default function Settings() {
       
       // 5. Reload the page with cache-busting
       console.log('Step 5: Reloading application...');
-      window.location.href = window.location.href.split('#')[0] + '?reset=' + Date.now();
+      const reloadUrl = new URL(window.location.href);
+      reloadUrl.searchParams.set('reset', String(Date.now()));
+      window.location.href = reloadUrl.toString();
       
     } catch (error) {
       console.error('❌ Error during app data reset:', error);
@@ -509,6 +592,35 @@ export default function Settings() {
                 </div>
               </div>
             )}
+
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={applyRecommendedWebLLMModel}
+                  disabled={webllmActionLoading !== null || !settings?.enableWebLLMCoach}
+                  className="btn btn-secondary btn-sm"
+                  title={!settings?.enableWebLLMCoach ? 'Enable AI Coach to change WebLLM models' : ''}
+                >
+                  {webllmActionLoading === 'recommend' ? 'Applying model...' : 'Use Recommended Low-Resource Model'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={testWebLLMReadiness}
+                  disabled={webllmActionLoading !== null || !settings?.enableWebLLMCoach}
+                  className="btn btn-secondary btn-sm"
+                  title={!settings?.enableWebLLMCoach ? 'Enable AI Coach to test WebLLM readiness' : ''}
+                >
+                  {webllmActionLoading === 'test' ? 'Testing local AI...' : 'Test Local AI Readiness'}
+                </button>
+              </div>
+              {!settings?.enableWebLLMCoach && (
+                <p className="text-xs text-gray-500">
+                  Turn on AI Coach first if you want to apply the recommended model or run a readiness test.
+                </p>
+              )}
+            </div>
           </div>
         </div>
         
@@ -703,10 +815,15 @@ export default function Settings() {
                   <Brain className="h-4 w-4" />
                   WebLLM Status
                 </h3>
-                {webLLMStatus?.enabled ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                {webLLMStatus?.statusLabel === 'ready' ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
                     <CheckCircle2 className="h-3 w-3" />
-                    Enabled
+                    Ready
+                  </span>
+                ) : webLLMStatus?.enabled ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded-full">
+                    <AlertCircle className="h-3 w-3" />
+                    Configured, Inactive
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 text-gray-700 text-xs rounded-full">
@@ -723,6 +840,20 @@ export default function Settings() {
                     {webLLMStatus?.enabled ? 'ENABLED' : 'DISABLED'}
                   </span>
                 </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Browser support:</span>
+                  <span className={webLLMStatus?.browserSupported ? 'text-green-600' : 'text-orange-600'}>
+                    {webLLMStatus?.browserSupported ? 'SUPPORTED' : 'BLOCKED'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Runtime ready:</span>
+                  <span className={webLLMStatus?.runtimeReady ? 'text-green-600' : 'text-gray-600'}>
+                    {webLLMStatus?.runtimeReady ? 'YES' : 'NO'}
+                  </span>
+                </div>
                 
                 {webLLMStatus?.selectedModel && (
                   <div className="flex justify-between">
@@ -733,12 +864,42 @@ export default function Settings() {
                   </div>
                 )}
                 
+                {webLLMStatus?.selectedModel && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Model profile:</span>
+                    <span className={webLLMStatus?.selectedModelIsLowResource ? 'text-green-600' : 'text-orange-600'}>
+                      {webLLMStatus?.selectedModelIsLowResource ? 'LOW RESOURCE' : 'STANDARD'}
+                    </span>
+                  </div>
+                )}
+
+                {webLLMStatus?.recommendedModelId && webLLMStatus?.recommendedModelId !== webLLMStatus?.selectedModel && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                    <div className="font-medium">Recommended fallback model</div>
+                    <div className="mt-1 font-mono text-xs text-blue-800">{webLLMStatus.recommendedModelId}</div>
+                  </div>
+                )}
+
+                {webLLMStatus?.enabled && !webLLMStatus?.runtimeReady && (
+                  <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex items-start gap-2 text-orange-700">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium mb-1">Configured, but not usable yet</div>
+                        <div className="text-sm">
+                          The toggle is on, but the local AI runtime has not successfully initialized on this browser/device yet.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {webLLMStatus?.lastError && (
                   <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                     <div className="flex items-start gap-2 text-yellow-700">
                       <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                       <div>
-                        <div className="font-medium mb-1">Last Error:</div>
+                        <div className="font-medium mb-1">Last Error{webLLMStatus?.lastErrorType ? ` (${webLLMStatus.lastErrorType})` : ''}:</div>
                         <div className="text-sm">{webLLMStatus.lastError}</div>
                       </div>
                     </div>
@@ -784,6 +945,22 @@ export default function Settings() {
                       <span className="text-gray-400">Available Models:</span>
                       <span className="text-yellow-300">{aiDebugInfo.availableModelsCount}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Browser Supported:</span>
+                      <span className={aiDebugInfo.browserSupported ? 'text-green-300' : 'text-orange-300'}>{aiDebugInfo.browserSupported ? 'YES' : 'NO'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Runtime Ready:</span>
+                      <span className={aiDebugInfo.runtimeReady ? 'text-green-300' : 'text-orange-300'}>{aiDebugInfo.runtimeReady ? 'YES' : 'NO'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Selected Model Profile:</span>
+                      <span className={aiDebugInfo.selectedModelIsLowResource ? 'text-green-300' : 'text-yellow-300'}>{aiDebugInfo.selectedModelIsLowResource ? 'LOW RESOURCE' : 'STANDARD'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Recommended Model:</span>
+                      <span className="text-cyan-300">{aiDebugInfo.recommendedModelId || 'None'}</span>
+                    </div>
                     {aiDebugInfo.modelValidation?.wasRepaired && (
                       <div className="p-2 bg-orange-900 border border-orange-700 rounded mt-2">
                         <span className="text-orange-300 font-bold">Model Auto-Repaired:</span>
@@ -794,6 +971,22 @@ export default function Settings() {
                       <div className="p-2 bg-red-900 border border-red-700 rounded mt-2">
                         <span className="text-red-300 font-bold">Last Error:</span>
                         <p className="text-red-200 mt-1">{aiDebugInfo.lastError}</p>
+                      </div>
+                    )}
+                    {aiDebugInfo.engineState && (
+                      <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">engine.isInitialized:</span>
+                          <span className={aiDebugInfo.engineState.isInitialized ? 'text-green-300' : 'text-orange-300'}>{String(aiDebugInfo.engineState.isInitialized)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">engine.isLoading:</span>
+                          <span className={aiDebugInfo.engineState.isLoading ? 'text-yellow-300' : 'text-green-300'}>{String(aiDebugInfo.engineState.isLoading)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">engine.hasEngine:</span>
+                          <span className={aiDebugInfo.engineState.hasEngine ? 'text-green-300' : 'text-orange-300'}>{String(aiDebugInfo.engineState.hasEngine)}</span>
+                        </div>
                       </div>
                     )}
                     <div className="mt-3 pt-3 border-t border-gray-700">

@@ -18,6 +18,9 @@ test.describe('Smoke: Global Assistant Drawer', () => {
     await gotoApp(page, '/dashboard')
     await page.waitForLoadState('networkidle')
 
+    await expect(page.getByTestId(testIds.assistant.fab)).toBeVisible()
+    await expect(page.getByTestId(testIds.assistant.drawer)).not.toBeVisible()
+
     await page.getByTestId(testIds.assistant.fab).click()
 
     await expect(page.getByTestId(testIds.assistant.drawer)).toBeVisible()

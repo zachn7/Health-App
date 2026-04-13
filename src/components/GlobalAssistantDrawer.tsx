@@ -185,7 +185,7 @@ export default function GlobalAssistantDrawer({ isOpen, onClose }: GlobalAssista
     <div className={`fixed inset-0 z-[55] bg-black/30 transition ${isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`} onClick={onClose}>
       <aside
         data-testid={testIds.assistant.drawer}
-        className={`absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl transition-transform duration-200 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`absolute bottom-0 right-0 h-full w-full bg-white shadow-2xl transition-transform duration-200 sm:bottom-24 sm:right-6 sm:h-[min(42rem,calc(100vh-8rem))] sm:max-w-md sm:rounded-2xl ${isOpen ? 'translate-x-0 sm:translate-y-0' : 'translate-x-full sm:translate-x-0 sm:translate-y-6'}`}
         onClick={(event) => event.stopPropagation()}
         aria-hidden={!isOpen}
       >

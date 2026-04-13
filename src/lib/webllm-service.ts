@@ -57,6 +57,12 @@ export interface WebLLMInitError {
   suggestions?: string[];
 }
 
+export interface WebLLMReadinessResult {
+  ok: boolean;
+  selectedModelId: string | null;
+  error: WebLLMInitError | null;
+}
+
 export class WebLLMService {
   private static engine: webllm.MLCEngineInterface | null = null;
   private static isLoading = false;
@@ -105,6 +111,25 @@ export class WebLLMService {
   
   static clearLastError(): void {
     this.lastError = null;
+  }
+
+  static async runReadinessCheck(): Promise<WebLLMReadinessResult> {
+    this.clearLastError();
+
+    try {
+      await this.initialize();
+      return {
+        ok: true,
+        selectedModelId: this.selectedModelId,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        selectedModelId: this.selectedModelId,
+        error: this.lastError,
+      };
+    }
   }
   
   static async getSelectedModelId(): Promise<string> {

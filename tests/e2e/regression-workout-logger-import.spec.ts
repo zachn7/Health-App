@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { testIds } from '../../src/testIds';
 import { setupTestProfile } from './helpers/setupProfile';
+import { gotoApp } from './helpers/bootstrap';
 
 test.describe('Regression: Workout Logger Import (R08)', () => {
   test.beforeEach(async ({ page, context }) => {
@@ -11,7 +12,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     });
   });
 
-  test('should import workout plan into logger without exercise DB load failure', async ({ page }) => {
+  test('should import workout plan into logger without exercise DB load failure', async ({ page, context }) => {
     // Create a mock workout plan with exercises
     const mockWorkoutPlan = {
       workoutPlanId: 'test-plan-123',
@@ -32,14 +33,11 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       notes: 'Test workout day'
     };
 
-    // Store the workout in sessionStorage (simulating import from Workouts page)
-    await page.goto('./#/log/workout');
-    await page.evaluate((workout) => {
+    // Seed the import payload before the app loads to avoid reload timing flakes
+    await context.addInitScript((workout) => {
       sessionStorage.setItem('currentWorkout', JSON.stringify(workout));
     }, mockWorkoutPlan);
-    
-    // Reload to trigger the import
-    await page.reload();
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     
     // Wait for page to load
@@ -56,37 +54,18 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       }
     });
     
-    // Verify workout plans are loaded and visible
-    // Wait for any workout plan to be created/imported
-    await page.waitForTimeout(2000);
-    
-    // Check for workout plans using stable testId pattern
-    const workoutPlans = page.locator('[data-testid^="workout-plan-"]');
-    const planCount = await workoutPlans.count();
-    console.log(`Found ${planCount} workout plans`);
-    
-    // If plans exist, check for exercises within them
-    if (planCount > 0) {
-      const exercises = page.locator('[data-testid^="plan-exercise-"]');
-      const exerciseCount = await exercises.count();
-      console.log(`Found ${exerciseCount} exercise entries in plans`);
-      expect(exerciseCount).toBeGreaterThan(0);
-    } else {
-      // If no plans, check if exercises are loaded separately
-      const exerciseEntries = page.locator('div').filter({ hasText: /Exercise/i });
-      const entryCount = await exerciseEntries.count();
-      console.log(`Found ${entryCount} exercise entries (no plans)`);
-      expect(entryCount).toBeGreaterThan(0);
-    }
-    
-    // Check that exercises are visible (they may have fallback names if DB doesn't have them)
-    const pageContent = await page.textContent('body');
-    const hasExercises = pageContent?.includes('barbell-bench-press') || 
-                        pageContent?.includes('dumbbell-curl') ||
-                        pageContent?.includes('bodyweight-squat');
-    
-    expect(hasExercises).toBeTruthy();
-    console.log('Exercises are visible in the logger');
+    // Imported workout should eventually materialize as persisted logger rows
+    const exerciseRows = page.locator('[data-testid^="workout-logger-exercise-row-"]');
+    await expect
+      .poll(async () => exerciseRows.count(), { timeout: 10000 })
+      .toBe(mockWorkoutPlan.exercises.length);
+    const exerciseCount = await exerciseRows.count();
+    console.log(`Imported exercise row count: ${exerciseCount}`);
+    expect(exerciseCount).toBe(mockWorkoutPlan.exercises.length);
+
+    const firstExerciseText = (await exerciseRows.first().textContent()) || '';
+    console.log(`First imported exercise row: ${firstExerciseText.substring(0, 80)}...`);
+    expect(firstExerciseText.trim().length).toBeGreaterThan(0);
     
     // Verify no exercise DB load errors in console
     const hasExerciseErrors = errorMessages.length > 0;
@@ -99,7 +78,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     await page.waitForTimeout(3000);
   });
 
-  test('should persist imported exercises after reload without requiring save', async ({ page }) => {
+  test('should persist imported exercises after reload without requiring save', async ({ page, context }) => {
     // Create a mock workout plan with exercises
     const mockWorkoutPlan = {
       workoutPlanId: 'test-plan-persist-123',
@@ -116,22 +95,21 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       notes: 'Persistence test workout'
     };
 
-    await page.goto('./#/log/workout');
-    await page.evaluate((workout) => {
+    await context.addInitScript((workout) => {
       sessionStorage.setItem('currentWorkout', JSON.stringify(workout));
     }, mockWorkoutPlan);
-    
-    // Reload to trigger the import
-    await page.reload();
+    await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
     // Verify exercises appeared
     await expect(page.getByTestId(testIds.workoutLogger.pageHeading)).toBeVisible({ timeout: 5000 });
-    await expect(page.getByTestId(testIds.workoutLogger.exerciseList)).toBeVisible({ timeout: 5000 });
+    const exercisesBefore = page.locator('[data-testid^="workout-logger-exercise-row-"]');
+    await expect
+      .poll(async () => exercisesBefore.count(), { timeout: 10000 })
+      .toBe(mockWorkoutPlan.exercises.length);
     
     // Count exercises before reload
-    const exercisesBefore = page.locator('[data-testid^="workout-logger-exercise-row-"]');
     const countBefore = await exercisesBefore.count();
     expect(countBefore).toBeGreaterThan(0);
     console.log(`Exercises before reload: ${countBefore}`);
@@ -170,7 +148,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     await setupTestProfile(page);
     
     // Navigate to workouts page
-    await page.goto('./#/workouts');
+    await gotoApp(page, '/workouts');
     await page.waitForLoadState('networkidle');
     
     // Generate a workout plan
@@ -276,7 +254,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     await setupTestProfile(page);
     
     // Navigate to workouts page
-    await page.goto('./#/workouts');
+    await gotoApp(page, '/workouts');
     await page.waitForLoadState('networkidle');
     
     // Generate a workout plan
@@ -444,7 +422,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     console.log('✅ All edit/add/swap/delete operations work and persist correctly');
   });
 
-  test('should show loading state during exercise data loading', async ({ page }) => {
+  test('should show loading state during exercise data loading', async ({ page, context }) => {
     // Mock a workout with more exercises to force loading time
     const mockWorkoutPlan = {
       workoutPlanId: 'test-loading-plan',
@@ -455,12 +433,10 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       notes: 'Loading test'
     };
 
-    await page.goto('./#/log/workout');
-    await page.evaluate((workout) => {
+    await context.addInitScript((workout) => {
       sessionStorage.setItem('currentWorkout', JSON.stringify(workout));
     }, mockWorkoutPlan);
-    
-    await page.reload();
+    await gotoApp(page, '/log/workout');
     
     // Check for loading state
     const loadingText = page.getByText(/loading/i);

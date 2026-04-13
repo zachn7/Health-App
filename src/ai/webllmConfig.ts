@@ -48,12 +48,33 @@ export async function getAvailableModels(): Promise<WebLLMModelRecord[]> {
   }
 }
 
+const PREFERRED_MODEL_PATTERNS = [
+  'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+  'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+  'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+  'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+  'Phi-3.5-mini-instruct-q4f16_1-MLC',
+  'Phi-3.5-mini-instruct-q4f32_1-MLC',
+] as const
+
+function getModelSortScore(model: WebLLMModelRecord): number {
+  const id = model.model_id
+  const explicitPreferenceIndex = PREFERRED_MODEL_PATTERNS.findIndex((pattern) => id.includes(pattern))
+  const preferredPatternScore = explicitPreferenceIndex === -1 ? 100 : explicitPreferenceIndex
+  const lowResourcePenalty = model.low_resource_required ? 0 : 25
+  const requiredFeaturePenalty = (model.required_features?.length || 0) * 10
+  const estimatedVramPenalty = model.estimated_vram_bytes > 0 ? model.estimated_vram_bytes / (1024 ** 3) : 5
+  const instructBonus = id.toLowerCase().includes('instruct') ? 0 : 15
+
+  return preferredPatternScore + lowResourcePenalty + requiredFeaturePenalty + estimatedVramPenalty + instructBonus
+}
+
 /**
- * Get a safe default model ID that should always work.
+ * Get a safe default model ID that should work on the widest range of machines.
  * Preferences:
- * 1. Models ending with -MLC (standard tested models)
- * 2. Models that don't require low resources and have no special features
- * 3. First available model in the list
+ * 1. Known tiny instruct-tuned models
+ * 2. Low-resource models with no special required features
+ * 3. Lowest estimated VRAM footprint
  */
 export async function getDefaultModelId(): Promise<string | null> {
   try {
@@ -64,19 +85,8 @@ export async function getDefaultModelId(): Promise<string | null> {
       return null
     }
 
-    const mlcModel = models.find((model) => model.model_id.endsWith('-MLC'))
-    if (mlcModel) {
-      return mlcModel.model_id
-    }
-
-    const safeModels = models.filter(
-      (model) => !model.low_resource_required && model.required_features.length === 0,
-    )
-    if (safeModels.length > 0) {
-      return safeModels[0].model_id
-    }
-
-    return models[0].model_id
+    const sortedModels = [...models].sort((a, b) => getModelSortScore(a) - getModelSortScore(b))
+    return sortedModels[0]?.model_id || null
   } catch (error) {
     console.error('Failed to get default model ID:', error)
     return null
@@ -154,8 +164,9 @@ export async function validateAndRepairModelId(selectedModelId: string | null): 
 export function getModelDisplayName(modelId: string): string {
   return modelId
     .replace(/-MLC$/, '')
-    .replace(/-q4f16/, '')
-    .replace(/-q4f32/, '')
+    .replace(/-q4f16_?1?/, '')
+    .replace(/-q4f32_?1?/, '')
+    .replace(/-q0f16/, '')
     .replace(/-int4/, '')
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
