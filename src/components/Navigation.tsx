@@ -123,8 +123,8 @@ export default function Navigation() {
             aria-expanded={isMobileMenuOpen}
           >
             <div className="flex items-center space-x-2">
-              <span className="text-xl">🐕</span>
-              <span className="font-semibold">CodePuppy Trainer</span>
+              <span className="text-xl">💪</span>
+              <span className="font-semibold">FitBud AI</span>
             </div>
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -146,8 +146,8 @@ export default function Navigation() {
               {/* Mobile header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                 <div className="flex items-center space-x-2">
-                  <span className="text-xl">🐕</span>
-                  <span className="font-semibold">CodePuppy Trainer</span>
+                  <span className="text-xl">💪</span>
+                  <span className="font-semibold">FitBud AI</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -204,9 +204,9 @@ export default function Navigation() {
       >
         {/* Logo */}
         <div className="flex h-16 items-center px-6 border-b border-gray-200">
-          <span className="text-2xl">🐕</span>
+          <span className="text-2xl">💪</span>
           <span className="ml-2 text-xl font-bold text-gray-900">
-            CodePuppy Trainer
+            FitBud AI
           </span>
         </div>
 

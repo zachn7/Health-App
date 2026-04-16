@@ -65,13 +65,13 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="mx-auto h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center">
-            <span className="text-2xl font-bold text-primary-600">🐕</span>
+            <span className="text-2xl font-bold text-primary-600">💪</span>
           </div>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Welcome to CodePuppy Trainer
+            Welcome to FitBud AI
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Your personal fitness companion
+            Your all-in-one AI fitness companion
           </p>
         </div>
         

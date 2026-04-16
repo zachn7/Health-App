@@ -14,7 +14,7 @@ import type {
   ExerciseDBItem
 } from '@/types';
 
-export class CodePuppyDB extends Dexie {
+export class FitBudDB extends Dexie {
   // Tables
   profiles!: Table<Profile>;
   workoutPlans!: Table<WorkoutPlan>;
@@ -30,7 +30,7 @@ export class CodePuppyDB extends Dexie {
   exercises!: Table<ExerciseDBItem>;
 
   constructor() {
-    super('CodePuppyTrainerDB');
+    super('FitBudAIDB');
 
     // Schema version 1
     this.version(1).stores({
@@ -167,7 +167,7 @@ export class CodePuppyDB extends Dexie {
 }
 
 // Create a singleton instance
-export const db = new CodePuppyDB();
+export const db = new FitBudDB();
 
 // Database helper functions
 export const initDatabase = async (): Promise<void> => {

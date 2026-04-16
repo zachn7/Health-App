@@ -14,7 +14,7 @@ export default function PrivacyPolicy() {
         <div className="card">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Our Privacy Promise</h2>
           <p className="text-gray-600 mb-4">
-            CodePuppy Trainer is an offline-first fitness application designed with your privacy as our top priority. 
+            FitBud AI is an offline-first fitness application designed with your privacy as our top priority. 
             We believe your health data should remain private and under your control.
           </p>
         </div>
@@ -130,7 +130,7 @@ export default function PrivacyPolicy() {
           <h2 className="text-xl font-bold text-gray-900 mb-4">Childrens Privacy</h2>
           <div className="space-y-4 text-gray-600">
             <p>
-              CodePuppy Trainer requires users to be at least 13 years old. We do not knowingly collect 
+              FitBud AI requires users to be at least 13 years old. We do not knowingly collect 
               personal information from children under 13. If you believe we have collected information 
               from a child under 13, please contact us immediately.
             </p>

@@ -6,7 +6,7 @@ test.describe('Smoke: Age Gate', () => {
     await page.goto('/');
     
     // Should see age gate initially
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI' })).toBeVisible();
     await expect(page.getByTestId('age-input')).toBeVisible();
     
     // Enter valid age and continue
@@ -14,7 +14,7 @@ test.describe('Smoke: Age Gate', () => {
     await page.getByTestId('age-gate-continue').click();
     
     // Should navigate to onboarding
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
     await expect(page.getByText('Your personal offline fitness companion')).toBeVisible();
     await expect(page.getByTestId('onboarding-setup-profile')).toBeVisible();
     

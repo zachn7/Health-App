@@ -52,9 +52,9 @@ export default defineConfig({
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'CodePuppy Trainer',
-        short_name: 'CP Trainer',
-        description: 'Offline-first AI-style personal trainer and fitness tracker',
+        name: 'FitBud AI',
+        short_name: 'FitBud',
+        description: 'All-in-one AI fitness companion — workout & nutrition logging, AI-assisted planning, adaptive coaching',
         theme_color: '#3b82f6',
         background_color: '#ffffff',
         display: 'standalone',

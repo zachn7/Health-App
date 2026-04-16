@@ -19,7 +19,7 @@ export default function MedicalDisclaimer() {
             <div className="ml-3">
               <h2 className="text-xl font-bold text-red-900 mb-2">Important Medical Notice</h2>
               <p className="text-red-800">
-                The information provided by CodePuppy Trainer is for educational and informational purposes only 
+                The information provided by FitBud AI is for educational and informational purposes only 
                 and is not a substitute for professional medical advice, diagnosis, or treatment.
               </p>
             </div>
@@ -30,7 +30,7 @@ export default function MedicalDisclaimer() {
           <h2 className="text-xl font-bold text-gray-900 mb-4">Not Medical Advice</h2>
           <div className="space-y-4 text-gray-600">
             <p>
-              <strong className="text-gray-900">CodePuppy Trainer is not a medical device.</strong> The workout plans, 
+              <strong className="text-gray-900">FitBud AI is not a medical device.</strong> The workout plans, 
               nutritional suggestions, and injury guidance provided are based on general fitness principles and 
               should not be considered personalized medical advice.
             </p>
@@ -150,7 +150,7 @@ export default function MedicalDisclaimer() {
           <h2 className="text-xl font-bold text-gray-900 mb-4">Liability Limitation</h2>
           <div className="space-y-4 text-gray-600">
             <p>
-              By using CodePuppy Trainer, you acknowledge and agree that you are responsible for your own health 
+              By using FitBud AI, you acknowledge and agree that you are responsible for your own health 
               and safety. The application and its creators are not liable for any injuries, health issues, or damages 
               that may result from following the information provided.
             </p>

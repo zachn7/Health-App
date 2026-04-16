@@ -1,6 +1,6 @@
 # API Keys and Settings Configuration
 
-This document explains how to configure API keys and settings for CodePuppy Trainer integrations.
+This document explains how to configure API keys and settings for FitBud AI integrations.
 
 ## USDA FoodData Central API Key
 
@@ -205,4 +205,4 @@ All settings can be exported from the Privacy page for backup or device migratio
 - Exercise DB: MIT license
 - App: No data collection or analytics
 
-This document will be updated as new integrations and settings are added to CodePuppy Trainer.
+This document will be updated as new integrations and settings are added to FitBud AI.

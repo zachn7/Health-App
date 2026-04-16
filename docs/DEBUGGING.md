@@ -22,7 +22,7 @@
 **Solutions**:
 ```javascript
 // Clear corrupted database
-indexedDB.deleteDatabase('CodePuppyTrainerDB');```
+indexedDB.deleteDatabase('FitBudAIDB');```
 
 ### Storage Errors
 
@@ -30,7 +30,7 @@ indexedDB.deleteDatabase('CodePuppyTrainerDB');```
 
 **Debugging**:
 - All repository methods log errors to console
-- Check browser's Application → IndexedDB → CodePuppyTrainerDB
+- Check browser's Application → IndexedDB → FitBudAIDB
 - Verify schema version matches expectations
 
 **Common Repository Issues**:
@@ -158,7 +158,7 @@ npx playwright test --ui
 
 **Storage Inspection**:
 1. F12 → Application → Storage → IndexedDB
-2. Select `CodePuppyTrainerDB`
+2. Select `FitBudAIDB`
 3. Browse tables and verify data
 4. Delete corrupted data if needed
 
@@ -204,7 +204,7 @@ npm run build
 **Database Corruption**:
 ```javascript
 // Clear entire database
-indexedDB.deleteDatabase('CodePuppyTrainerDB');
+indexedDB.deleteDatabase('FitBudAIDB');
 ```
 
 **Reset to Fresh State**:
@@ -216,7 +216,7 @@ indexedDB.deleteDatabase('CodePuppyTrainerDB');
 **Profile Reset**:
 ```javascript
 // Clear only profile data
-indexedDB.open('CodePuppyTrainerDB').onsuccess = function(e) {
+indexedDB.open('FitBudAIDB').onsuccess = function(e) {
   const db = e.target.result;
   db.transaction(['profiles'], 'readwrite').objectStore('profiles').clear();
 };

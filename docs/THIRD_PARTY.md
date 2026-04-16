@@ -1,6 +1,6 @@
 # Third-Party Services Integration
 
-This document outlines the third-party services integrated into CodePuppy Trainer and their respective licenses and terms.
+This document outlines the third-party services integrated into FitBud AI and their respective licenses and terms.
 
 ## Free Exercise DB
 

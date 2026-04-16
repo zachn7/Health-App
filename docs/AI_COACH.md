@@ -1,6 +1,6 @@
 # AI Coach Integration - WebLLM
 
-This document explains how the AI Coach feature works in CodePuppy Trainer using WebLLM for in-browser AI model execution.
+This document explains how the AI Coach feature works in FitBud AI using WebLLM for in-browser AI model execution.
 
 ## Overview
 

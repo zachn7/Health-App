@@ -58,7 +58,7 @@ const defaultSettings: Required<SeedSettingsOptions> = {
   webllmModelId: null,
 }
 
-const DB_NAME = 'CodePuppyTrainerDB'
+const DB_NAME = 'FitBudAIDB'
 const DB_VERSION = 5
 
 export async function bootstrapAppState(context: BrowserContext, options: BootstrapOptions = {}) {

@@ -5,7 +5,7 @@ test.describe('Onboarding Flow', () => {
     await page.goto('/');
     
     // Should show age gate
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI' })).toBeVisible();
     await expect(page.getByTestId('age-input')).toBeVisible();
     
     // Try invalid age
@@ -18,7 +18,7 @@ test.describe('Onboarding Flow', () => {
     await page.getByTestId('age-gate-continue').click();
     
     // Should navigate to onboarding after age gate
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
     
     // Complete onboarding - skip for now
     await page.getByTestId('onboarding-skip').click();
@@ -36,10 +36,10 @@ test.describe('Onboarding Flow', () => {
     await page.getByTestId('age-gate-continue').click();
     
     // Navigate to onboarding
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
     
     // Reload page - should not show age gate again (should stay on onboarding)
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
   });
 });

@@ -53,7 +53,7 @@ test.describe('Regression: Nutrition saved food search is predictive', () => {
       ];
 
       await new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('CodePuppyTrainerDB');
+        const request = indexedDB.open('FitBudAIDB');
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {

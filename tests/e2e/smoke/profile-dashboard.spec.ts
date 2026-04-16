@@ -6,7 +6,7 @@ test.describe('Smoke: Profile Page Loads', () => {
     await page.goto('./#/profile');
     
     // Complete age gate
-    await expect(page.getByRole('heading', { name: 'Welcome to CodePuppy Trainer' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI' })).toBeVisible();
     await page.getByTestId('age-input').fill('20');
     await page.getByTestId('age-gate-continue').click();
     

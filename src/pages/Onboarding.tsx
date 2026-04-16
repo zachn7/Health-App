@@ -33,10 +33,10 @@ export default function Onboarding() {
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8 text-center">
         <div className="mx-auto h-16 w-16 rounded-full bg-primary-100 flex items-center justify-center mb-6">
-          <span className="text-3xl">🐕</span>
+          <span className="text-3xl">💪</span>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome to CodePuppy Trainer!</h1>
-        <p className="text-lg text-gray-600">Your personal offline fitness companion</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome to FitBud AI!</h1>
+        <p className="text-lg text-gray-600">Your all-in-one AI fitness companion</p>
       </div>
       
       <div className="space-y-6">
