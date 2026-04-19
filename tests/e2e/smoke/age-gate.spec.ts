@@ -15,7 +15,8 @@ test.describe('Smoke: Age Gate', () => {
     
     // Should navigate to onboarding
     await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
-    await expect(page.getByText('Your personal offline fitness companion')).toBeVisible();
+    // Tagline comes from src/config/app.ts (DRY), so don't hardcode it in tests.
+    await expect(page.getByText('Your all-in-one AI fitness companion')).toBeVisible();
     await expect(page.getByTestId('onboarding-setup-profile')).toBeVisible();
     
     // Verify localStorage was set

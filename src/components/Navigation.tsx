@@ -1,21 +1,22 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { 
-  Home, 
-  User, 
-  Brain, 
-  Dumbbell, 
-  BookOpen, 
-  Apple, 
+import {
+  Home,
+  User,
+  Brain,
+  Dumbbell,
+  BookOpen,
+  Apple,
   Utensils,
-  TrendingUp, 
-  Heart, 
+  TrendingUp,
+  Heart,
   Shield,
   Settings,
   Menu,
   X
 } from 'lucide-react';
 import { testIds } from '../testIds';
+import { APP_NAME } from '../config/app';
 
 interface NavItem {
   name: string;
@@ -29,7 +30,7 @@ const navItems: NavItem[] = [
     name: 'Dashboard',
     path: '/',
     icon: Home,
-    description: 'Today\'s overview'
+    description: "Today's overview"
   },
   {
     name: 'Profile',
@@ -124,7 +125,7 @@ export default function Navigation() {
           >
             <div className="flex items-center space-x-2">
               <span className="text-xl">💪</span>
-              <span className="font-semibold">FitBud AI</span>
+              <span className="font-semibold">{APP_NAME}</span>
             </div>
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -139,7 +140,7 @@ export default function Navigation() {
             className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          
+
           {/* Drawer */}
           <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white lg:hidden overflow-y-auto">
             <div className="flex flex-col h-full">
@@ -147,7 +148,7 @@ export default function Navigation() {
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                 <div className="flex items-center space-x-2">
                   <span className="text-xl">💪</span>
-                  <span className="font-semibold">FitBud AI</span>
+                  <span className="font-semibold">{APP_NAME}</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -163,7 +164,7 @@ export default function Navigation() {
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = isCurrentPath(item.path);
-                  
+
                   return (
                     <NavLink
                       key={item.path}
@@ -205,9 +206,7 @@ export default function Navigation() {
         {/* Logo */}
         <div className="flex h-16 items-center px-6 border-b border-gray-200">
           <span className="text-2xl">💪</span>
-          <span className="ml-2 text-xl font-bold text-gray-900">
-            FitBud AI
-          </span>
+          <span className="ml-2 text-xl font-bold text-gray-900">{APP_NAME}</span>
         </div>
 
         {/* Navigation */}
@@ -242,22 +241,13 @@ export default function Navigation() {
             <p>🔒 Offline-first • Private</p>
             <p>Version {appVersion}</p>
             <div className="pt-2 space-x-2">
-              <a
-                href="#/legal/privacy"
-                className="text-primary-600 hover:text-primary-700"
-              >
+              <a href="#/legal/privacy" className="text-primary-600 hover:text-primary-700">
                 Privacy
               </a>
-              <a
-                href="#/legal/terms"
-                className="text-primary-600 hover:text-primary-700"
-              >
+              <a href="#/legal/terms" className="text-primary-600 hover:text-primary-700">
                 Terms
               </a>
-              <a
-                href="#/legal/disclaimer"
-                className="text-primary-600 hover:text-primary-700"
-              >
+              <a href="#/legal/disclaimer" className="text-primary-600 hover:text-primary-700">
                 Disclaimer
               </a>
             </div>

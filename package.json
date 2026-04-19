@@ -1,5 +1,5 @@
 {
-  "name": "code-puppy-trainer",
+  "name": "fitbudai",
   "private": true,
   "version": "0.2.29",
   "type": "module",
@@ -16,7 +16,9 @@
     "test:e2e": "playwright test --reporter=line",
     "test:e2e:smoke": "playwright test tests/e2e/smoke --project=chromium --reporter=line",
     "test:e2e:ci": "npm run test:e2e:smoke",
-    "test:ci": "npm run test && npm run test:e2e:ci"
+    "test:ci": "npm run test && npm run test:e2e:ci",
+    "typecheck": "tsc --noEmit",
+    "type-check": "npm run typecheck"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",

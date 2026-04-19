@@ -53,7 +53,7 @@ export default defineConfig({
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'FitBud AI',
-        short_name: 'FitBud',
+        short_name: 'FitBud AI',
         description: 'All-in-one AI fitness companion — workout & nutrition logging, AI-assisted planning, adaptive coaching',
         theme_color: '#3b82f6',
         background_color: '#ffffff',

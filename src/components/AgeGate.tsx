@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { APP_NAME, APP_TAGLINE } from '../config/app';
 
 const MINIMUM_AGE = 13;
 
@@ -19,38 +20,32 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
     e.preventDefault();
     setError('');
     setDevError('');
-    
+
     const ageNum = parseInt(age, 10);
-    
+
     if (isNaN(ageNum) || ageNum < 1 || ageNum > 150) {
       setError('Please enter a valid age');
       return;
     }
-    
+
     if (ageNum < MINIMUM_AGE) {
       setError(`You must be at least ${MINIMUM_AGE} years old to use this app.`);
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       // Save to localStorage
       setAccepted(true);
       setTimestamp(new Date().toISOString());
-      
-      // Save to localStorage
-      setAccepted(true);
-      setTimestamp(new Date().toISOString());
-      
+
       console.log('Age gate passed, navigating...');
-      
+
       // Keep loading state briefly for visual feedback, then call callback
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       setIsLoading(false);
-      if (onAgeGatePassed) {
-        onAgeGatePassed();
-      }
+      onAgeGatePassed?.();
     } catch (error) {
       setIsLoading(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -67,14 +62,10 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
           <div className="mx-auto h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center">
             <span className="text-2xl font-bold text-primary-600">💪</span>
           </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Welcome to FitBud AI
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Your all-in-one AI fitness companion
-          </p>
+          <h2 className="mt-6 text-3xl font-bold text-gray-900">Welcome to {APP_NAME}</h2>
+          <p className="mt-2 text-sm text-gray-600">{APP_TAGLINE}</p>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             <div>
@@ -102,25 +93,22 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
                 </p>
               )}
             </div>
-            
+
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-              <h3 className="text-sm font-medium text-blue-900 mb-1">
-                Age Requirement
-              </h3>
+              <h3 className="text-sm font-medium text-blue-900 mb-1">Age Requirement</h3>
               <p className="text-sm text-blue-700">
                 This app is only available to users {MINIMUM_AGE} years or older.
               </p>
             </div>
-            
+
             <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-1">
-                Privacy & Safety
-              </h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-1">Privacy & Safety</h3>
               <p className="text-sm text-gray-700">
-                This is an offline-first application. Your data is stored securely on your device and is never shared with third parties.
+                This is an offline-first application. Your data is stored securely on your device and is never
+                shared with third parties.
               </p>
             </div>
-            
+
             <button
               type="submit"
               className="btn btn-primary w-full"
@@ -131,7 +119,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
             </button>
           </form>
         </div>
-        
+
         <div className="text-center">
           <p className="text-xs text-gray-500">
             By continuing, you confirm that you meet the age requirement and accept our{' '}
@@ -145,7 +133,7 @@ export default function AgeGate({ onAgeGatePassed }: AgeGateProps) {
             .
           </p>
         </div>
-        
+
         {devError && process.env.NODE_ENV === 'development' && (
           <div className="mt-4 p-2 bg-red-100 border border-red-400 text-red-700 text-xs rounded">
             {devError}

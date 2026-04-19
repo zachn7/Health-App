@@ -1,4 +1,4 @@
-# Debugging Guide for Code Puppy Trainer
+# Debugging Guide for FitBud AI
 
 ## Common Issues and Solutions
 

@@ -94,6 +94,13 @@ const registerServiceWorker = async () => {
 // Initialize app and database
 const initializeApp = async () => {
   try {
+    // E2E tests seed IndexedDB via an initScript. Dexie can race that.
+    // In normal app usage this is undefined and skipped.
+    const seedPromise = (window as any).__e2e_seed_promise__ as Promise<void> | undefined
+    if (seedPromise) {
+      await seedPromise
+    }
+
     // Initialize core database only. Heavy route-specific data like the exercise
     // library now loads on demand instead of bloating every first paint.
     await initDatabase();
