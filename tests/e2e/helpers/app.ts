@@ -7,13 +7,13 @@ import { testIds } from '../../../src/testIds'
  * fallback (if any) to disappear.
  */
 export async function waitForRouteReady(page: Page) {
-  await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible()
-
-  // If the lazy route fallback is up, wait until it's gone.
-  const fallback = page.getByTestId(testIds.app.routeFallback)
-  if (await fallback.isVisible().catch(() => false)) {
-    await expect(fallback).toBeHidden({ timeout: 30_000 })
-  }
+  // Wait for app init to complete (Dexie open + E2E seed promise). Without this,
+  // the UI can be stuck on a placeholder in slower CI.
+  await page
+    .waitForFunction(() => (window as any).__APP_INIT_DONE__ === true, null, { timeout: 30_000 })
+    .catch(() => {
+      // If the flag doesn't exist (older builds), we'll fall back to checking DOM.
+    })
 
   // Wait for any async bootstrap seeding (profile/settings) to finish.
   await page
@@ -31,5 +31,13 @@ export async function waitForRouteReady(page: Page) {
 
   if (bootstrapStatus?.stage === 'error') {
     throw new Error(`E2E bootstrap seeding failed: ${bootstrapStatus.error ?? 'unknown error'}`)
+  }
+
+  await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible({ timeout: 30_000 })
+
+  // If the lazy route fallback is up, wait until it's gone.
+  const fallback = page.getByTestId(testIds.app.routeFallback)
+  if (await fallback.isVisible().catch(() => false)) {
+    await expect(fallback).toBeHidden({ timeout: 30_000 })
   }
 }

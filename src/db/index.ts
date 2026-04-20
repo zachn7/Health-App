@@ -47,7 +47,7 @@ export class FitBudDB extends Dexie {
       mealTemplates: '++id, name, createdAt, updatedAt',
       
       // Tracking
-      weightLogs: '++id, date, weightKg, createdAt, updatedAt',
+      weightLogs: 'id, date, weightKg, createdAt, updatedAt',
       weeklyCheckIns: '++id, createdAt',
       
       // Safety
@@ -71,7 +71,7 @@ export class FitBudDB extends Dexie {
       nutritionLogs: '++id, date, createdAt, updatedAt, [date]',
       foodItems: '++id, name, barcode, source, createdAt, updatedAt, [name+source]',
       mealTemplates: '++id, name, createdAt, updatedAt',
-      weightLogs: '++id, date, weightKg, createdAt, updatedAt, [date+weightKg]',
+      weightLogs: 'id, date, weightKg, createdAt, updatedAt, [date+weightKg]',
       weeklyCheckIns: '++id, createdAt, [createdAt]',
       injuryAssessments: '++id, createdAt, area, severity, [area+severity]',
       
@@ -93,7 +93,7 @@ export class FitBudDB extends Dexie {
       nutritionLogs: '++id, date, createdAt, updatedAt, [date], lastSync',
       foodItems: '++id, name, barcode, source, createdAt, updatedAt, [name+source], lastSync',
       mealTemplates: '++id, name, createdAt, updatedAt, lastSync',
-      weightLogs: '++id, date, weightKg, createdAt, updatedAt, [date+weightKg], lastSync',
+      weightLogs: 'id, date, weightKg, createdAt, updatedAt, [date+weightKg], lastSync',
       weeklyCheckIns: '++id, createdAt, [createdAt], lastSync',
       injuryAssessments: '++id, createdAt, area, severity, [area+severity], lastSync',
       
@@ -107,7 +107,9 @@ export class FitBudDB extends Dexie {
       customExercises: '++id, name, createdAt, updatedAt, lastSync'
     });
 
-    // Schema version 4 - Use date as primary key for weight logs (one entry per day)
+    // Schema version 4 - Weight logs are keyed by `id` (string), with `id === date`.
+    // IMPORTANT: Dexie does NOT support changing primary keys across versions.
+    // Keep weightLogs keyPath stable, and enforce "one entry per day" at the repository layer.
     this.version(4).stores({
       profiles: 'id, createdAt, updatedAt, age, activityLevel, experienceLevel, lastSync',
       workoutPlans: '++id, name, generatedBy, createdAt, updatedAt, lastSync',
@@ -115,30 +117,18 @@ export class FitBudDB extends Dexie {
       nutritionLogs: '++id, date, createdAt, updatedAt, [date], lastSync',
       foodItems: '++id, name, barcode, source, createdAt, updatedAt, [name+source], lastSync',
       mealTemplates: '++id, name, createdAt, updatedAt, lastSync',
-      weightLogs: 'id, date, weightKg, createdAt, updatedAt, lastSync', // Date is now primary key
+      weightLogs: 'id, date, weightKg, createdAt, updatedAt, lastSync',
       weeklyCheckIns: '++id, createdAt, [createdAt], lastSync',
       injuryAssessments: '++id, createdAt, area, severity, [area+severity], lastSync',
-      
+
       // Settings
       settings: 'id, createdAt, updatedAt, lastSync',
-      
+
       // Exercise Database
       exercises: 'id, name, bodyPart, category, equipment, difficulty, [name+bodyPart], lastSync',
-      
+
       // Custom Exercises
       customExercises: '++id, name, createdAt, updatedAt, lastSync'
-    }).upgrade(tx => {
-      // Migrate existing weight logs to use date as primary key
-      return tx.table('weightLogs').toCollection().modify(log => {
-        // Set the ID to be the date string for primary key constraint
-        log.id = log.date;
-      });
-    }).upgrade(tx => {
-      // Migrate existing weight logs to use date as primary key
-      return tx.table('weightLogs').toCollection().modify(log => {
-        // Set the ID to be the date string for primary key constraint
-        log.id = log.date;
-      });
     });
 
     // Schema version 5 - Add Meal Plans

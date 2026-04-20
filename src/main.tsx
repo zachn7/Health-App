@@ -93,38 +93,59 @@ const registerServiceWorker = async () => {
 
 // Initialize app and database
 const initializeApp = async () => {
-  try {
-    // E2E tests seed IndexedDB via an initScript. Dexie can race that.
-    // In normal app usage this is undefined and skipped.
-    const seedPromise = (window as any).__e2e_seed_promise__ as Promise<void> | undefined
-    if (seedPromise) {
-      await seedPromise
-    }
-
-    // Initialize core database only. Heavy route-specific data like the exercise
-    // library now loads on demand instead of bloating every first paint.
-    await initDatabase();
-    
-    console.log('App initialization complete');
-  } catch (error) {
-    console.error('App initialization failed:', error);
-    // Continue anyway - app should work even if init fails
+  // E2E tests seed IndexedDB via an initScript. Dexie can race that.
+  // In normal app usage this is undefined and skipped.
+  const seedPromise = (window as any).__e2e_seed_promise__ as Promise<void> | undefined
+  if (seedPromise) {
+    await seedPromise
   }
-};
 
-// Register SW in a non-blocking way
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    registerServiceWorker();
-    initializeApp();
-  });
-} else {
-  registerServiceWorker();
-  initializeApp();
+  // Initialize core database only. Heavy route-specific data like the exercise
+  // library now loads on demand instead of bloating every first paint.
+  await initDatabase()
+
+  // Tell tests we finished the init pipeline.
+  ;(window as any).__APP_INIT_DONE__ = true
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+const rootEl = document.getElementById('root')
+if (!rootEl) {
+  throw new Error('Root element not found')
+}
+
+const root = ReactDOM.createRoot(rootEl)
+
+// Render something immediately so users don't stare at a blank page.
+root.render(
+  <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+    Loading FitBud AI...
+  </div>,
 )
+
+async function bootstrap() {
+  try {
+    await initializeApp()
+    console.log('App initialization complete')
+  } catch (error) {
+    console.error('App initialization failed:', error)
+    // Keep going anyway - some pages can still render without IndexedDB.
+  } finally {
+    // Even if init fails, render the app so the UI can show a helpful state.
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    )
+  }
+}
+
+// Register SW in a non-blocking way.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    registerServiceWorker()
+    void bootstrap()
+  })
+} else {
+  registerServiceWorker()
+  void bootstrap()
+}

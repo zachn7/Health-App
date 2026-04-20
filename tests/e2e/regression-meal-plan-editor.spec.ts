@@ -178,11 +178,12 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     await expect(qtyInput).not.toBeVisible({ timeout: 3000 });
     
     // Reload and verify persistence
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForRouteReady(page);
+
     // Navigate to Meal Plans tab
     const mealPlansTab = page.getByTestId('meals-meal-plans-tab');
+    await expect(mealPlansTab).toBeVisible({ timeout: 10_000 });
     await mealPlansTab.click();
     await expect(page.locator('.card').filter({ hasText: /days/ }).first()).toBeVisible({ timeout: 10_000 });
     
@@ -233,11 +234,12 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     }
     
     // Reload page
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForRouteReady(page);
+
     // Navigate to Meal Plans tab
     const mealPlansTab = page.getByTestId('meals-meal-plans-tab');
+    await expect(mealPlansTab).toBeVisible({ timeout: 10_000 });
     await mealPlansTab.click();
     await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 });
     
@@ -332,10 +334,11 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     }
 
     // Reload page
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForRouteReady(page);
+
     // Navigate to Meal Plans tab
+    await expect(mealPlansTab).toBeVisible({ timeout: 10_000 });
     await mealPlansTab.click();
     await expect(page.locator('body')).toBeVisible();
 

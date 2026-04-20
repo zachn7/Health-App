@@ -151,8 +151,15 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
       // Default to "done" so tests that don't seed don't hang.
       ;(window as any).__e2e_seed_done__ = true
 
-      if (clearStorage) {
+      const clearMarkerKey = '__e2e_clear_done__'
+      const seedMarkerKey = '__e2e_seed_completed__'
+      const shouldClearStorage = clearStorage && localStorage.getItem(clearMarkerKey) !== 'true'
+
+      if (shouldClearStorage) {
         localStorage.clear()
+        // Ensure we don't nuke storage again on reloads within the same test.
+        localStorage.setItem(clearMarkerKey, 'true')
+        localStorage.removeItem(seedMarkerKey)
       }
 
       // Default to "no seed requested" so gotoApp() can decide whether to wait.
@@ -176,6 +183,13 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
       window.__E2E_BOOTSTRAP_ERROR = null
 
       if (!seedProfile && !seedSettings) {
+        return
+      }
+
+      // If we've already seeded this context once (and we're not explicitly clearing),
+      // don't do it again on reload. Re-seeding can cause slow/hanging IndexedDB
+      // transactions in CI.
+      if (!shouldClearStorage && localStorage.getItem(seedMarkerKey) === 'true') {
         return
       }
 
@@ -280,30 +294,116 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
             }
           }
 
-          // Core
-          ensureStore('profiles', { keyPath: 'id' })
-          ensureStore('settings', { keyPath: 'id' })
+          // Core (indexes must match src/db/index.ts schema version 5)
+          ensureStore('profiles', { keyPath: 'id' }, [
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'age', keyPath: 'age' },
+            { name: 'activityLevel', keyPath: 'activityLevel' },
+            { name: 'experienceLevel', keyPath: 'experienceLevel' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
+
+          ensureStore('settings', { keyPath: 'id' }, [
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
 
           // Workouts
-          ensureStore('workoutPlans', { keyPath: 'id', autoIncrement: true })
-          ensureStore('workoutLogs', { keyPath: 'id', autoIncrement: true })
+          ensureStore('workoutPlans', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'name', keyPath: 'name' },
+            { name: 'generatedBy', keyPath: 'generatedBy' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
+
+          ensureStore('workoutLogs', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'date', keyPath: 'date' },
+            { name: 'workoutPlanId', keyPath: 'workoutPlanId' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'date+workoutPlanId', keyPath: ['date', 'workoutPlanId'] },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
 
           // Nutrition
-          ensureStore('nutritionLogs', { keyPath: 'id', autoIncrement: true })
-          ensureStore('foodItems', { keyPath: 'id', autoIncrement: true })
-          ensureStore('mealTemplates', { keyPath: 'id', autoIncrement: true })
-          ensureStore('mealPlans', { keyPath: 'id', autoIncrement: true })
+          ensureStore('nutritionLogs', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'date', keyPath: 'date' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
+
+          ensureStore('foodItems', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'name', keyPath: 'name' },
+            { name: 'barcode', keyPath: 'barcode' },
+            { name: 'source', keyPath: 'source' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'name+source', keyPath: ['name', 'source'] },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
+
+          ensureStore('mealTemplates', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'name', keyPath: 'name' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
+
+          ensureStore('mealPlans', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'name', keyPath: 'name' },
+            { name: 'startDate', keyPath: 'startDate' },
+            { name: 'endDate', keyPath: 'endDate' },
+            { name: 'generationType', keyPath: 'generationType' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'startDate+endDate', keyPath: ['startDate', 'endDate'] },
+          ])
 
           // Tracking
-          ensureStore('weightLogs', { keyPath: 'id' })
-          ensureStore('weeklyCheckIns', { keyPath: 'id', autoIncrement: true })
+          ensureStore('weightLogs', { keyPath: 'id' }, [
+            { name: 'date', keyPath: 'date' },
+            { name: 'weightKg', keyPath: 'weightKg' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+            { name: 'date+weightKg', keyPath: ['date', 'weightKg'] },
+          ])
+
+          ensureStore('weeklyCheckIns', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
 
           // Safety
-          ensureStore('injuryAssessments', { keyPath: 'id', autoIncrement: true })
+          ensureStore('injuryAssessments', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'area', keyPath: 'area' },
+            { name: 'severity', keyPath: 'severity' },
+            { name: 'area+severity', keyPath: ['area', 'severity'] },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
 
           // Exercise DB
-          ensureStore('exercises', { keyPath: 'id' })
-          ensureStore('customExercises', { keyPath: 'id', autoIncrement: true })
+          ensureStore('exercises', { keyPath: 'id' }, [
+            { name: 'name', keyPath: 'name' },
+            { name: 'bodyPart', keyPath: 'bodyPart' },
+            { name: 'category', keyPath: 'category' },
+            { name: 'equipment', keyPath: 'equipment' },
+            { name: 'difficulty', keyPath: 'difficulty' },
+            { name: 'name+bodyPart', keyPath: ['name', 'bodyPart'] },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
+
+          ensureStore('customExercises', { keyPath: 'id', autoIncrement: true }, [
+            { name: 'name', keyPath: 'name' },
+            { name: 'createdAt', keyPath: 'createdAt' },
+            { name: 'updatedAt', keyPath: 'updatedAt' },
+            { name: 'lastSync', keyPath: 'lastSync' },
+          ])
         }
 
         request.onerror = () => {
@@ -324,6 +424,11 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
             ;(window as any).__e2e_seed_done__ = true
             try {
               ;(window as any).__e2e_seed_resolve__?.()
+            } catch {
+              // ignore
+            }
+            try {
+              localStorage.setItem(seedMarkerKey, 'true')
             } catch {
               // ignore
             }
@@ -381,7 +486,7 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         }
       }
 
-      if (clearStorage) {
+      if (shouldClearStorage) {
         const deleteRequest = indexedDB.deleteDatabase(dbName)
         deleteRequest.onsuccess = startSeed
         deleteRequest.onerror = startSeed
