@@ -1,22 +1,21 @@
 import { expect, test } from '@playwright/test'
-import { bootstrapAppState, gotoApp } from '../helpers/bootstrap'
-import { setupTestProfile } from '../helpers/setupProfile'
+import { bootstrapContext, gotoApp } from '../helpers/bootstrap'
+import { waitForRouteReady } from '../helpers/app'
 import { testIds } from '../../../src/testIds'
 
 test.describe('Smoke: Global Assistant Drawer', () => {
-  test.beforeEach(async ({ page, context }) => {
-    await bootstrapAppState(context, {
+  test.beforeEach(async ({ context }) => {
+    await bootstrapContext(context, {
       clearStorage: true,
       acceptAgeGate: true,
       completeOnboarding: true,
+      seedProfile: true,
     })
-
-    await setupTestProfile(page)
   })
 
   test('opens globally and shows the assistant trend snapshot', async ({ page }) => {
     await gotoApp(page, '/dashboard')
-    await page.waitForLoadState('networkidle')
+    await waitForRouteReady(page)
 
     await expect(page.getByTestId(testIds.assistant.fab)).toBeVisible()
     await expect(page.getByTestId(testIds.assistant.drawer)).not.toBeVisible()
@@ -31,7 +30,7 @@ test.describe('Smoke: Global Assistant Drawer', () => {
 
   test('starter prompts send guided assistant requests', async ({ page }) => {
     await gotoApp(page, '/dashboard')
-    await page.waitForLoadState('networkidle')
+    await waitForRouteReady(page)
 
     await page.getByTestId(testIds.assistant.fab).click()
     await page.getByTestId(testIds.assistant.starter('analyze-trends')).click()
@@ -44,7 +43,7 @@ test.describe('Smoke: Global Assistant Drawer', () => {
 
   test('refuses out-of-domain requests with domain-locked guidance', async ({ page }) => {
     await gotoApp(page, '/dashboard')
-    await page.waitForLoadState('networkidle')
+    await waitForRouteReady(page)
 
     await page.getByTestId(testIds.assistant.fab).click()
     await page.getByTestId(testIds.assistant.input).fill('Solve this algebra equation: 2x + 4 = 10')

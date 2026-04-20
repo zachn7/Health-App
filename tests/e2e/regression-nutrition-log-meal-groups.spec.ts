@@ -1,22 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { setupTestProfile } from './helpers/setupProfile';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 
 test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', () => {
   test.beforeEach(async ({ context }) => {
-    // Set age gate to pass BEFORE page loads
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
   });
 
   test('should import meal plan dinner section into nutrition log', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
     // Navigate to Meals page to create/import a meal plan
-    await page.goto('./#/meals');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/meals');
+    await waitForRouteReady(page);
 
     // Switch to Presets tab
     const presetsTab = page.getByTestId('meals-presets-tab');
@@ -31,12 +30,11 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
-    await page.waitForTimeout(2000);
 
     // Close the meal plan editor
     const closeEditorButton = page.getByTestId('meal-plan-close-editor-btn');
+    await expect(closeEditorButton).toBeVisible({ timeout: 10_000 });
     await closeEditorButton.click();
-    await page.waitForTimeout(500);
 
     // Navigate to Nutrition page
     await page.goto('./#/nutrition');
@@ -48,25 +46,22 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     
     // Open import modal
     await importMealPlanButton.click();
-    await page.waitForTimeout(500);
 
     // Verify the import modal opened with select element
     const planSelect = page.locator('select').first();
-    await expect(planSelect).toBeVisible({ timeout: 3000 });
+    await expect(planSelect).toBeVisible({ timeout: 5000 });
 
     // Cancel the modal
     const cancelButton = page.getByRole('button', { name: 'Cancel' });
     await cancelButton.click();
-    await page.waitForTimeout(500);
 
     // Verify the modal is closed
+    await expect(planSelect).not.toBeVisible({ timeout: 5000 });
     await expect(importMealPlanButton).toBeVisible();
   });
 
   test('should add food using manual entry to Breakfast section', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
     // Navigate to Nutrition page
     await page.goto('./#/nutrition');
     await page.waitForLoadState('networkidle');
@@ -75,10 +70,10 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     const manualEntryButton = page.getByTestId('nutrition-manual-entry-btn');
     await expect(manualEntryButton).toBeVisible({ timeout: 5000 });
     await manualEntryButton.click();
-    await page.waitForTimeout(500);
 
     // Fill in food details
     const nameInput = page.locator('input[placeholder*="Chicken Breast"]');
+    await expect(nameInput).toBeVisible({ timeout: 5000 });
     await nameInput.fill('Test Breakfast Food');
 
     // Find and fill calories input (second number input in the form)
@@ -88,18 +83,16 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     // Click Save
     const saveButton = page.getByRole('button', { name: 'Save Food' });
     await saveButton.click();
-    await page.waitForTimeout(2000);
 
     // Verify food was added (check if any section has food)
     const foodItems = page.getByTestId('nutrition-food-item');
+    await expect(foodItems.first()).toBeVisible({ timeout: 10_000 });
     const itemCount = await foodItems.count();
     expect(itemCount).toBeGreaterThan(0);
   });
 
   test('should add food to Dinner section using Dinner Add Food button', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
     // Navigate to Nutrition page
     await page.goto('./#/nutrition');
     await page.waitForLoadState('networkidle');
@@ -108,10 +101,10 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     const dinnerAddButton = page.getByTestId('nutrition-add-food-dinner');
     await expect(dinnerAddButton).toBeVisible({ timeout: 5000 });
     await dinnerAddButton.click();
-    await page.waitForTimeout(500);
 
     // Fill in food details
     const nameInput = page.locator('input[placeholder*="Chicken Breast"]');
+    await expect(nameInput).toBeVisible({ timeout: 5000 });
     await nameInput.fill('Test Dinner Food');
 
     const numberInputs = page.locator('input[type="number"]');
@@ -120,9 +113,9 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     // Click Save
     const saveButton = page.getByRole('button', { name: 'Save Food' });
     await saveButton.click();
-    await page.waitForTimeout(2000);
 
     // Verify food was added and appears under Dinner section
+    await expect(page.getByTestId('nutrition-food-item').first()).toBeVisible({ timeout: 10_000 });
     const dinnerSection = page.locator('text=Dinner').last();
     await expect(dinnerSection).toBeVisible();
 
@@ -141,8 +134,6 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
 
   test('should persist meal group after page reload', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
     // Navigate to Nutrition page
     await page.goto('./#/nutrition');
     await page.waitForLoadState('networkidle');
@@ -151,9 +142,9 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     const lunchAddButton = page.getByTestId('nutrition-add-food-lunch');
     await expect(lunchAddButton).toBeVisible({ timeout: 5000 });
     await lunchAddButton.click();
-    await page.waitForTimeout(500);
 
     const nameInput = page.locator('input[placeholder*="Chicken Breast"]');
+    await expect(nameInput).toBeVisible({ timeout: 5000 });
     await nameInput.fill('Test Lunch Food');
 
     const numberInputs = page.locator('input[type="number"]');
@@ -161,9 +152,9 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
 
     const saveButton = page.getByRole('button', { name: 'Save Food' });
     await saveButton.click();
-    await page.waitForTimeout(2000);
 
     // Verify food was added
+    await expect(page.getByTestId('nutrition-food-item').first()).toBeVisible({ timeout: 10_000 });
     let foodItems = page.getByTestId('nutrition-food-item');
     let itemCountBeforeReload = await foodItems.count();
     expect(itemCountBeforeReload).toBeGreaterThan(0);
@@ -173,7 +164,7 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     // Reload page
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('nutrition-food-item').first()).toBeVisible({ timeout: 10_000 });
 
     // Verify food still exists after reload
     foodItems = page.getByTestId('nutrition-food-item');
@@ -190,8 +181,6 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
 
   test('should show meal group sections', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
     // Navigate to Nutrition page
     await page.goto('./#/nutrition');
     await page.waitForLoadState('networkidle');
@@ -200,9 +189,9 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     // First, add a generic food to create Uncategorized section
     const manualEntryButton = page.getByTestId('nutrition-manual-entry-btn');
     await manualEntryButton.click();
-    await page.waitForTimeout(500);
 
     const nameInput = page.locator('input[placeholder*="Chicken Breast"]');
+    await expect(nameInput).toBeVisible({ timeout: 5000 });
     await nameInput.fill('Test Food');
 
     const numberInputs = page.locator('input[type="number"]');
@@ -210,7 +199,7 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
 
     const saveButton = page.getByRole('button', { name: 'Save Food' });
     await saveButton.click();
-    await page.waitForTimeout(2000);
+    await expect(page.getByTestId('nutrition-food-item').first()).toBeVisible({ timeout: 10_000 });
 
     // Add another food to Breakfast section
     const addFoodButtons = page.getByRole('button', { name: 'Add Food' });
@@ -218,9 +207,9 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     
     if (buttonCount > 0) {
       await addFoodButtons.first().click();
-      await page.waitForTimeout(500);
 
       const nameInput2 = page.locator('input[placeholder*="Chicken Breast"]');
+      await expect(nameInput2).toBeVisible({ timeout: 5000 });
       await nameInput2.fill('Breakfast Item');
 
       const numberInputs2 = page.locator('input[type="number"]');
@@ -228,7 +217,7 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
 
       const saveButton2 = page.getByRole('button', { name: 'Save Food' });
       await saveButton2.click();
-      await page.waitForTimeout(2000);
+      await expect(page.getByTestId('nutrition-food-item').first()).toBeVisible({ timeout: 10_000 });
 
       // Verify we have food items displayed
       const foodItems = page.getByTestId('nutrition-food-item');
@@ -238,11 +227,9 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
 
   test('should import meal plan food with correct servings+grams display', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
     // Navigate to Meals page to create a simple meal plan
-    await page.goto('./#/meals');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/meals');
+    await waitForRouteReady(page);
 
     // Switch to Presets tab
     const presetsTab = page.getByTestId('meals-presets-tab');
@@ -257,16 +244,14 @@ test.describe('Regression: Nutrition Log Meal Groups + Import from Meal Plans', 
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
-    await page.waitForTimeout(2000);
 
     // Verify meal plan editor is open
     const titleInput = page.getByTestId('meal-plan-title-input');
-    await expect(titleInput).toBeVisible({ timeout: 5000 });
+    await expect(titleInput).toBeVisible({ timeout: 10_000 });
 
     // Click "Log Day to Today" button to import all
     const logDayButton = page.getByTestId('meal-plan-log-day-btn');
     await logDayButton.click();
-    await page.waitForTimeout(2000);
 
     // Navigate to Nutrition page
     await page.goto('./#/nutrition');

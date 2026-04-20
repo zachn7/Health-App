@@ -84,6 +84,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-monday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible({ timeout: 7_500 });
     
     // Navigate to progress page
     await gotoApp(page, '/progress');
@@ -99,8 +100,9 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     // Save the weight entry
     await page.getByTestId('save-weight-button').click();
     
-    // Should show the logged weight in the list/graph
-    await expect(page.getByTestId('current-weight-display')).toContainText('170.5');
+    // Don't assert against the *trend* tile (it smooths values).
+    // Assert against the actual log table row instead.
+    await expect(page.locator('table')).toContainText('170.5 lbs');
   });
 
   test('should persist weight entries across page refreshes', async ({ page }) => {
@@ -128,7 +130,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.waitForLoadState();
     await page.getByTestId('weight-input').fill('175.0');
     await page.getByTestId('save-weight-button').click();
-    await expect(page.getByTestId('current-weight-display')).toContainText('175.0');
+    await expect(page.locator('table')).toContainText('175.0 lbs');
     
     // Navigate to previous day and log second weight
     await page.getByTestId('prev-day-button').click();
@@ -138,8 +140,8 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('weight-input').fill('174.5');
     await page.getByTestId('save-weight-button').click();
     
-    // Brief wait for save to complete
-    await page.waitForTimeout(500);
+    // Wait for save to complete
+    await expect(page.locator('table')).toContainText('174.5 lbs');
     
     // Go back to today
     await page.getByTestId('next-day-button').click();
@@ -149,10 +151,9 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.reload();
     await page.waitForLoadState();
     
-    // Wait for weight display to update with imperial units
-    await page.waitForTimeout(500);
-    
     // Imperial preference should still be applied after reload
+    await expect(page.getByTestId('current-weight-display')).toContainText('lb', { timeout: 10_000 });
+
     await page.getByRole('button', { name: 'Log Weight' }).click();
     await expect(page.getByTestId('weight-unit-label')).toContainText('lb');
     await expect(page.getByTestId('current-weight-display')).toContainText('lb');
@@ -173,6 +174,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-wednesday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible({ timeout: 7_500 });
     
     // Navigate to progress and log weight
     await gotoApp(page, '/progress');
@@ -204,6 +206,7 @@ test.describe('Regression: Weight Log LB Persistence (R03)', () => {
     await page.getByTestId('equipment-bodyweight').check();
     await page.getByTestId('schedule-wednesday').check();
     await page.getByRole('button', { name: 'Save Profile' }).click();
+    await expect(page.getByText('Profile saved successfully!')).toBeVisible({ timeout: 7_500 });
     
     // Navigate to progress page
     await gotoApp(page, '/progress');

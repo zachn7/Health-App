@@ -2,10 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  fullyParallel: !process.env.CI,
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // CI can handle a little parallelism. 1 worker is safe but sloooow.
+  workers: process.env.CI ? 3 : undefined,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'html',
   timeout: 30_000,
   expect: {
@@ -38,7 +39,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --strictPort --port 4173',
+    command: 'npm run build && npm run preview -- --host 127.0.0.1 --strictPort --port 4173',
     url: 'http://127.0.0.1:4173',
     timeout: 120_000,
     stdout: 'pipe',

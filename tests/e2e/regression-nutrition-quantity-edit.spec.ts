@@ -87,7 +87,7 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     );
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
+    await expect(page.getByTestId('usda-add-food').first()).toBeVisible({ timeout: 10_000 });
 
     // Add food
     const detailResponse = page.waitForResponse(
@@ -98,9 +98,9 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await detailResponse;
     await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
 
-    // Close modal
-    await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
+    // Close USDA import panel (it's a card, not a toggle button)
+    await page.getByTestId('nutrition-manual-entry-btn').click();
+    await expect(page.getByTestId('usda-import-modal')).not.toBeVisible({ timeout: 10_000 });
 
     // Get first food item
     const firstItem = page.getByTestId('nutrition-food-item').first();
@@ -109,10 +109,10 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Click edit serving on the first food item
     const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
     await editServingButton.click();
-    await page.waitForTimeout(300);
 
     // Get the quantity input using testId
     const quantityInput = page.getByTestId('quantity-input');
+    await expect(quantityInput).toBeVisible({ timeout: 5_000 });
     await expect(quantityInput).toHaveValue('1');
 
     // Clear the input entirely
@@ -121,7 +121,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Blur the input (click toggle button)
     await page.getByTestId('quantity-servings-btn').click();
-    await page.waitForTimeout(200);
 
     // Verify input defaults to 0 after blur
     await expect(quantityInput).toHaveValue('0');
@@ -143,7 +142,7 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     );
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
+    await expect(page.getByTestId('usda-add-food').first()).toBeVisible({ timeout: 10_000 });
 
     // Add food
     const detailResponse = page.waitForResponse(
@@ -154,9 +153,9 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await detailResponse;
     await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
 
-    // Close modal
-    await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
+    // Close USDA import panel (it's a card, not a toggle button)
+    await page.getByTestId('nutrition-manual-entry-btn').click();
+    await expect(page.getByTestId('usda-import-modal')).not.toBeVisible({ timeout: 10_000 });
 
     // Get first food item
     const firstItem = page.getByTestId('nutrition-food-item').first();
@@ -165,10 +164,10 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Click edit serving on the first food item
     const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
     await editServingButton.click();
-    await page.waitForTimeout(300);
 
     // Get the quantity input using testId
     const quantityInput = page.getByTestId('quantity-input');
+    await expect(quantityInput).toBeVisible({ timeout: 5_000 });
     await expect(quantityInput).toHaveValue('1');
 
     // Test 1: Arrow key increments in serving mode
@@ -191,7 +190,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Test 2: Arrow key increments in grams mode
     // Switch to grams using toggle button
     await page.getByTestId('quantity-grams-btn').click();
-    await page.waitForTimeout(300);
 
     // Verify current value in grams (should be integer) - just check it's not empty
     const gramsValue = await quantityInput.inputValue();
@@ -229,7 +227,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     );
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
 
     // Add food
     const detailResponse = page.waitForResponse(
@@ -242,7 +239,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Close modal
     await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
 
     // Get first food item
     const firstItem = page.getByTestId('nutrition-food-item').first();
@@ -250,7 +246,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     // Click edit serving on the first food item
     const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
     await editServingButton.click();
-    await page.waitForTimeout(300);
 
     // Get the quantity input using testId
     const quantityInput = page.getByTestId('quantity-input');
@@ -260,14 +255,12 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Set value to 1.5 servings
     await quantityInput.fill('1.5');
-    await page.waitForTimeout(200);
 
     // Verify macro tiles show correct values for 1.5 servings
     await expect(caloriesTile).toContainText('248'); // 1.5 * 165 ≈ 248
 
     // Switch to grams mode
     await gramsBtn.click();
-    await page.waitForTimeout(200);
 
     // Should show the equivalent grams (1.5 * 100 = 150g)
     await expect(quantityInput).toHaveValue('150');
@@ -277,15 +270,13 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Change grams to 200
     await quantityInput.fill('200');
-    await page.waitForTimeout(200);
 
     // Verify macros updated (200g = 2 servings * 165 = 330)
     await expect(caloriesTile).toContainText('330');
 
     // Switch back to serving mode
     await servingsBtn.click();
-    await page.waitForTimeout(200);
-
+    
     // Should show 2 servings (200g / 100g per serving)
     await expect(quantityInput).toHaveValue('2');
 
@@ -305,7 +296,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     );
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
 
     // Add food
     const detailResponse = page.waitForResponse(
@@ -318,12 +308,10 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Close modal
     await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
 
     // Get first food item and click edit
     const firstItem = page.getByTestId('nutrition-food-item').first();
     await firstItem.getByRole('button', { name: 'edit serving' }).click();
-    await page.waitForTimeout(300);
 
     const quantityInput = page.getByTestId('quantity-input');
     const caloriesTile = page.getByTestId('quantity-macro-calories');
@@ -360,8 +348,7 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     );
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
-
+    
     // Add food
     const detailResponse = page.waitForResponse(
       response => response.url().includes('/food/170967') && response.status() === 200
@@ -373,15 +360,13 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Close modal
     await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
-
+    
     // Get first food item and edit buttons
     const firstItem = page.getByTestId('nutrition-food-item').first();
     const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
 
     // First edit: open and switch to grams, set 200g
     await editServingButton.click();
-    await page.waitForTimeout(300);
 
     const quantityInput = page.getByTestId('quantity-input');
     const gramsBtn = page.getByTestId('quantity-grams-btn');
@@ -390,7 +375,6 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
 
     // Switch to grams mode
     await gramsBtn.click();
-    await page.waitForTimeout(200);
 
     // Set grams to 200
     await quantityInput.fill('200');
@@ -400,7 +384,7 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     await saveButton.click();
 
     // Wait for edit modal to close
-    await page.waitForTimeout(500);
+    await expect(quantityInput).not.toBeVisible({ timeout: 10_000 });
 
     // Second edit: reopen the food item editor
     // Re-find the elements since the modal re-rendered
@@ -411,17 +395,14 @@ test.describe('Regression: Nutrition Logger Quantity Editing', () => {
     
     // Reopen the edit dialog
     await editServingButton2.click();
-    await page.waitForTimeout(300);
-
-    // Wait a bit more for state to fully initialize
-    await page.waitForTimeout(300);
+    
+    await expect(quantityInput2).toBeVisible({ timeout: 5_000 });
 
     // Should still be in grams mode with value 200
     await expect(quantityInput2).toHaveValue('200');
 
     // Switch to servings mode
     await servingsBtn2.click();
-    await page.waitForTimeout(200);
 
     // Critical: Should show 2 servings (200g / 100g per serving), NOT 200 servings
     await expect(quantityInput2).toHaveValue('2');

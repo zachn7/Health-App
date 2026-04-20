@@ -1,22 +1,20 @@
 import { test, expect } from '@playwright/test';
-import { setupTestProfile } from './helpers/setupProfile';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 
 test.describe('Regression: Workout Editor Swap', () => {
   test.beforeEach(async ({ context }) => {
-    // Set age gate to pass BEFORE page loads
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
   });
 
   test('should replace exercise on swap (not append) and keep edit mode active', async ({ page }) => {
-    // Set up profile
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Switch to Presets tab
     const presetsTab = page.getByTestId('workouts-presets-tab');
@@ -31,20 +29,18 @@ test.describe('Regression: Workout Editor Swap', () => {
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
-    await page.waitForTimeout(3000);
 
     // Import usually switches to My Programs tab automatically
-    // Wait for the plan to load in the editor
-    await page.waitForTimeout(3000);
+    // Wait for plan cards to appear
+    const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
+    await expect(workoutPlanCards.first()).toBeVisible({ timeout: 15_000 });
 
     // Sometimes the import opens the plan directly, sometimes we need to select it
     // Try clicking on the first workout plan card if it exists
-    const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
-    const hasPlanCards = await workoutPlanCards.count() > 0;
-    
+    const hasPlanCards = (await workoutPlanCards.count()) > 0;
+
     if (hasPlanCards) {
       await workoutPlanCards.first().click();
-      await page.waitForTimeout(2000);
     }
 
     // Get the initial exercise count in the first day
@@ -63,8 +59,8 @@ test.describe('Regression: Workout Editor Swap', () => {
     await expect(editToggle).toBeVisible();
     await editToggle.click();
 
-    // Wait a moment for edit mode to activate
-    await page.waitForTimeout(500);
+    // Wait for edit mode to activate
+    await expect(page.getByTestId('workout-editor-exercise-swap-btn').first()).toBeVisible({ timeout: 10_000 });
 
     // Click Swap button on the first exercise
     const swapBtn = page.getByTestId('workout-editor-exercise-swap-btn').first();
@@ -72,24 +68,18 @@ test.describe('Regression: Workout Editor Swap', () => {
     await swapBtn.click();
 
     // Wait for exercise picker to load
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('exercise-search-input')).toBeVisible({ timeout: 10_000 });
 
-    // Click the first exercise in the picker (different from original)
-    const pickerExercise = page.locator('button').filter({ hasText: /bench|squat|deadlift|press/i }).first();
-    const hasPickerExercise = await pickerExercise.count() > 0;
-    
-    if (!hasPickerExercise) {
-      // If no specific exercise found, try clicking any exercise button
-      const anyExercise = page.locator('button').filter({ hasText: /cal|reps\/kg|kg|lbs/i }).first();
-      if (await anyExercise.count() > 0) {
-        await anyExercise.click();
-      }
-    } else {
-      await pickerExercise.click();
-    }
+    // Pick the first actual result inside the ExercisePicker modal (scoped, deterministic)
+    const pickerHeading = page.getByRole('heading', { name: 'Exercise Picker' });
+    await expect(pickerHeading).toBeVisible({ timeout: 10_000 });
 
-    // Wait for swap to complete
-    await page.waitForTimeout(2000);
+    const firstPickerResult = page.getByTestId('exercise-results-list').getByRole('button').first();
+    await expect(firstPickerResult).toBeVisible({ timeout: 10_000 });
+    await firstPickerResult.click();
+
+    // Wait for swap to complete (picker closes)
+    await expect(pickerHeading).not.toBeVisible({ timeout: 10_000 });
 
     // Verify exercise count is unchanged (not appended)
     const exerciseRowsAfterSwap = page.locator('[data-testid^="workout-editor-exercise-row-"]');
@@ -116,24 +106,18 @@ test.describe('Regression: Workout Editor Swap', () => {
 
       // Click Swap on second exercise
       await secondSwapBtn.click();
-      await page.waitForTimeout(1000);
+      await expect(page.getByTestId('exercise-search-input')).toBeVisible({ timeout: 10_000 });
 
-      // Select an exercise in picker
-      const pickerExercise2 = page.locator('button').filter({ hasText: /row|lat|pull|curl/i }).first();
-      const hasPickerExercise2 = await pickerExercise2.count() > 0;
-      
-      if (hasPickerExercise2) {
-        await pickerExercise2.click();
-      } else {
-        // Fallback to any exercise
-        const anyExercise2 = page.locator('button').filter({ hasText: /cal|reps\/kg|kg|lbs/i }).first();
-        if (await anyExercise2.count() > 0) {
-          await anyExercise2.click();
-        }
-      }
+      // Select an exercise in picker (again: scoped + deterministic)
+      const pickerHeading2 = page.getByRole('heading', { name: 'Exercise Picker' });
+      await expect(pickerHeading2).toBeVisible({ timeout: 10_000 });
 
-      // Wait for swap to complete
-      await page.waitForTimeout(2000);
+      const firstPickerResult2 = page.getByTestId('exercise-results-list').getByRole('button').first();
+      await expect(firstPickerResult2).toBeVisible({ timeout: 10_000 });
+      await firstPickerResult2.click();
+
+      // Wait for swap to complete (picker closes)
+      await expect(pickerHeading2).not.toBeVisible({ timeout: 10_000 });
 
       // Verify count is still unchanged
       const exerciseRowsAfterSecondSwap = page.locator('[data-testid^="workout-editor-exercise-row-"]');
@@ -148,11 +132,8 @@ test.describe('Regression: Workout Editor Swap', () => {
 
   test('should have stable testIds for workout editor', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Switch to My Programs
     const myProgramsTab = page.getByTestId('workouts-my-programs-tab');
@@ -169,16 +150,15 @@ test.describe('Regression: Workout Editor Swap', () => {
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
-    await page.waitForTimeout(2000);
 
     // Verify stable testIds exist
-    await expect(page.getByTestId('edit-workout-day-btn-0-0')).toBeVisible();
+    await expect(page.getByTestId('edit-workout-day-btn-0-0')).toBeVisible({ timeout: 15_000 });
     const exerciseRows = page.locator('[data-testid^="workout-editor-exercise-row-"]');
     await expect(exerciseRows.first()).toBeVisible();
 
     // Enter edit mode
     await page.getByTestId('edit-workout-day-btn-0-0').click();
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('workout-editor-exercise-swap-btn').first()).toBeVisible({ timeout: 10_000 });
 
     // Verify swap button testId
     await expect(page.getByTestId('workout-editor-exercise-swap-btn').first()).toBeVisible();

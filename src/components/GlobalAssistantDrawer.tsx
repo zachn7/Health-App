@@ -87,10 +87,12 @@ export default function GlobalAssistantDrawer({ isOpen, onClose }: GlobalAssista
   const [actions, setActions] = useState<AssistantActionSuggestion[]>([])
 
   useEffect(() => {
+    if (!isOpen) return
+
     repositories.profile.get().then((result) => setProfile(result || null)).catch((error) => {
       console.warn('Failed to load profile for global assistant:', error)
     })
-  }, [])
+  }, [isOpen])
 
   useEffect(() => {
     if (!profile || !isOpen) return
@@ -113,7 +115,21 @@ export default function GlobalAssistantDrawer({ isOpen, onClose }: GlobalAssista
   const sendPrompt = async (nextMessage: string) => {
     if (!nextMessage.trim() || loading) return
 
-    if (!profile) {
+    let activeProfile = profile
+
+    // Profile can be created/seeded after the app mounts. If state hasn't caught up yet,
+    // do a quick read right before we give up.
+    if (!activeProfile) {
+      try {
+        const fresh = await repositories.profile.get()
+        activeProfile = fresh || null
+        if (fresh) setProfile(fresh)
+      } catch (error) {
+        console.warn('Failed to refresh profile before sending assistant prompt:', error)
+      }
+    }
+
+    if (!activeProfile) {
       appendAssistantMessage('You need to save your profile first so I can give you personalized coaching instead of generic gym-bro wallpaper text.')
       return
     }
@@ -122,12 +138,12 @@ export default function GlobalAssistantDrawer({ isOpen, onClose }: GlobalAssista
     setMessages((prev) => [...prev, { role: 'user', content: nextMessage }])
 
     try {
-      const response = await assistantService.sendMessage(nextMessage, profile)
+      const response = await assistantService.sendMessage(nextMessage, activeProfile)
       if (response.suggestedWorkoutPlan) setGeneratedPlan(response.suggestedWorkoutPlan)
       if (response.suggestedMealPlan) setSuggestedMealPlan(response.suggestedMealPlan)
       setActions(response.actions || [])
       appendAssistantMessage(response.message)
-      setContext(await assistantService.getContextSnapshot(profile))
+      setContext(await assistantService.getContextSnapshot(activeProfile))
     } catch (error) {
       console.error('Global assistant send failed:', error)
       appendAssistantMessage(`I hit an error while trying to help: ${error instanceof Error ? error.message : 'unknown error'}`)

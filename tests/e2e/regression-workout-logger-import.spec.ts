@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { testIds } from '../../src/testIds';
-import { setupTestProfile } from './helpers/setupProfile';
-import { gotoApp } from './helpers/bootstrap';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 
 test.describe('Regression: Workout Logger Import (R08)', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
+  test.beforeEach(async ({ context }) => {
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
   });
 
@@ -38,10 +39,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       sessionStorage.setItem('currentWorkout', JSON.stringify(workout));
     }, mockWorkoutPlan);
     await gotoApp(page, '/log/workout');
-    await page.waitForLoadState('networkidle');
-    
-    // Wait for page to load
-    await page.waitForTimeout(2000);
+    await waitForRouteReady(page);
     
     // Check console for any exercise DB load errors
     const errorMessages: string[] = [];
@@ -73,9 +71,6 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
       console.error('Exercise DB load errors:', errorMessages);
     }
     expect(hasExerciseErrors).toBeFalsy();
-    
-    // Wait a bit more to ensure no async errors
-    await page.waitForTimeout(3000);
   });
 
   test('should persist imported exercises after reload without requiring save', async ({ page, context }) => {
@@ -100,10 +95,9 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     }, mockWorkoutPlan);
     await gotoApp(page, '/log/workout');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
-    
+
     // Verify exercises appeared
-    await expect(page.getByTestId(testIds.workoutLogger.pageHeading)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId(testIds.workoutLogger.pageHeading)).toBeVisible({ timeout: 10_000 });
     const exercisesBefore = page.locator('[data-testid^="workout-logger-exercise-row-"]');
     await expect
       .poll(async () => exercisesBefore.count(), { timeout: 10000 })
@@ -123,8 +117,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Reload the page WITHOUT clicking save
     await page.reload();
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
+    await waitForRouteReady(page);
     
     // Verify exercises STILL exist after reload (persisted)
     const exercisesAfter = page.locator('[data-testid^="workout-logger-exercise-row-"]');
@@ -144,24 +137,18 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
   });
 
   test('should handle import from workout program page', async ({ page }) => {
-    // Setup test profile using the shared helper
-    await setupTestProfile(page);
-    
-    // Navigate to workouts page
     await gotoApp(page, '/workouts');
-    await page.waitForLoadState('networkidle');
+    await waitForRouteReady(page);
     
     // Generate a workout plan
     page.on('dialog', dialog => dialog.accept());
     await page.getByTestId(testIds.workouts.generatePlanButton).click();
-    await page.waitForTimeout(500); // Wait for modal to appear
-    
+
     // Select "Based on Profile" mode
     const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await expect(profileModeButton).toBeVisible({ timeout: 10_000 });
     await profileModeButton.click();
-    await page.waitForTimeout(300); // Wait for state update
-    
+
     // Click the generate button in the modal
     const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
     await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
@@ -234,8 +221,7 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Reload to verify persistence WITHOUT clicking save
     await page.reload();
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
+    await waitForRouteReady(page);
     
     // Verify exercises still exist after reload
     const exercisesAfter = page.locator('[data-testid^="workout-logger-exercise-row-"]');
@@ -250,23 +236,17 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
   });
 
   test('should allow editing adding swapping and deleting exercises in imported log', async ({ page, context }) => {
-    // Setup test profile using the shared helper
-    await setupTestProfile(page);
-    
-    // Navigate to workouts page
     await gotoApp(page, '/workouts');
-    await page.waitForLoadState('networkidle');
+    await waitForRouteReady(page);
     
     // Generate a workout plan
     page.on('dialog', dialog => dialog.accept());
     await page.getByTestId(testIds.workouts.generatePlanButton).click();
-    await page.waitForTimeout(500); // Wait for modal to appear
-    
+
     // Select "Based on Profile" mode
     const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await expect(profileModeButton).toBeVisible({ timeout: 10_000 });
     await profileModeButton.click();
-    await page.waitForTimeout(300); // Wait for state update
     
     // Click the generate button in the modal
     const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
@@ -344,13 +324,12 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Search for an exercise
     await searchInput.fill('bench');
-    await page.waitForTimeout(1000);
-    
+
     // Select the first result
     const firstResult = page.getByTestId(testIds.exerciseSearch.resultsList).locator('[data-testid^="exercise-result-"]').first();
+    await expect(firstResult).toBeVisible({ timeout: 10_000 });
     await firstResult.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify count increased back to original
     await expect(exerciseRows).toHaveCount(initialCount);
     console.log(`After add: ${initialCount} exercises`);
@@ -372,13 +351,12 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Search for a different exercise
     await searchInput.fill('squat');
-    await page.waitForTimeout(1000);
-    
+
     // Select the first result
     const squatResult = page.getByTestId(testIds.exerciseSearch.resultsList).locator('[data-testid^="exercise-result-"]').first();
+    await expect(squatResult).toBeVisible({ timeout: 10_000 });
     await squatResult.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify exercise name changed (this is tricky since content includes more than just the name)
     // Instead, verify count is still the same (swap doesn't change count)
     await expect(exerciseRows).toHaveCount(initialCount);
@@ -389,22 +367,19 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     const addSetBtn = firstExerciseRow.getByRole('button', { name: 'Add First Set' });
     if (await addSetBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await addSetBtn.click();
-      await page.waitForTimeout(500);
     }
     
     // Edit reps value
     const repsInput = firstExerciseRow.locator('input[type="number"]').first();
     if (await repsInput.isVisible({ timeout: 2000 }).catch(() => false)) {
       await repsInput.fill('10');
-      await page.waitForTimeout(500);
       await expect(repsInput).toHaveValue('10');
       console.log('✅ Successfully edited reps value');
     }
     
     // TEST 5: Reload and verify persistence
     await page.reload();
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
+    await waitForRouteReady(page);
     
     // Verify exercise count persisted
     await expect(page.getByTestId(testIds.workoutLogger.exerciseList)).toBeVisible({ timeout: 5000 });
@@ -452,8 +427,8 @@ test.describe('Regression: Workout Logger Import (R08)', () => {
     
     // Wait for loading to complete
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
-    
+    await expect(page.locator('[data-testid^="workout-logger-exercise-row-"]').first()).toBeVisible({ timeout: 10_000 });
+
     // Verify we have content (not just loading spinner)
     const bodyContent = await page.textContent('body');
     expect(bodyContent?.length).toBeGreaterThan(100);

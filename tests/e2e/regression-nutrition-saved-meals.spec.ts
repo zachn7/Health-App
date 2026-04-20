@@ -13,15 +13,15 @@ test.describe('Regression: Nutrition Log Saved Meals', () => {
     
     // Create a new meal
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     await page.getByTestId('meal-editor-name-input').fill('Test Log Meal');
     
     // Add a manual food item
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
     
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await expect(foodNameInput).toBeVisible({ timeout: 5000 });
     await foodNameInput.fill('Test Chicken Breast');
     
     const caloriesInput = page.locator('input[placeholder="200"]');
@@ -37,14 +37,13 @@ test.describe('Regression: Nutrition Log Saved Meals', () => {
     await fatInput.fill('3');
     
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
-    await page.waitForTimeout(1000);
-    
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 10_000 });
+
     // Verify meal was saved
-    await expect(page.getByText('Test Log Meal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Test Log Meal')).toBeVisible({ timeout: 10_000 });
     
     // Now navigate to Nutrition Log
     await page.goto('./#/nutrition');
@@ -55,7 +54,6 @@ test.describe('Regression: Nutrition Log Saved Meals', () => {
     
     // Click 'Saved Meals' button to open modal
     await page.getByTestId('nutrition-log-add-saved-meal-btn').click();
-    await page.waitForTimeout(300);
     
     // Verify saved meals modal is visible
     await expect(page.getByTestId('nutrition-log-saved-meal-modal')).toBeVisible({ timeout: 3000 });
@@ -63,7 +61,6 @@ test.describe('Regression: Nutrition Log Saved Meals', () => {
     // Click on the saved meal we created (find by name instead of testId)
     await expect(page.getByText('Test Log Meal')).toBeVisible({ timeout: 3000 });
     await page.locator('button').filter({ hasText: 'Test Log Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Verify modal is closed
     await expect(page.getByTestId('nutrition-log-saved-meal-modal')).not.toBeVisible({ timeout: 3000 });

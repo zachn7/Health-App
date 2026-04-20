@@ -16,16 +16,16 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Quantity Test Meal');
     
     // Add a manual food item
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
     
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await expect(foodNameInput).toBeVisible({ timeout: 5000 });
     await foodNameInput.fill('Test Chicken Breast');
     
     const caloriesInput = page.locator('input[placeholder="200"]');
@@ -42,7 +42,6 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Verify food appears in meal with initial values
     await expect(page.getByText('Test Chicken Breast')).toBeVisible({ timeout: 5000 });
@@ -54,11 +53,10 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click edit button on the food item
     await page.getByTestId('meal-item-edit-btn-0').click();
-    await page.waitForTimeout(300);
-    
+
     // Verify edit controls are visible
-    await expect(page.getByTestId('meal-item-qty-type-toggle-0')).toBeVisible({ timeout: 3000 });
-    await expect(page.getByTestId('meal-item-qty-input-0')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByTestId('meal-item-qty-type-toggle-0')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('meal-item-qty-input-0')).toBeVisible({ timeout: 5000 });
     
     // Verify current values (should be 1 serving)
     const qtyInput = page.getByTestId('meal-item-qty-input-0');
@@ -67,7 +65,6 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Change quantity to 2 servings
     await qtyInput.fill('2');
-    await page.waitForTimeout(200);
     
     // Verify live preview shows 600 calories
     const macroCalTile = page.getByTestId('meal-item-macro-cal-0');
@@ -75,7 +72,7 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click Update to commit changes
     await page.getByTestId('meal-item-update-0').click();
-    await page.waitForTimeout(300);
+    await expect(page.getByTestId('meal-item-qty-input-0')).not.toBeVisible({ timeout: 5000 });
     
     // Verify calories updated (should be 2 * 300 = 600)
     // Use testid selector for calories
@@ -85,7 +82,7 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
-    await page.waitForTimeout(1000);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 10_000 });
     
     // Verify meal editor closed
     await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 5000 });
@@ -95,7 +92,7 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click edit on the meal
     await page.getByTitle('Edit meal').click();
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('meal-item-cal-0')).toBeVisible({ timeout: 10_000 });
     
     // Verify quantity persisted (should still show 2 servings with 600 cal)
     // Use specific selectors to avoid matching too many elements
@@ -111,16 +108,16 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Blank Input Test Meal');
     
     // Add a manual food item
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
     
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await expect(foodNameInput).toBeVisible({ timeout: 5000 });
     await foodNameInput.fill('Test Egg');
     
     const caloriesInput = page.locator('input[placeholder="200"]');
@@ -137,7 +134,6 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Verify food appears with initial values
     await expect(page.getByText('Test Egg')).toBeVisible({ timeout: 5000 });
@@ -149,9 +145,9 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click edit button
     await page.getByTestId('meal-item-edit-btn-0').click();
-    await page.waitForTimeout(300);
     
     const qtyInput = page.getByTestId('meal-item-qty-input-0');
+    await expect(qtyInput).toBeVisible({ timeout: 5000 });
     await expect(qtyInput).toHaveValue('1');
     
     // Clear the input entirely
@@ -164,10 +160,9 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click Update to commit changes (defaulting to 0)
     await page.getByTestId('meal-item-update-0').click();
-    await page.waitForTimeout(300);
     
     // Editor should be closed after clicking Update
-    await expect(qtyInput).not.toBeVisible();
+    await expect(qtyInput).not.toBeVisible({ timeout: 5000 });
     
     // Verify macros display shows 0 calories (static display)
     const caloriesText = await page.locator(`text=/cal/`).first().textContent();
@@ -183,16 +178,16 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Arrow Key Test Meal');
     
     // Add a manual food item
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
     
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await expect(foodNameInput).toBeVisible({ timeout: 5000 });
     await foodNameInput.fill('Test Rice');
     
     const caloriesInput = page.locator('input[placeholder="200"]');
@@ -209,16 +204,15 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Verify food appears
     await expect(page.getByText('Test Rice')).toBeVisible({ timeout: 5000 });
     
     // Click edit button
     await page.getByTestId('meal-item-edit-btn-0').click();
-    await page.waitForTimeout(300);
     
     const qtyInput = page.getByTestId('meal-item-qty-input-0');
+    await expect(qtyInput).toBeVisible({ timeout: 5000 });
     await expect(qtyInput).toHaveValue('1');
     
     // Clear the input
@@ -241,7 +235,6 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     const gramsButton = page.getByText('Grams');
     if (await gramsButton.isVisible()) {
       await gramsButton.click();
-      await page.waitForTimeout(200);
     }
     
     // Verify current value in grams (should be integer)
@@ -278,16 +271,16 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Live Preview Test Meal');
     
     // Add a manual food item
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
     
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
+    await expect(foodNameInput).toBeVisible({ timeout: 5000 });
     await foodNameInput.fill('Beef Steak');
     
     const caloriesInput = page.locator('input[placeholder="200"]');
@@ -304,7 +297,6 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Verify food appears with initial values (1 serving = 300 cal)
     await expect(page.getByText('Beef Steak')).toBeVisible({ timeout: 5000 });
@@ -316,9 +308,9 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Click edit button
     await page.getByTestId('meal-item-edit-btn-0').click();
-    await page.waitForTimeout(300);
     
     const qtyInput = page.getByTestId('meal-item-qty-input-0');
+    await expect(qtyInput).toBeVisible({ timeout: 5000 });
     const macroCalTile = page.getByTestId('meal-item-macro-cal-0');
     
     // Focus the input
@@ -326,14 +318,12 @@ test.describe('Regression: Meal Item Quantity Editing', () => {
     
     // Type new quantity without blurring
     await qtyInput.fill('2');
-    await page.waitForTimeout(100);
     
     // Verify macro tile updated immediately (2 * 300 = 600 cal)
     await expect(macroCalTile).toContainText('600');
     
     // Continue typing without blurring
     await qtyInput.fill('3');
-    await page.waitForTimeout(100);
     
     // Verify macro tile updated immediately (3 * 300 = 900 cal)
     await expect(macroCalTile).toContainText('900');

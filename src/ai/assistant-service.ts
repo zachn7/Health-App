@@ -25,7 +25,14 @@ class AssistantService {
       case 'deterministic':
         return this.deterministicProvider
       case 'webllm':
-        return await this.getWebLLMProvider()
+        try {
+          return await this.getWebLLMProvider()
+        } catch (error) {
+          // WebLLM is optional and can fail to initialize (no WebGPU, blocked wasm, etc).
+          // Falling back keeps the app usable.
+          console.warn('WebLLM assistant provider unavailable. Falling back to deterministic.', error)
+          return this.deterministicProvider
+        }
       case 'openrouter':
       default:
         return this.deterministicProvider

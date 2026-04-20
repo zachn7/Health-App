@@ -349,11 +349,8 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Search for USDA food
     await page.getByTestId('usda-search-input').fill('apple');
     
-    // Wait for debounce delay (500ms) + buffer for search to complete
-    await page.waitForTimeout(600);
-    
-    // Wait for search results to appear
-    await expect(page.getByTestId('usda-results')).toBeVisible();
+    // Wait for search results to appear (debounced)
+    await expect(page.getByTestId('usda-results')).toBeVisible({ timeout: 10_000 });
     
     // Click "Add" button on the test apple
     const addFoodButton = page.getByTestId('usda-add-food').first();
@@ -385,7 +382,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.getByTestId('usda-search-button').click();
     await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('apple');
-    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     
     // Use first add button (assuming mock returns Test Apple first)
@@ -399,8 +395,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.getByTestId('usda-search-button').click();
     await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('banana');
-    await page.waitForTimeout(600);
-    await expect(page.getByTestId('usda-results')).toBeVisible();
+        await expect(page.getByTestId('usda-results')).toBeVisible();
     const bananaButton = page.getByTestId('usda-add-food').first();  // First result when searching 'banana'
     await bananaButton.click();
     await expect(bananaButton).not.toHaveText('Adding...', { timeout: 10000 });
@@ -417,7 +412,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.getByTestId('usda-search-button').click();
     await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('apple');
-    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     
     // Use first add button (assuming mock returns Test Apple first)
@@ -431,8 +425,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.getByTestId('usda-search-button').click();
     await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('banana');
-    await page.waitForTimeout(600);
-    await expect(page.getByTestId('usda-results')).toBeVisible();
+        await expect(page.getByTestId('usda-results')).toBeVisible();
     const bananaButton = page.getByTestId('usda-add-food').first();  // First result when searching 'banana'
     await bananaButton.click();
     await expect(bananaButton).not.toHaveText('Adding...', { timeout: 10000 });
@@ -462,7 +455,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.getByTestId('usda-search-button').click();
     await expect(page.getByTestId('usda-import-modal')).toBeVisible();
     await page.getByTestId('usda-search-input').fill('banana');
-    await page.waitForTimeout(600);
     await expect(page.getByTestId('usda-results')).toBeVisible();
     
     // Use first add button (Test Banana)
@@ -649,8 +641,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for 'small pack' to find the 30g food
       await page.getByTestId('usda-search-input').fill('small');
-      await page.waitForTimeout(600);
-      
+            
       // Wait for search results to appear
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -689,14 +680,11 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for 'apple' (Foundation food with no specific serving size)
       await page.getByTestId('usda-search-input').fill('apple');
-      await page.waitForTimeout(600);
-      
       // Wait for search results to appear
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
       // Wait for hydration to complete (details fetch happens after results)
-      await page.waitForTimeout(2000);
-      
+            
       const appleRow = page.locator('[data-fdc-id="123456"]');
       
       // Foundation foods with per-100g macros should show 'per 100 g'
@@ -729,8 +717,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for infer-cal food (missing calories, has P/C/F: 20/30/10g)
       await page.getByTestId('usda-search-input').fill('infer-cal');
-      await page.waitForTimeout(600);
-      
       // Wait for search results
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -749,8 +735,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await addCalButton.click();
       
       // Wait longer for import/processing (inference might take a moment)
-      await page.waitForTimeout(2000);
-      
+        
       // Verify food was added (inference succeeded)
       await expect(page.getByTestId('nutrition-food-item')).toBeVisible();
       
@@ -777,8 +762,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for infer-prot food (missing protein, has cal/C/F: 500/30/10)
       await page.getByTestId('usda-search-input').fill('infer-prot');
-      await page.waitForTimeout(600);
-      
       // Wait for search results
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -796,8 +779,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await addProtButton.click();
       
       // Wait longer for import/processing (inference might take a moment)
-      await page.waitForTimeout(2000);
-      
+            
       // Verify food was added (inference succeeded)
       await expect(page.getByTestId('nutrition-food-item')).toBeVisible();
       
@@ -820,8 +802,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for incomplete food (missing fat and carbs, has cal/P: 100/5)
       await page.getByTestId('usda-search-input').fill('incomplete');
-      await page.waitForTimeout(600);
-      
       // Wait for search results
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -833,8 +813,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await addIncompleteButton.click();
       
       // Wait for UI to update
-      await page.waitForTimeout(1000);
-      
+            
       // Verify food was NOT added (blocked)
       await expect(page.getByTestId('nutrition-food-item')).not.toBeVisible();
       
@@ -860,8 +839,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await expect(page.getByTestId('usda-import-modal')).toBeVisible();
       
       await page.getByTestId('usda-search-input').fill('water');
-      await page.waitForTimeout(600);
-      
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
       // Verify zero values are shown (not N/A) and no warning badge
@@ -898,8 +875,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for 'small pack' (30g food)
       await page.getByTestId('usda-search-input').fill('small');
-      await page.waitForTimeout(600);
-      
       // Wait for search results to appear and hydration to complete
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -907,7 +882,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       const smallPackRow = page.locator('[data-fdc-id="999999"]');
       
       // Wait for hydration (macro values to appear)
-      await page.waitForTimeout(2000);
+      await expect(smallPackRow.getByText(/cal/i)).toBeVisible({ timeout: 10_000 });
       
       // Get preview macro values
       const previewCalories = await smallPackRow.getByText(/cal/).textContent();
@@ -1023,12 +998,10 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for the test food
       await page.getByTestId('usda-search-input').fill('test 30g');
-      await page.waitForTimeout(1000);
-      
+        
       // Wait for search results and hydration to complete
       await expect(page.getByTestId('usda-results')).toBeVisible();
-      await page.waitForTimeout(3000); // Wait for hydration
-      
+            
       // Verify display shows "1 serving (30g)" NOT "1 serving (100g)"
       // After hydration, the display should use the actual serving size from food details
       await expect(page.getByText('1 serving (30g)')).toBeVisible();
@@ -1113,8 +1086,6 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search for the test food
       await page.getByTestId('usda-search-input').fill('test foundation');
-      await page.waitForTimeout(600);
-      
       // Verify display shows "per 100 g" explicitly
       await expect(page.getByText('per 100 g')).toBeVisible();
       
@@ -1140,11 +1111,9 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       // Search for partial query 'cheeseca' - should return 0 initially
       // then trigger query relaxation to 'cheese'
       await page.getByTestId('usda-search-input').fill('cheeseca');
-      await page.waitForTimeout(300); // Debounce delay
-      
+            
       // Wait for relaxation to complete (might need multiple queries)
-      await page.waitForTimeout(1000);
-      
+            
       // Should show results due to relaxation
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -1174,8 +1143,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       await page.getByTestId('usda-search-input').fill('cheeseca');
       
       // Wait for api call + debounce + reranking + relaxation
-      await page.waitForTimeout(1500);
-      
+            
       // Should show results
       await expect(page.getByTestId('usda-results')).toBeVisible();
       
@@ -1214,10 +1182,9 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
       
       // Search with partial query
       await page.getByTestId('usda-search-input').fill('chick');
-      await page.waitForTimeout(300);
-      
-      // Wait a bit more for relaxation
-      await page.waitForTimeout(1000);
+            
+      // Wait for results to settle (relaxation may run)
+      await expect(page.getByTestId('usda-results')).toBeVisible({ timeout: 10_000 });
       
       // Check if relaxation hint appears (may not always show for all queries)
       // This is a soft test - if relaxation is used, show hint

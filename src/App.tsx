@@ -27,9 +27,11 @@ import ErrorBoundary from './components/ErrorBoundary';
 // Hooks
 import { useLocalStorage } from './hooks/useLocalStorage';
 
+import { testIds } from './testIds';
+
 function RouteFallback() {
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid={testIds.app.routeFallback}>
       <div className="card text-center py-10">
         <div className="text-lg font-medium text-gray-900">Loading page...</div>
         <p className="mt-2 text-sm text-gray-600">Hang tight, the app is fetching only what this route actually needs.</p>

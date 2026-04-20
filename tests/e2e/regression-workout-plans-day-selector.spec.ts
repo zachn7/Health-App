@@ -1,25 +1,23 @@
 import { test, expect } from '@playwright/test';
-import { setupTestProfile } from './helpers/setupProfile';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 import { testIds } from '../../src/testIds';
 
 const VISIBLE_DAYS = 5;
 
 test.describe('Regression: Workout Plans Day Selector Carousel', () => {
   test.beforeEach(async ({ context }) => {
-    // Set age gate to pass BEFORE page loads
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
   });
 
   test('should show day carousel when plan has many days (>5)', async ({ page }) => {
-    // Set up profile
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Switch to Presets tab
     const presetsTab = page.getByTestId('workouts-presets-tab');
@@ -34,39 +32,33 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
-    await page.waitForTimeout(3000);
 
     // Open the first workout plan
     const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
     await expect(workoutPlanCards.first()).toBeVisible({ timeout: 10000 });
     await workoutPlanCards.first().getByRole('button', { name: 'View', exact: true }).click();
-    await page.waitForTimeout(2000);
 
-    // Check if day carousel is visible (only if >5 days)
-    const dayCarouselContainer = page.getByTestId('workout-plan-days-prev').locator('..').locator('..');
-    const dayCarouselVisible = await dayCarouselContainer.isVisible().catch(() => false);
+    const dayCards = page.locator('[data-testid^="workout-day-"]');
+    await expect(dayCards.first()).toBeVisible({ timeout: 10_000 });
 
-    if (dayCarouselVisible) {
-      // Verify prev/next arrows exist
+    const dayCount = await dayCards.count();
+    if (dayCount > VISIBLE_DAYS) {
       const prevButton = page.getByTestId('workout-plan-days-prev');
       const nextButton = page.getByTestId('workout-plan-days-next');
-      
-      await expect(prevButton).toBeVisible();
-      await expect(nextButton).toBeVisible();
-      
-      console.log('✅ Day carousel visible for plan with many days');
+      await expect(prevButton).toBeVisible({ timeout: 5000 });
+      await expect(nextButton).toBeVisible({ timeout: 5000 });
+      console.log(`✅ Day carousel visible for plan with many days (${dayCount})`);
     } else {
-      console.log('ℹ️  Plan has <=5 days, day carousel not shown (expected)');
+      await expect(page.getByTestId('workout-plan-days-prev')).toHaveCount(0);
+      await expect(page.getByTestId('workout-plan-days-next')).toHaveCount(0);
+      console.log(`ℹ️  Plan has <=${VISIBLE_DAYS} days (${dayCount}), carousel not shown (expected)`);
     }
   });
 
   test('should page through days using carousel arrows', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Find or create a plan with many days
     const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
@@ -76,12 +68,10 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
       // Generate a plan first
       const generateButton = page.getByTestId('generate-workout-plan-btn');
       await generateButton.click();
-      await page.waitForTimeout(500);
       
       const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-      await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+      await expect(profileModeButton).toBeVisible({ timeout: 10_000 });
       await profileModeButton.click();
-      await page.waitForTimeout(300);
       
       page.on('dialog', dialog => dialog.accept());
       
@@ -94,7 +84,7 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Open first plan (click View button)
     await workoutPlanCards.first().getByRole('button', { name: 'View', exact: true }).click();
-    await page.waitForTimeout(2000);
+    await expect(page.locator('[data-testid^="workout-day-"]').first()).toBeVisible({ timeout: 10_000 });
 
     // Try to add days until we have >5
     const addDayButton = page.getByRole('button', { name: /add day/i });
@@ -105,8 +95,9 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Add days if needed (aim for at least 7)
     while (dayCount < 7) {
+      const before = dayCount;
       await addDayButton.click();
-      await page.waitForTimeout(500);
+      await expect.poll(async () => await page.locator('[data-testid^="workout-day-"]').count(), { timeout: 10_000 }).toBeGreaterThan(before);
       dayCount = await page.locator('[data-testid^="workout-day-"]').count();
       console.log('Day count after adding:', dayCount);
       
@@ -133,7 +124,7 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Click next to scroll
     await nextButton.click();
-    await page.waitForTimeout(300);
+    await expect(prevButton).toBeEnabled({ timeout: 5_000 });
     
     // Verify prev is now enabled
     const prevAfterNext = await prevButton.isDisabled();
@@ -143,7 +134,7 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Click prev to go back
     await prevButton.click();
-    await page.waitForTimeout(300);
+    await expect(prevButton).toBeDisabled({ timeout: 5_000 });
     
     // Verify prev is disabled again
     const prevAfterPrev = await prevButton.isDisabled();
@@ -159,7 +150,6 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
       let clicks = 0;
       while (!nextDisabled && clicks < 10) {
         await nextButtonAfter.click();
-        await page.waitForTimeout(300);
         nextDisabled = await nextButtonAfter.isDisabled();
         clicks++;
       }
@@ -175,11 +165,8 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
 
   test('should scroll to day cards when clicking day buttons', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Find or create a plan with many days
     const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
@@ -189,12 +176,10 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
       // Generate a plan
       const generateButton = page.getByTestId('generate-workout-plan-btn');
       await generateButton.click();
-      await page.waitForTimeout(500);
       
       const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-      await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+      await expect(profileModeButton).toBeVisible({ timeout: 10_000 });
       await profileModeButton.click();
-      await page.waitForTimeout(300);
       
       page.on('dialog', dialog => dialog.accept());
       
@@ -207,15 +192,16 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Open first plan (click View button)
     await workoutPlanCards.first().getByRole('button', { name: 'View', exact: true }).click();
-    await page.waitForTimeout(2000);
+    await expect(page.getByTestId('workout-plan-day-complete-0-0')).toBeVisible({ timeout: 10_000 });
 
     // Add days until we have >5
     const addDayButton = page.getByRole('button', { name: /add day/i });
     let dayCount = await page.locator('[data-testid^="workout-day-"]').count();
     
     while (dayCount < 7) {
+      const before = dayCount;
       await addDayButton.click();
-      await page.waitForTimeout(500);
+      await expect.poll(async () => await page.locator('[data-testid^="workout-day-"]').count(), { timeout: 10_000 }).toBeGreaterThan(before);
       dayCount = await page.locator('[data-testid^="workout-day-"]').count();
       if (dayCount > 10) break;
     }
@@ -234,7 +220,6 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
       
       // Click first day button
       await firstDayButton.click();
-      await page.waitForTimeout(500);
       
       // Verify it's now highlighted
       await expect(firstDayButton).toHaveClass(/bg-blue-600/);
@@ -245,11 +230,8 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
 
   test('should toggle day completion and persist after reload', async ({ page }) => {
     // Set up profile
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Find or create a plan
     const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
@@ -259,12 +241,10 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
       // Generate a plan
       const generateButton = page.getByTestId('generate-workout-plan-btn');
       await generateButton.click();
-      await page.waitForTimeout(500);
       
       const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-      await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+      await expect(profileModeButton).toBeVisible({ timeout: 10_000 });
       await profileModeButton.click();
-      await page.waitForTimeout(300);
       
       page.on('dialog', dialog => dialog.accept());
       
@@ -277,7 +257,7 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Open first plan (click View button)
     await workoutPlanCards.first().getByRole('button', { name: 'View', exact: true }).click();
-    await page.waitForTimeout(2000);
+    await expect(page.getByTestId('workout-plan-day-complete-0-0')).toBeVisible({ timeout: 10_000 });
 
     // Find first day's completion toggle
     const firstDayToggle = page.getByTestId('workout-plan-day-complete-0-0');
@@ -289,7 +269,6 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Toggle day as completed
     await firstDayToggle.click();
-    await page.waitForTimeout(500);
     
     // Verify green background appears
     await expect(parentCard).toHaveClass(/bg-green-50/);
@@ -301,14 +280,14 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Reload page to test persistence
     await page.reload();
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
     
     // Re-open the plan
     const planCardsAfterReload = page.locator('[data-testid^="workout-plan-"]');
     if (await planCardsAfterReload.count() > 0) {
       // If we're on the list view, click View button
       await planCardsAfterReload.first().getByRole('button', { name: 'View', exact: true }).click();
-      await page.waitForTimeout(2000);
+      await expect(page.getByTestId('workout-plan-day-complete-0-0')).toBeVisible({ timeout: 10_000 });
     }
     
     // Find the day toggle again
@@ -323,7 +302,6 @@ test.describe('Regression: Workout Plans Day Selector Carousel', () => {
     
     // Toggle back to incomplete
     await firstDayToggleAfterReload.click();
-    await page.waitForTimeout(500);
     
     // Verify green background removed
     await expect(parentCardAfterReload).not.toHaveClass(/bg-green-50/);

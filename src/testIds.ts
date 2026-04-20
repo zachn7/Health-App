@@ -281,6 +281,11 @@ export const testIds = {
     sidebarNav: 'sidebar-nav',
   },
 
+  // App shell
+  app: {
+    routeFallback: 'route-fallback',
+  },
+
   // Layout
   layout: {
     mainContent: 'main-content',

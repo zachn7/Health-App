@@ -21,20 +21,17 @@ test.describe('Smoke: Workout Features', () => {
       await createButton.click();
       
       // Wait for modal to appear
-      await page.waitForTimeout(500);
       
       // Check for program name input
       const nameInput = page.getByPlaceholder('Enter program name');
       if (await nameInput.isVisible({ timeout: 3000 })) {
         await nameInput.fill('Test Workout Program');
-        await page.waitForTimeout(300);
         
         // Look for exercise counts (e.g., "0 exercises")
         const exerciseCountButton = page.locator('button').filter({ hasText: /exercises/ });
         
         if (await exerciseCountButton.first().isVisible()) {
           await exerciseCountButton.first().click();
-          await page.waitForTimeout(500);
           
           // Check for search input
           const searchInput = page.getByPlaceholder('Search exercises...').first();
@@ -42,13 +39,11 @@ test.describe('Smoke: Workout Features', () => {
           if (await searchInput.isVisible({ timeout: 3000 })) {
             // Type "bench" to search
             await searchInput.fill('bench');
-            await page.waitForTimeout(500);
             
             // Look for result container
             const resultsContainer = page.locator('.space-y-2').first();
             
             // Wait a bit for results to load
-            await page.waitForTimeout(1000);
             
             // Verify we can see exercise results
             if (await resultsContainer.isVisible()) {
@@ -71,26 +66,22 @@ test.describe('Smoke: Workout Features', () => {
     
     if (await createButton.isVisible({ timeout: 5000 })) {
       await createButton.click();
-      await page.waitForTimeout(500);
       
       const nameInput = page.getByPlaceholder('Enter program name');
       
       if (await nameInput.isVisible({ timeout: 3000 })) {
         await nameInput.fill('Squat Test');
-        await page.waitForTimeout(300);
         
         // Try to search for squat exercises
         const exerciseCountButton = page.locator('button').filter({ hasText: /exercises/ });
         
         if (await exerciseCountButton.first().isVisible()) {
           await exerciseCountButton.first().click();
-          await page.waitForTimeout(500);
           
           const searchInput = page.getByPlaceholder('Search exercises...').first();
           
           if (await searchInput.isVisible({ timeout: 3000 })) {
             await searchInput.fill('squat');
-            await page.waitForTimeout(500);
             
             // Just verify search input works - results may vary
             expect(await searchInput.inputValue()).toBe('squat');
@@ -165,14 +156,12 @@ test.describe('Smoke: Workout Features', () => {
     
     // Click filter toggle to open
     await filterToggle.click();
-    await page.waitForTimeout(300);
     
     // Verify filter controls are now visible
     await expect(filtersPanel).toBeVisible({ timeout: 3000 });
     
     // Click filter toggle to close
     await filterToggle.click();
-    await page.waitForTimeout(300);
     
     // Verify filters panel is hidden
     await expect(filtersPanel).not.toBeVisible({ timeout: 3000 });

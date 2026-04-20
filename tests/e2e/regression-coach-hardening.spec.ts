@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+async function waitForNonTrivialBody(page: import('@playwright/test').Page) {
+  await expect
+    .poll(async () => {
+      const body = await page.textContent('body');
+      return body?.length ?? 0;
+    }, { timeout: 10_000 })
+    .toBeGreaterThan(50);
+}
+
 test.describe('Regression: Coach Route Hardening (R09)', () => {
   test.beforeEach(async ({ page, context }) => {
     // Set up age gate
@@ -13,8 +22,7 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
     
-    // Wait for page to load fully
-    await page.waitForTimeout(3000);
+    await waitForNonTrivialBody(page);
     
     // Verify we're NOT on the global error screen - this is THE critical test
     const errorScreen = page.getByText('Application Error');
@@ -35,7 +43,7 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
     // Navigate to Coach page
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(3000);
+    await waitForNonTrivialBody(page);
     
     // Verify global error screen is NOT shown
     const errorScreen = page.getByText('Application Error');
@@ -55,7 +63,7 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
     // Navigate to Coach page
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(3000);
+    await waitForNonTrivialBody(page);
     
     // After page loads, verify no global crash
     const errorScreen = page.getByText('Application Error');
@@ -74,7 +82,7 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
   test('should render Coach features even without WebGPU', async ({ page }) => {
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(3000);
+    await waitForNonTrivialBody(page);
     
     // Verify no global crash
     const errorScreen = page.getByText('Application Error');
@@ -94,12 +102,12 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
     // Navigate to dashboard first
     await page.goto('./#/dashboard');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await waitForNonTrivialBody(page);
     
     // Navigate to coach
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(3000);
+    await waitForNonTrivialBody(page);
     
     // Verify no crash
     const errorScreen = page.getByText('Application Error');
@@ -123,7 +131,7 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
     
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(3000);
+    await waitForNonTrivialBody(page);
     
     // Verify no global crash
     const errorScreen = page.getByText('Application Error');
@@ -142,14 +150,14 @@ test.describe('Regression: Coach Route Hardening (R09)', () => {
   test('should allow retry after AI initialization failure', async ({ page }) => {
     await page.goto('./#/coach');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
+    await waitForNonTrivialBody(page);
     
     // Look for retry button or reload options
     const retryButton = page.getByRole('button', { name: /Retry|Reload|Try Again/i });
     
     if (await retryButton.isVisible({ timeout: 3000 })) {
       await retryButton.click();
-      await page.waitForTimeout(2000);
+      await waitForNonTrivialBody(page);
     }
     
     // After retry, verify no global crash

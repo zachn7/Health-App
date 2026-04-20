@@ -1,22 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { setupTestProfile } from './helpers/setupProfile';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 
 test.describe('Regression: Meal Presets Import - Complete Flow', () => {
   test.beforeEach(async ({ context }) => {
-    // Set age gate to pass BEFORE page loads
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
+    // Fast, deterministic starting state (no UI profile setup, no age gate).
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
   });
 
   test('should import preset as meal plan and edit title', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    // Navigate to Meals page
-    await page.goto('./#/meals');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/meals');
+    await waitForRouteReady(page);
 
     // Switch to Presets tab
     const presetsTab = page.getByTestId('meals-presets-tab');
@@ -34,8 +33,7 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
     await expect(importButton).toBeVisible();
     await importButton.click();
 
-    // Wait for navigation to Meal Plans tab and editor to load
-    await page.waitForTimeout(2000);
+    // Wait for editor to load (no arbitrary sleep pls)
 
     // Verify we're on Meal Plans tab
     const mealPlansTab = page.getByTestId('meals-meal-plans-tab');
@@ -54,37 +52,33 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
     await titleInput.clear();
     await titleInput.fill(newTitle);
 
-    // Trigger blur to save by clicking outside
-    await page.mouse.click(100, 100);
-    await page.waitForTimeout(1000);
+    // Trigger blur to save
+    await page.mouse.click(0, 0);
 
-    // Click outside to close editor
-    await page.mouse.click(500, 500);
-    await page.waitForTimeout(500);
+    // Close editor and ensure the updated title made it to the list (i.e., save finished)
+    const closeEditorButton = page.getByTestId('meal-plan-close-editor-btn');
+    await closeEditorButton.click();
+    await expect(page.getByText(newTitle)).toBeVisible({ timeout: 10_000 });
 
     // Reload to verify persistence
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await waitForRouteReady(page);
 
     // Navigate to Meals page directly (should reset any modal/editor state)
-    await page.goto('./#/meals');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/meals');
+    await waitForRouteReady(page);
 
     // Click Meal Plans tab
     const mealPlansTabAfterReload = page.getByTestId('meals-meal-plans-tab');
     await mealPlansTabAfterReload.click();
-    await page.waitForTimeout(1000);
 
     // Verify the meal plans tab shows our edited plan
-    await expect(page.getByText(newTitle)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(newTitle)).toBeVisible({ timeout: 10_000 });
   });
 
   test('should import preset and persist after reload', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    await page.goto('./#/meals');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/meals');
+    await waitForRouteReady(page);
 
     const presetsTab = page.getByTestId('meals-presets-tab');
     await presetsTab.click();
@@ -97,8 +91,7 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
 
-    // Wait for import to complete
-    await page.waitForTimeout(2000);
+    // Wait for import to complete by waiting on the editor UI
 
     // Get the plan title
     const titleInput = page.getByTestId('meal-plan-title-input');
@@ -106,23 +99,19 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
 
     // Reload the page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await waitForRouteReady(page);
 
     // Navigate to Meal Plans
     const mealPlansTab = page.getByTestId('meals-meal-plans-tab');
     await mealPlansTab.click();
-    await page.waitForTimeout(1000);
 
     // Verify the imported plan persists
     await expect(page.getByText(planTitle)).toBeVisible({ timeout: 5000 });
   });
 
   test('should import preset and show structure in editor', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    await page.goto('./#/meals');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/meals');
+    await waitForRouteReady(page);
 
     const presetsTab = page.getByTestId('meals-presets-tab');
     await presetsTab.click();
@@ -132,8 +121,7 @@ test.describe('Regression: Meal Presets Import - Complete Flow', () => {
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
     await importButton.click();
 
-    // Wait for editor to load
-    await page.waitForTimeout(2000);
+    // Wait for editor to load (by waiting on expected UI)
 
     // Verify editor shows day structure
     await expect(page.getByText('Day Structure')).toBeVisible({ timeout: 5000 });

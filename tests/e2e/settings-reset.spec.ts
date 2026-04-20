@@ -24,7 +24,7 @@ test.describe('Settings: Reset App Data', () => {
     // Navigate to Settings
     await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
     
     // Get initial URL
     const initialUrl = page.url();
@@ -44,8 +44,8 @@ test.describe('Settings: Reset App Data', () => {
     await resetButton.click();
     
     // Wait for page reload - the reload uses a cache-busting query param
-    await page.waitForTimeout(5000);
-    
+    await page.waitForURL(url => url.toString().includes('reset='), { timeout: 15_000 });
+
     // Check that the URL changed (has reset parameter)
     const url = page.url();
     console.log('URL after reset:', url);
@@ -54,7 +54,7 @@ test.describe('Settings: Reset App Data', () => {
     
     // Wait for the new page to load
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.locator('body')).toBeVisible();
     
     // Verify the page reloaded and is in a valid state
     const bodyContent = await page.textContent('body');
@@ -66,7 +66,7 @@ test.describe('Settings: Reset App Data', () => {
   test('should show confirmation dialog before reset', async ({ page }) => {
     await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('reset-app-data-btn')).toBeVisible({ timeout: 10_000 });
     
     const resetButton = page.getByTestId('reset-app-data-btn');
     await expect(resetButton).toBeVisible();
@@ -83,10 +83,9 @@ test.describe('Settings: Reset App Data', () => {
     });
     
     await resetButton.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify dialog was shown
-    expect(dialogShown).toBeTruthy();
+    await expect.poll(() => dialogShown, { timeout: 5_000 }).toBeTruthy();
     expect(dialogMessage).toContain('Warning: This will permanently delete all your data');
     expect(dialogMessage).toContain('profiles');
     expect(dialogMessage).toContain('cannot be undone');
@@ -99,7 +98,7 @@ test.describe('Settings: Reset App Data', () => {
     
     await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('reset-app-data-btn')).toBeVisible({ timeout: 10_000 });
     
     const resetButton = page.getByTestId('reset-app-data-btn');
     
@@ -109,9 +108,9 @@ test.describe('Settings: Reset App Data', () => {
     });
     
     await resetButton.click();
-    await page.waitForTimeout(1000);
-    
+
     // Verify we're still on settings page (no reload)
+    await expect(page).toHaveURL(/#\/settings/);
     const currentUrl = page.url();
     expect(currentUrl).toContain('/settings');
     
@@ -125,7 +124,7 @@ test.describe('Settings: Reset App Data', () => {
   test('should have reset button visible in settings', async ({ page }) => {
     await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('reset-app-data-btn')).toBeVisible({ timeout: 10_000 });
     
     // Verify reset button exists and is visible
     const resetButton = page.getByTestId('reset-app-data-btn');
@@ -140,7 +139,7 @@ test.describe('Settings: Reset App Data', () => {
   test('should show detailed explanation near reset button', async ({ page }) => {
     await gotoApp(page, '/settings');
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('reset-app-data-btn')).toBeVisible({ timeout: 10_000 });
     
     const resetButton = page.getByTestId('reset-app-data-btn');
     

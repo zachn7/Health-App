@@ -14,6 +14,7 @@ test.describe('Smoke: Age Gate', () => {
     await page.getByTestId('age-gate-continue').click();
     
     // Should navigate to onboarding
+    await expect(page).toHaveURL(/#\/onboarding/);
     await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
     // Tagline comes from src/config/app.ts (DRY), so don't hardcode it in tests.
     await expect(page.getByText('Your all-in-one AI fitness companion')).toBeVisible();

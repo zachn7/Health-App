@@ -13,14 +13,14 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.getByRole('heading', { name: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Macro Display Test Meal');
     
     // Open manual food form
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('input[placeholder*="e.g., Homemade Salad"]')).toBeVisible({ timeout: 5000 });
     
     // Fill in manual food form with all macros
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
@@ -40,11 +40,11 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Chicken Breast')).toBeVisible({ timeout: 5000 });
     
     // Save the meal
     await page.getByRole('button', { name: 'Save Meal' }).click();
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('meal-editor-name-input')).toBeHidden({ timeout: 10000 });
     
     // Navigate back to meals list
     await page.goto('./#/meals');
@@ -57,9 +57,7 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     // Click Edit button - it's a button with an SVG icon
     const editButton = mealCard.locator('button').nth(0); // First button is Edit
     await editButton.click();
-    
-    // Wait for editor to load
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('meal-item-row-0')).toBeVisible({ timeout: 5000 });
     
     // Find the meal item row (should be index 0)
     const mealItemRow = page.getByTestId('meal-item-row-0');
@@ -88,14 +86,14 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.getByRole('heading', { name: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Card View Macros Test');
     
     // Open manual food form
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('input[placeholder*="e.g., Homemade Salad"]')).toBeVisible({ timeout: 5000 });
     
     // Fill in manual food form with all macros
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
@@ -115,11 +113,11 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Salmon Fillet')).toBeVisible({ timeout: 5000 });
     
     // Save the meal
     await page.getByRole('button', { name: 'Save Meal' }).click();
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('meal-editor-name-input')).toBeHidden({ timeout: 10000 });
     
     // Navigate back to meals list
     await page.goto('./#/meals');
@@ -133,7 +131,6 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     const detailsElement = mealCard.locator('details').first();
     // Use JavaScript to set the open attribute
     await page.evaluate((el) => el.setAttribute('open', ''), await detailsElement.elementHandle());
-    await page.waitForTimeout(300);
     
     // Verify the ingredient item is visible
     // Look for the ingredient within the meal card
@@ -161,7 +158,7 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Verify meal editor opened
     await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
@@ -171,7 +168,7 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Open manual food form
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('input[placeholder*="e.g., Homemade Salad"]')).toBeVisible({ timeout: 5000 });
     
     // Fill in manual food form
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
@@ -191,14 +188,14 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Test Food')).toBeVisible({ timeout: 5000 });
     
     // Verify food appears in meal editor
     await expect(page.getByText('Test Food')).toBeVisible({ timeout: 5000 });
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
-    await page.waitForTimeout(1000);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 10000 });
     
     // Verify meal editor closed
     await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 5000 });
@@ -218,14 +215,14 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name
     await page.getByTestId('meal-editor-name-input').fill('Persistence Test Meal');
     
     // Open manual food form and add food
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('input[placeholder*="e.g., Homemade Salad"]')).toBeVisible({ timeout: 5000 });
     
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
     await foodNameInput.fill('Persistence Food');
@@ -244,11 +241,11 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Persistence Food')).toBeVisible({ timeout: 5000 });
     
     // Save the meal
     await page.getByTestId('meal-editor-save-btn').click();
-    await page.waitForTimeout(1000);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 10000 });
     
     // Refresh the page
     await page.reload();
@@ -268,12 +265,12 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Don't set meal name
     // Try to open manual food form
     await page.getByTestId('meal-editor-add-manual-food-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('input[placeholder*="e.g., Homemade Salad"]')).toBeVisible({ timeout: 5000 });
     
     // Add food
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
@@ -293,7 +290,7 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Test Food')).toBeVisible({ timeout: 5000 });
     
     // Try to save without meal name - button should be disabled
     const saveButton = page.getByTestId('meal-editor-save-btn');
@@ -307,7 +304,7 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Save and verify success
     await saveButton.click();
-    await page.waitForTimeout(1000);
+    await expect(page.getByText('Named Meal')).toBeVisible({ timeout: 10000 });
     
     // Verify meal appears in list
     await expect(page.getByText('Named Meal')).toBeVisible({ timeout: 5000 });
@@ -326,14 +323,13 @@ test.describe('Regression: Meal Save Persistence (R05)', () => {
     
     // Click "Create New Meal" button
     await page.getByTestId('create-new-meal-btn').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Set meal name but don't add food
     await page.getByTestId('meal-editor-name-input').fill('Empty Meal');
     
     // Try to save without food items - should show alert
     await page.getByTestId('meal-editor-save-btn').click();
-    await page.waitForTimeout(500);
     
     // Meal editor should still be open (alert was shown but didn't close it)
     await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });

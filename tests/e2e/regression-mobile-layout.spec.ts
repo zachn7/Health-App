@@ -149,9 +149,6 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
     await page.getByRole('link', { name: 'Profile' }).click();
     await expect(page).toHaveURL(/.*profile/);
 
-    // Wait for page to settle
-    await page.waitForTimeout(500);
-
     await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible();
     await expect(page.getByTestId(testIds.nav.toggleBtn)).toBeVisible();
 
@@ -166,9 +163,6 @@ test.describe('Mobile Layout (390x844 viewport)', () => {
     // Find the Workouts link in the mobile drawer (use first since desktop sidebar is hidden)
     await drawer.locator('a[href="#/workouts"]').click();
     await expect(page).toHaveURL(/.*workouts/);
-
-    // Wait for page to settle
-    await page.waitForTimeout(500);
 
     await expect(page.getByTestId(testIds.layout.mainContent)).toBeVisible();
     await expect(page.getByTestId(testIds.nav.toggleBtn)).toBeVisible();

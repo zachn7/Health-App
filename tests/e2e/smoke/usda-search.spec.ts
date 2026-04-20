@@ -133,7 +133,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await searchResponse;
     
     // Wait for debounce delay and DOM update
-    await page.waitForTimeout(600); // 500ms debounce + buffer
     
     // Should show search results container
     const resultsContainer = page.getByTestId('usda-results');
@@ -166,7 +165,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Search for food
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
     
     // Wait for results to appear
     await expect(page.getByTestId('usda-results')).toBeVisible({ timeout: 10000 });
@@ -191,7 +189,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await expect(addButton.getByText('Adding...')).not.toBeVisible({ timeout: 10000 });
     
     // Wait a bit for the UI to update
-    await page.waitForTimeout(500);
     
     // Close the USDA import modal by clicking the search button again (toggles it closed)
     await page.getByTestId('usda-search-button').click();
@@ -247,7 +244,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Search for food
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
     
     // Wait for results to appear
     await expect(page.getByTestId('usda-results')).toBeVisible({ timeout: 10000 });
@@ -281,7 +277,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     
     // Close the USDA import modal
     await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
     
     // Count nutrition log items - should have increased by 2
     const nutritionLogItems = nutritionLogList.getByTestId('nutrition-food-item');
@@ -315,7 +310,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     );
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
 
     // Add first food
     const detailResponse = page.waitForResponse(
@@ -328,7 +322,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
 
     // Close modal
     await page.getByTestId('usda-search-button').click();
-    await page.waitForTimeout(500);
 
     // Get first food item
     const firstItem = page.getByTestId('nutrition-food-item').first();
@@ -339,17 +332,14 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Click edit serving on the first food item
     const editServingButton = firstItem.getByRole('button', { name: 'edit serving' });
     await editServingButton.click();
-    await page.waitForTimeout(300);
 
     // Test 1: Edit in serving mode
     const quantityInput = page.locator('input[type="number"]').first();
     await quantityInput.fill('2');
-    await page.waitForTimeout(300);
 
     // Click update
     const updateButton = page.getByRole('button', { name: 'Update' });
     await updateButton.click();
-    await page.waitForTimeout(500);
 
     // Verify the serving size was updated
     const updatedServingLabel = await firstItem.getByTestId('serving-size').textContent();
@@ -359,22 +349,18 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
 
     // Test 2: Edit in grams mode
     await editServingButton.click();
-    await page.waitForTimeout(300);
 
     // Switch to grams using toggle button
     const gramsBtn = page.getByTestId('quantity-grams-btn');
     await gramsBtn.click();
-    await page.waitForTimeout(300);
 
     // Enter grams value (200g)
     await quantityInput.fill('200');
-    await page.waitForTimeout(300);
 
     // Save
     await updateButton.click();
     
     // Wait longer for the update to persist and UI to refresh
-    await page.waitForTimeout(1000);
 
     // Verify grams were saved (should show dual format: "200 g (X servings)")
     const gramsLabel = await firstItem.getByTestId('serving-size').textContent();
@@ -419,7 +405,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     // Search for food
     await page.getByTestId('usda-search-input').fill('chicken');
     await searchResponse;
-    await page.waitForTimeout(600);
     
     // Should show error message using testid
     const errorElement = page.getByTestId('usda-error');
@@ -441,7 +426,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await searchResponse;
     
     // Wait for debounce (300ms) + state update
-    await page.waitForTimeout(600);
     
     // Check for loading state - should be done
     await expect(page.getByText('Searching...')).not.toBeVisible();
@@ -521,7 +505,6 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
     await searchResponse;
     
     // Wait for debounce (300ms) + state update
-    await page.waitForTimeout(600);
     
     // Should show search results
     const resultsContainer = page.getByTestId('usda-results');

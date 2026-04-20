@@ -1,6 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test'
 
-interface SeedProfileOptions {
+export interface SeedProfileOptions {
   age?: number
   sex?: 'male' | 'female'
   activityLevel?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'
@@ -16,7 +16,7 @@ interface SeedProfileOptions {
   }
 }
 
-interface SeedSettingsOptions {
+export interface SeedSettingsOptions {
   enableUSDALookups?: boolean
   enableWebLLMCoach?: boolean
   aiProvider?: 'deterministic' | 'webllm' | 'openrouter'
@@ -24,7 +24,7 @@ interface SeedSettingsOptions {
   webllmModelId?: string | null
 }
 
-interface BootstrapOptions {
+export interface BootstrapOptions {
   clearStorage?: boolean
   acceptAgeGate?: boolean
   completeOnboarding?: boolean
@@ -60,6 +60,55 @@ const defaultSettings: Required<SeedSettingsOptions> = {
 
 const DB_NAME = 'FitBudAIDB'
 const DB_VERSION = 5
+
+const DEFAULT_BOOTSTRAP: Required<Pick<BootstrapOptions, 'clearStorage' | 'acceptAgeGate' | 'completeOnboarding'>> = {
+  // Each Playwright test gets a fresh BrowserContext anyway.
+  // Clearing on *every* navigation/reload is slow and breaks tests that
+  // intentionally validate persistence.
+  clearStorage: false,
+  acceptAgeGate: true,
+  completeOnboarding: true,
+}
+
+const bootstrappedContexts = new WeakMap<BrowserContext, string>()
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+
+  const obj = value as Record<string, unknown>
+  const keys = Object.keys(obj).sort()
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`
+}
+
+function optionsSignature(options: BootstrapOptions): string {
+  // Stable-ish signature so we can detect accidental conflicting bootstraps.
+  // (Recursive key sorting so object literal key ordering doesn't troll us.)
+  return stableStringify(options)
+}
+
+export function isBootstrapped(context: BrowserContext): boolean {
+  return bootstrappedContexts.has(context)
+}
+
+export async function bootstrapContext(context: BrowserContext, options: BootstrapOptions = DEFAULT_BOOTSTRAP) {
+  const signature = optionsSignature(options)
+  const existing = bootstrappedContexts.get(context)
+
+  if (existing) {
+    if (existing !== signature) {
+      throw new Error(
+        `This BrowserContext was bootstrapped already with different options.\n` +
+          `Existing: ${existing}\n` +
+          `New: ${signature}`,
+      )
+    }
+    return
+  }
+
+  await bootstrapAppState(context, options)
+  bootstrappedContexts.set(context, signature)
+}
 
 export async function bootstrapAppState(context: BrowserContext, options: BootstrapOptions = {}) {
   const {
@@ -105,6 +154,14 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         localStorage.setItem('onboarding_completed', 'true')
       }
 
+      // Tiny sync hook so tests can wait until async seeding is done.
+      // @ts-expect-error - injected test-only flag
+      window.__E2E_BOOTSTRAP_PENDING = false
+      // @ts-expect-error - injected test-only flag
+      window.__E2E_BOOTSTRAP_STAGE = 'noop'
+      // @ts-expect-error - injected test-only flag
+      window.__E2E_BOOTSTRAP_ERROR = null
+
       if (!seedProfile && !seedSettings) {
         return
       }
@@ -118,6 +175,26 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         ;(window as any).__e2e_seed_resolve__ = resolve
       })
 
+      // @ts-expect-error - injected test-only flag
+      window.__E2E_BOOTSTRAP_PENDING = true
+      // @ts-expect-error - injected test-only flag
+      window.__E2E_BOOTSTRAP_STAGE = 'start'
+      // @ts-expect-error - injected test-only flag
+      window.__E2E_BOOTSTRAP_ERROR = null
+
+      const finalizeBootstrap = (stage, error = null) => {
+        try {
+          // @ts-expect-error - injected test-only flag
+          window.__E2E_BOOTSTRAP_STAGE = stage
+          // @ts-expect-error - injected test-only flag
+          window.__E2E_BOOTSTRAP_ERROR = error
+          // @ts-expect-error - injected test-only flag
+          window.__E2E_BOOTSTRAP_PENDING = false
+        } catch {
+          // ignore
+        }
+      }
+
       // Safety fuse: never hang tests forever if IndexedDB goes sideways.
       setTimeout(() => {
         ;(window as any).__e2e_seed_done__ = true
@@ -126,6 +203,7 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         } catch {
           // ignore
         }
+        finalizeBootstrap('error', 'E2E bootstrap timed out')
       }, 15000)
 
       const schedule = {
@@ -167,67 +245,76 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         updatedAt: now,
       }
 
-      const startSeed = () => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION)
+      // The DB is created by the app (Dexie) during initDatabase().
+      // In CI, that can race our initScript. We *must not* create the DB ourselves
+      // (that would create v1 and break migrations), so we poll until it exists.
+
+      const MAX_ATTEMPTS = 200
+      const RETRY_DELAY_MS = 50
+
+      const seedOnceDbExists = (attempt = 0) => {
+        if (attempt >= MAX_ATTEMPTS) {
+          finalizeBootstrap('error', 'Timed out waiting for IndexedDB database to exist')
+          return
+        }
+
+        let request
+        try {
+          request = indexedDB.open(DB_NAME)
+        } catch (e) {
+          finalizeBootstrap('error', String(e))
+          return
+        }
 
         request.onupgradeneeded = () => {
-          const db = request.result
-
-          // Keep this in sync with src/db/index.ts schema version 5.
-          // Yes it's duplicated. No I don't like it either. But E2E bootstrapping runs *before* the app code.
-          const ensureStore = (
-            name: string,
-            options: IDBObjectStoreParameters,
-            indexes: Array<{ name: string; keyPath: string | string[]; options?: IDBIndexParameters }> = [],
-          ) => {
-            if (!db.objectStoreNames.contains(name)) {
-              const store = db.createObjectStore(name, options)
-              indexes.forEach((idx) => store.createIndex(idx.name, idx.keyPath, idx.options))
-            }
+          // DB doesn't exist yet. Abort creating it.
+          try {
+            // @ts-expect-error - injected test-only flag
+            window.__E2E_BOOTSTRAP_STAGE = 'waiting-for-db'
+          } catch {
+            // ignore
           }
 
-          // Core
-          ensureStore('profiles', { keyPath: 'id' })
-          ensureStore('settings', { keyPath: 'id' })
+          try {
+            request.transaction?.abort()
+          } catch {
+            // ignore
+          }
+        }
 
-          // Workouts
-          ensureStore('workoutPlans', { keyPath: 'id', autoIncrement: true })
-          ensureStore('workoutLogs', { keyPath: 'id', autoIncrement: true })
-
-          // Nutrition
-          ensureStore('nutritionLogs', { keyPath: 'id', autoIncrement: true })
-          ensureStore('foodItems', { keyPath: 'id', autoIncrement: true })
-          ensureStore('mealTemplates', { keyPath: 'id', autoIncrement: true })
-          ensureStore('mealPlans', { keyPath: 'id', autoIncrement: true })
-
-          // Tracking
-          ensureStore('weightLogs', { keyPath: 'id' })
-          ensureStore('weeklyCheckIns', { keyPath: 'id', autoIncrement: true })
-
-          // Safety
-          ensureStore('injuryAssessments', { keyPath: 'id', autoIncrement: true })
-
-          // Exercise DB
-          ensureStore('exercises', { keyPath: 'id' })
-          ensureStore('customExercises', { keyPath: 'id', autoIncrement: true })
+        request.onerror = () => {
+          const errName = request.error?.name
+          if (errName === 'AbortError') {
+            setTimeout(() => seedOnceDbExists(attempt + 1), RETRY_DELAY_MS)
+            return
+          }
+          finalizeBootstrap('error', request.error ? String(request.error) : 'indexedDB open error')
         }
 
         request.onsuccess = () => {
           const db = request.result
-          const storeNames = [] as string[]
-          if (seedProfile && db.objectStoreNames.contains('profiles')) {
-            storeNames.push('profiles')
-          }
-          if (seedSettings && db.objectStoreNames.contains('settings')) {
-            storeNames.push('settings')
-          }
 
-          if (storeNames.length === 0) {
+          const hasProfiles = db.objectStoreNames.contains('profiles')
+          const hasSettings = db.objectStoreNames.contains('settings')
+
+          if ((seedProfile && !hasProfiles) || (seedSettings && !hasSettings)) {
             db.close()
+            setTimeout(() => seedOnceDbExists(attempt + 1), RETRY_DELAY_MS)
             return
           }
 
-          const tx = db.transaction(storeNames, 'readwrite')
+          const storeNames = [] as string[]
+          if (seedProfile) storeNames.push('profiles')
+          if (seedSettings) storeNames.push('settings')
+
+          let tx: IDBTransaction
+          try {
+            tx = db.transaction(storeNames, 'readwrite')
+          } catch (e) {
+            db.close()
+            finalizeBootstrap('error', String(e))
+            return
+          }
 
           if (seedProfile) {
             const profileStore = tx.objectStore('profiles')
@@ -274,6 +361,7 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
               // ignore
             }
             db.close()
+            finalizeBootstrap('done', null)
           }
 
           tx.oncomplete = finish
@@ -282,14 +370,10 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
         }
       }
 
-      if (clearStorage) {
-        const deleteRequest = indexedDB.deleteDatabase(DB_NAME)
-        deleteRequest.onsuccess = startSeed
-        deleteRequest.onerror = startSeed
-        deleteRequest.onblocked = startSeed
-      } else {
-        startSeed()
+      seedOnceDbExists()
       }
+
+      seedOnceDbExists()
     },
     { clearStorage, acceptAgeGate, completeOnboarding, seedProfile, seededProfile, seedSettings, seededSettings },
   )
@@ -304,9 +388,20 @@ function buildAppUrl(hashPath: string, cacheBust: boolean): string {
 export async function gotoApp(
   page: Page,
   hashPath = '/',
-  options: { cacheBust?: boolean } = {},
+  options: { cacheBust?: boolean; bootstrap?: BootstrapOptions } = {},
 ) {
-  const { cacheBust = true } = options
+  const { cacheBust = true, bootstrap } = options
+
+  // Ensure the app doesn't get stuck behind the age gate / onboarding in tests.
+  // If a context is already bootstrapped, we *don't* try to re-bootstrap it unless
+  // the caller explicitly provides options.
+  const context = page.context()
+  if (!isBootstrapped(context)) {
+    await bootstrapContext(context, bootstrap ?? DEFAULT_BOOTSTRAP)
+  } else if (bootstrap) {
+    await bootstrapContext(context, bootstrap)
+  }
+
   await page.goto(buildAppUrl(hashPath, cacheBust), { waitUntil: 'domcontentloaded' })
 
   // Wait for the initScript DB seeding to finish (if seeding was requested).

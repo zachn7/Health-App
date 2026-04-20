@@ -36,10 +36,16 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   const [displayedExercises, setDisplayedExercises] = useState<ExerciseDBItem[]>([]);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const searchRequestSeqRef = useRef(0);
 
+  // Load filter option lists once.
+  // (Doing this on every keystroke is… how do I put this politely… not ideal.)
   useEffect(() => {
     loadFilters();
-    // Immediately search when filters or query change
+  }, []);
+
+  // Search whenever query/filters change.
+  useEffect(() => {
     searchExercises();
   }, [searchQuery, selectedBodyPart, selectedEquipment, selectedDifficulty]);
 
@@ -80,6 +86,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   };
   
   const searchExercises = async () => {
+    const requestId = ++searchRequestSeqRef.current;
     setLoading(true);
     try {
       // Step 1: Get all exercises from database
@@ -132,14 +139,26 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
         finalResults = [...candidates].sort((a, b) => a.name.localeCompare(b.name));
       }
 
+      // If a newer search started while we were working, ignore this stale result.
+      if (requestId !== searchRequestSeqRef.current) {
+        return;
+      }
+
       // Update state with all filtered results (not just displayed ones)
       setAllFilteredExercises(finalResults);
       setVisibleLimit(30); // Reset to initial visible count
     } catch (error) {
       console.error('Failed to search exercises:', error);
-      setAllFilteredExercises([]);
+
+      // Only clear results if this is the most recent request.
+      if (requestId === searchRequestSeqRef.current) {
+        setAllFilteredExercises([]);
+      }
     } finally {
-      setLoading(false);
+      // Only the latest request gets to control the spinner.
+      if (requestId === searchRequestSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
   

@@ -371,9 +371,6 @@ test.describe('Regression: Program Import - No Unexpected Token (R04)', () => {
       if (await importButton.isVisible()) {
         await importButton.click();
         
-        // Should navigate to workout logger without errors
-        await page.waitForTimeout(2000);
-        
         // Check if we're on the workout logger page
         await expect(page.getByText(/Workout Logger|Logging|Exercise/i)).toBeVisible({ timeout: 10000 });
         
@@ -394,7 +391,6 @@ test.describe('Regression: Program Import - No Unexpected Token (R04)', () => {
         const startButton = firstPlan.getByRole('button', { name: /Start/i });
         if (await startButton.isVisible()) {
           await startButton.click();
-          await page.waitForTimeout(2000);
           
           // Check for successful navigation without errors
           await expect(page.getByText(/Workout Logger|Logging|Exercise/i)).toBeVisible({ timeout: 10000 });

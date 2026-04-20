@@ -1,42 +1,38 @@
 import { test, expect } from '@playwright/test';
-import { setupTestProfile } from './helpers/setupProfile';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 import { testIds } from '../../src/testIds';
 
 test.describe('Regression: Workout Program Variety (R11)', () => {
   
   test('should generate workout plans successfully', async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
-    
-    // Setup a test profile
-    await setupTestProfile(page);
-    
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
     
     // Generate workout plan with seeded RNG
-    const generateButton = page.getByTestId(testIds.workouts.generatePlanButton);
+    const generateButton = page.getByTestId(testIds.workouts.generateEmptyPlanButton);
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     
     page.on('dialog', dialog => dialog.accept());
     
     // Generate plan and verify it contains exercises
     await generateButton.click();
-    await page.waitForTimeout(500); // Wait for modal to appear
-    
-    // Select "Based on Profile" mode
+
+    // Mode selector modal appears; profile mode is default but we click anyway to be explicit.
     const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await expect(profileModeButton).toBeVisible({ timeout: 5000 });
     await profileModeButton.click();
-    await page.waitForTimeout(300); // Wait for state update
-    
+
     // Click the generate button in the modal
     const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
-    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await expect(modalGenerateButton).toBeVisible({ timeout: 5000 });
     await modalGenerateButton.click();
     const plans = page.locator('[data-testid^="workout-plan-"]');
     await expect(plans.first()).toBeVisible({ timeout: 10000 });
@@ -57,36 +53,29 @@ test.describe('Regression: Workout Program Variety (R11)', () => {
   });
 
   test('should generate different exercises in a separate session', async ({ page, context }) => {
-    // Set up age gate and onboarding
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
-    
-    // Setup a test profile for a different session
-    await setupTestProfile(page);
-    
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
     
     // Generate workout plan (different timestamp seed than previous session)
-    const generateButton = page.getByTestId(testIds.workouts.generatePlanButton);
+    const generateButton = page.getByTestId(testIds.workouts.generateEmptyPlanButton);
     await expect(generateButton).toBeVisible({ timeout: 5000 });
     
     page.on('dialog', dialog => dialog.accept());
     await generateButton.click();
-    await page.waitForTimeout(500); // Wait for modal to appear
-    
-    // Select "Based on Profile" mode
+
     const profileModeButton = page.getByTestId(testIds.workouts.modeProfileBtn);
-    await expect(profileModeButton).toBeVisible({ timeout: 3000 });
+    await expect(profileModeButton).toBeVisible({ timeout: 5000 });
     await profileModeButton.click();
-    await page.waitForTimeout(300); // Wait for state update
-    
-    // Click the generate button in the modal
+
     const modalGenerateButton = page.getByTestId(testIds.workouts.modalGenerateButton);
-    await expect(modalGenerateButton).toBeVisible({ timeout: 3000 });
+    await expect(modalGenerateButton).toBeVisible({ timeout: 5000 });
     await modalGenerateButton.click();
     
     const plans = page.locator('[data-testid^="workout-plan-"]');

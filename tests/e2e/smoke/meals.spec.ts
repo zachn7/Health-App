@@ -37,8 +37,7 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Click "Create New Meal" button
     await page.getByText('Create New Meal').click();
-    await page.waitForTimeout(500);
-    
+
     // Verify meal editor modal opens
     // Use text content instead of role for modal title
     await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
@@ -52,7 +51,7 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Close modal using text
     await page.getByText('Cancel').click();
-    await page.waitForTimeout(300);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).not.toBeVisible({ timeout: 5000 });
   });
 
   test('Food picker modal opens and searches for food', async ({ page }) => {
@@ -62,11 +61,10 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Open meal editor
     await page.getByText('Create New Meal').click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('h2').filter({ hasText: /Create New Meal/i })).toBeVisible({ timeout: 5000 });
     
     // Click "Search USDA Foods" button - use button role to avoid strict mode
     await page.getByRole('button', { name: 'Search USDA Foods' }).click();
-    await page.waitForTimeout(500);
     
     // Verify food picker modal opens
     await expect(page.locator('h2').filter({ hasText: 'Add Food' })).toBeVisible({ timeout: 5000 });
@@ -78,9 +76,11 @@ test.describe('Smoke: Meals Feature', () => {
     // Note: Actual search requires mocked USDA responses, which is covered in USDA tests
     // This test just verifies the UI exists
     
-    // Close modal by pressing Escape
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    // Close modal via the header X button (Escape isn't wired here)
+    const addFoodHeading = page.getByRole('heading', { name: 'Add Food' });
+    const closeBtn = addFoodHeading.locator('..').locator('button');
+    await closeBtn.click();
+    await expect(addFoodHeading).not.toBeVisible({ timeout: 5000 });
   });
 
   test('Meals navigation link exists in sidebar', async ({ page }) => {
@@ -101,10 +101,9 @@ test.describe('Smoke: Meals Feature', () => {
     // Click Meals link using aria-label or href
     const mealsLink = page.locator('a[href*="meals"]');
     await mealsLink.click();
-    await page.waitForTimeout(500);
     
     // Verify URL changed
-    await expect(page.url()).toContain('/meals');
+    await expect(page).toHaveURL(/\/meals/);
   });
 
   test('Can dismiss import status toast', async ({ page }) => {
@@ -125,14 +124,12 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Open meal editor
     await page.getByText('Create New Meal').click();
-    await page.waitForTimeout(500);
     
     // Verify empty state message
     await expect(page.getByText('No food items added yet')).toBeVisible({ timeout: 5000 });
     
     // Close modal using text
     await page.getByText('Cancel').click();
-    await page.waitForTimeout(300);
   });
 
   test('Create New Meal button is disabled/different when meal name is empty', async ({ page }) => {
@@ -142,7 +139,6 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Open meal editor
     await page.getByText('Create New Meal').click();
-    await page.waitForTimeout(500);
     
     // Note: Save button should be disabled when name is empty
     // This is verified by the disabled attribute, but button visibility is enough for smoke test
@@ -151,7 +147,6 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Close modal using text
     await page.getByText('Cancel').click();
-    await page.waitForTimeout(300);
   });
 
   test('Meal Plans tab exists and can be switched to', async ({ page }) => {
@@ -161,7 +156,6 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Click Meal Plans tab button
     await page.getByRole('button', { name: 'Meal Plans' }).click();
-    await page.waitForTimeout(300);
     
     // Verify Meal Plans tab is active (contains "Meal Plans" heading)
     await expect(page.locator('h2').filter({ hasText: 'Meal Plans' })).toBeVisible({ timeout: 5000 });
@@ -177,14 +171,12 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Switch to Meal Plans
     await page.getByRole('button', { name: 'Meal Plans' }).click();
-    await page.waitForTimeout(300);
     
     // Verify tab switched
     await expect(page.locator('h2').filter({ hasText: 'Meal Plans' })).toBeVisible({ timeout: 5000 });
     
     // Switch back to Saved Meals
     await page.getByRole('button', { name: 'Saved Meals' }).click();
-    await page.waitForTimeout(300);
     
     // Verify tab switched back (check button is active with border-blue-500)
     const savedMealsButton = page.getByRole('button', { name: 'Saved Meals' });
@@ -199,7 +191,6 @@ test.describe('Smoke: Meals Feature', () => {
     // Click Presets tab
     const presetsTab = page.getByTestId('meals-presets-tab');
     await presetsTab.click();
-    await page.waitForTimeout(300);
     
     // Verify Presets tab is active
     await expect(presetsTab).toHaveClass(/border-blue-500/);
@@ -230,14 +221,12 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Click filter toggle to open
     await filterToggle.click();
-    await page.waitForTimeout(300);
     
     // Verify filter controls are visible
     await expect(filtersPanel).toBeVisible({ timeout: 3000 });
     
     // Click filter toggle to close
     await filterToggle.click();
-    await page.waitForTimeout(300);
     
     // Verify filters panel is hidden
     await expect(filtersPanel).not.toBeVisible({ timeout: 3000 });
@@ -263,17 +252,14 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Switch to Meal Plans
     await mealPlansTab.click();
-    await page.waitForTimeout(300);
     await expect(mealPlansTab).toHaveClass(/border-blue-500/);
     
     // Switch to Presets
     await presetsTab.click();
-    await page.waitForTimeout(300);
     await expect(presetsTab).toHaveClass(/border-blue-500/);
     
     // Switch back to Saved Meals
     await savedMealsTab.click();
-    await page.waitForTimeout(300);
     await expect(savedMealsTab).toHaveClass(/border-blue-500/);
   });
 
@@ -293,7 +279,6 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Open meal editor
     await page.getByText('Create New Meal').click();
-    await page.waitForTimeout(500);
     
     // Set meal name
     const nameInput = page.locator('input[placeholder*="e.g., Post-Workout Shake"]');
@@ -301,7 +286,6 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Open manual food form
     await page.getByRole('button', { name: 'Add Manual Food' }).click();
-    await page.waitForTimeout(500);
     
     // Fill in manual food form
     const foodNameInput = page.locator('input[placeholder*="e.g., Homemade Salad"]');
@@ -321,7 +305,6 @@ test.describe('Smoke: Meals Feature', () => {
     
     // Add to meal
     await page.getByRole('button', { name: 'Add to Meal' }).click();
-    await page.waitForTimeout(500);
     
     // Verify food appears in meal
     await expect(page.getByText('Test Food')).toBeVisible({ timeout: 5000 });

@@ -15,24 +15,23 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const manualWorkoutBtn = page.locator('button', { hasText: 'Manual Workout' });
     if (await manualWorkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await manualWorkoutBtn.click();
-      await page.waitForTimeout(500);
+      await expect(page.getByTestId(testIds.workoutLogger.addExerciseBtn)).toBeVisible({ timeout: 10_000 });
     }
     
     // Add an exercise manually
     const addExerciseBtn = page.getByTestId(testIds.workoutLogger.addExerciseBtn);
     await expect(addExerciseBtn).toBeVisible({ timeout: 5000 });
     await addExerciseBtn.click();
-    await page.waitForTimeout(500);
-    
+
     // Search for and select an exercise
     const searchInput = page.getByTestId('exercise-search-input');
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
     await searchInput.fill('squat');
-    await page.waitForTimeout(1000);
-    
+
     const firstResult = page.getByTestId('exercise-results-list').locator('[data-testid^="exercise-result-"]').first();
+    await expect(firstResult).toBeVisible({ timeout: 10_000 });
     await firstResult.click();
-    await page.waitForTimeout(1000);
-    
+
     // Add a set
     const exerciseRow = page.getByTestId(testIds.workoutLogger.exerciseRow(0));
     await expect(exerciseRow).toBeVisible({ timeout: 5000 });
@@ -41,8 +40,7 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const addFirstSetButton = exerciseRow.getByRole('button', { name: 'Add First Set' });
     await expect(addFirstSetButton).toBeVisible({ timeout: 5000 });
     await addFirstSetButton.click();
-    await page.waitForTimeout(1000);
-    
+
     // After adding first set, button becomes "Add Set"
     const addSetButton = exerciseRow.getByRole('button', { name: 'Add Set' });
     await expect(addSetButton).toBeVisible({ timeout: 5000 });
@@ -51,14 +49,12 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const allInputs = exerciseRow.locator('input[type="number"]');
     await expect(allInputs.first()).toBeVisible({ timeout: 5000 });
     await allInputs.first().fill('10');
-    await page.waitForTimeout(500);
-    
+
     // Save the workout
     const saveBtn = page.locator('button', { hasText: 'Save Workout' });
     await expect(saveBtn).toBeVisible({ timeout: 5000 });
     await saveBtn.click();
-    await page.waitForTimeout(1000);
-    
+
     // Verify the workout is saved (shows "Workout Complete" status)
     await expect(page.getByTestId(testIds.workoutLogger.workoutCompleteStatus)).toBeVisible({ timeout: 5000 });
     
@@ -67,13 +63,12 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     
     // Edit the rep value to prove functionality remains
     await allInputs.first().fill('12');
-    await page.waitForTimeout(500);
     await expect(allInputs.first()).toHaveValue('12');
     
     // Add another set to prove full functionality remains
     await addSetButton.click();
-    await page.waitForTimeout(500);
-    
+
+    await expect.poll(async () => await allInputs.count(), { timeout: 5_000 }).toBe(4);
     const finalCount = await allInputs.count();
     expect(finalCount).toBe(4); // 2 sets x 2 inputs (reps + weight)
     
@@ -89,15 +84,14 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const manualWorkoutBtn = page.locator('button', { hasText: 'Manual Workout' });
     if (await manualWorkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await manualWorkoutBtn.click();
-      await page.waitForTimeout(500);
+      await expect(page.getByTestId(testIds.workoutLogger.timerStart)).toBeVisible({ timeout: 10_000 });
     }
     
     // Click Start Timer button
     const startTimerBtn = page.getByTestId(testIds.workoutLogger.timerStart);
     await expect(startTimerBtn).toBeVisible({ timeout: 5000 });
     await startTimerBtn.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify timer buttons changed (Stop Timer is now visible instead of Start)
     const stopTimerBtn = page.getByTestId(testIds.workoutLogger.timerStop);
     await expect(stopTimerBtn).toBeVisible({ timeout: 5000 });
@@ -109,12 +103,11 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     await expect(timeEntry).toBeVisible();
     await expect(timeEntry).toContainText('Active');
     
-    // Wait a moment then stop the timer
-    await page.waitForTimeout(1000);
+    // Stop the timer
     await stopTimerBtn.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify timer stopped (shows duration)
+    await expect(timeEntry).not.toContainText('Active', { timeout: 10_000 });
     const timeEntryText = await timeEntry.textContent();
     expect(timeEntryText).not.toContain('Active');
     expect(timeEntryText).toMatch(/\d+ min/);
@@ -124,36 +117,33 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     // Add an exercise to save with timer
     const addExerciseBtn = page.getByTestId(testIds.workoutLogger.addExerciseBtn);
     await addExerciseBtn.click();
-    await page.waitForTimeout(500);
-    
+
     const searchInput = page.getByTestId('exercise-search-input');
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
     await searchInput.fill('bench');
-    await page.waitForTimeout(1000);
-    
+
     const firstResult = page.getByTestId('exercise-results-list').locator('[data-testid^="exercise-result-"]').first();
+    await expect(firstResult).toBeVisible({ timeout: 10_000 });
     await firstResult.click();
-    await page.waitForTimeout(500);
-    
+
     // Try to add a set if the button is visible
     const exerciseRow = page.getByTestId(testIds.workoutLogger.exerciseRow(0));
     const addSetBtn = exerciseRow.locator('button', { hasText: 'Add Set' }).first();
     if (await addSetBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await addSetBtn.click();
-      await page.waitForTimeout(500);
     }
     
     // Enter any rep value
     const repsInput = exerciseRow.locator('input[type="number"]').first();
     if (await repsInput.isVisible({ timeout: 2000 }).catch(() => false)) {
       await repsInput.fill('10');
-      await page.waitForTimeout(500);
     }
     
     const saveBtn = page.locator('button', { hasText: 'Save Workout' });
     await expect(saveBtn).toBeVisible({ timeout: 5000 });
     await saveBtn.click();
-    await page.waitForTimeout(1000);
-    
+    await expect(page.getByTestId(testIds.workoutLogger.workoutCompleteStatus)).toBeVisible({ timeout: 10_000 });
+
     // Reload page to verify timer entry persisted
     await page.reload();
     await page.waitForLoadState('networkidle');
@@ -178,18 +168,17 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const manualWorkoutBtn = page.locator('button', { hasText: 'Manual Workout' });
     if (await manualWorkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await manualWorkoutBtn.click();
-      await page.waitForTimeout(500);
+      await expect(page.getByTestId(testIds.workoutLogger.timerStart)).toBeVisible({ timeout: 10_000 });
     }
     
     // Start and stop a timer to create an entry
     const startTimerBtn = page.getByTestId(testIds.workoutLogger.timerStart);
     await startTimerBtn.click();
-    await page.waitForTimeout(1000);
-    
+
     const stopTimerBtn = page.getByTestId(testIds.workoutLogger.timerStop);
+    await expect(stopTimerBtn).toBeVisible({ timeout: 10_000 });
     await stopTimerBtn.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify time entry exists
     await expect(page.getByTestId(testIds.workoutLogger.timeSection)).toBeVisible();
     const timeEntry = page.getByTestId(testIds.workoutLogger.timeEntry(0));
@@ -199,8 +188,7 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const deleteBtn = page.getByTestId(testIds.workoutLogger.timeEntryDelete(0));
     await expect(deleteBtn).toBeVisible();
     await deleteBtn.click();
-    await page.waitForTimeout(500);
-    
+
     // Verify time entry is removed (section should be gone now)
     await expect(page.getByTestId(testIds.workoutLogger.timeSection)).not.toBeVisible();
     
@@ -216,23 +204,21 @@ test.describe('Regression: Workout Logger Always Editable (R10)', () => {
     const manualWorkoutBtn = page.locator('button', { hasText: 'Manual Workout' });
     if (await manualWorkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await manualWorkoutBtn.click();
-      await page.waitForTimeout(500);
+      await expect(page.getByTestId(testIds.workoutLogger.timerStart)).toBeVisible({ timeout: 10_000 });
     }
     
     // Start and stop first timer
     const startTimerBtn = page.getByTestId(testIds.workoutLogger.timerStart);
     await startTimerBtn.click();
-    await page.waitForTimeout(1000);
-    
+
     const stopTimerBtn = page.getByTestId(testIds.workoutLogger.timerStop);
+    await expect(stopTimerBtn).toBeVisible({ timeout: 10_000 });
     await stopTimerBtn.click();
-    await page.waitForTimeout(500);
     
     // Start and stop second timer
     await startTimerBtn.click();
-    await page.waitForTimeout(1000);
+    await expect(stopTimerBtn).toBeVisible({ timeout: 10_000 });
     await stopTimerBtn.click();
-    await page.waitForTimeout(500);
     
     // Verify we have 2 time entries
     await expect(page.getByTestId(testIds.workoutLogger.timeSection)).toBeVisible();

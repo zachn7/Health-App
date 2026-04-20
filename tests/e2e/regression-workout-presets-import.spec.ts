@@ -1,22 +1,20 @@
 import { test, expect } from '@playwright/test';
-import { setupTestProfile } from './helpers/setupProfile';
+import { bootstrapContext, gotoApp } from './helpers/bootstrap';
+import { waitForRouteReady } from './helpers/app';
 
 test.describe('Regression: Workout Presets Import - Complete Flow', () => {
   test.beforeEach(async ({ context }) => {
-    // Set age gate to pass BEFORE page loads
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('age_gate_timestamp', new Date().toISOString());
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
     });
   });
 
   test('should import preset program with mapped exercises', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    // Navigate to Workouts page
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     // Switch to Presets tab
     const presetsTab = page.getByTestId('workouts-presets-tab');
@@ -32,9 +30,6 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' }).first();
     await expect(importButton).toBeVisible();
     await importButton.click();
-
-    // Wait for navigation to My Programs and plan to load
-    await page.waitForTimeout(3000);
 
     // Verify we're on My Programs tab (check for selected plan card)
     const planCard = page.locator('[data-testid^="workout-plan-"]').first();
@@ -61,12 +56,8 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
   });
 
   test('should allow swapping exercises in imported program', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    // Import a preset first
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     const presetsTab = page.getByTestId('workouts-presets-tab');
     await presetsTab.click();
@@ -77,12 +68,9 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
     await expect(importButton).toBeVisible();
     await importButton.click();
 
-    // Wait for import to complete
-    await page.waitForTimeout(3000);
-
     // Find and click edit button for the first workout day
     const editButton = page.getByTestId(/edit-workout-day-btn-/).first();
-    await expect(editButton).toBeVisible({ timeout: 10000 });
+    await expect(editButton).toBeVisible({ timeout: 15_000 });
     await editButton.click();
 
     // Now swap button should be visible
@@ -100,12 +88,8 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
   });
 
   test('should import preset with equipment constraints', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    // Navigate to Workouts > Presets
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     const presetsTab = page.getByTestId('workouts-presets-tab');
     await presetsTab.click();
@@ -120,9 +104,6 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
     await expect(importButton).toBeVisible();
     await importButton.click();
 
-    // Verify navigation to My Programs - wait for URL or UI change
-    await page.waitForTimeout(5000);
-
     // Verify program loaded (plan card visible)
     const planCard = page.locator('[data-testid^="workout-plan-"]').first();
     await expect(planCard).toBeVisible({ timeout: 10000 });
@@ -133,11 +114,8 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
   });
 
   test('should handle presets gracefully with unknown exercise keywords', async ({ page }) => {
-    // Set up profile first
-    await setupTestProfile(page);
-
-    await page.goto('./#/workouts');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/workouts');
+    await waitForRouteReady(page);
 
     const presetsTab = page.getByTestId('workouts-presets-tab');
     await presetsTab.click();
@@ -152,7 +130,6 @@ test.describe('Regression: Workout Presets Import - Complete Flow', () => {
     await importButton.click();
 
     // Should complete without error (even if some exercises have unresolved placeholders)
-    await page.waitForTimeout(2000);
 
     // Warning banner might be shown for unresolved exercises
     const importWarning = page.getByTestId('workouts-preset-import-warning');

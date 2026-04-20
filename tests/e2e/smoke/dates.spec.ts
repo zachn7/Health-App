@@ -24,7 +24,6 @@ test.describe('Smoke: Date Navigation and Weight Logging', () => {
     await page.getByRole('button', { name: /Today/i }).click();
     
     // Wait for date to update
-    await page.waitForTimeout(200);
     
     // Verify the displayed date matches today
     const dateString = await page.textContent('.text-center.text-lg.font-medium');
@@ -43,7 +42,6 @@ test.describe('Smoke: Date Navigation and Weight Logging', () => {
     await page.getByRole('button', { name: /Next/i }).click();
     
     // Wait for date to update
-    await page.waitForTimeout(200);
     
     // Get new date text
     const newText = await page.textContent('.text-center.text-lg.font-medium');
@@ -65,7 +63,6 @@ test.describe('Smoke: Date Navigation and Weight Logging', () => {
     await page.locator('button:has(.lucide-chevron-right)').first().click();
     
     // Wait for update
-    await page.waitForTimeout(200);
     
     // Get new date
     const newDateString = await page.locator('button:has(.lucide-calendar)').first().textContent();
@@ -95,7 +92,6 @@ test.describe('Smoke: Date Navigation and Weight Logging', () => {
     await page.getByRole('button', { name: 'Log Weight' }).click();
     
     // Enter weight with decimal
-    await page.waitForTimeout(300);
     const weightInput = page.locator('input[type="number"]').first();
     await weightInput.fill('150.5');
     

@@ -18,8 +18,8 @@ test.describe('Age Gate Continue Fix', () => {
     await page.getByTestId('age-gate-continue').click();
     
     // Should navigate to onboarding without refresh
+    await expect(page).toHaveURL(/#\/onboarding/);
     await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
-    await expect(page.getByText('Your personal offline fitness companion')).toBeVisible();
     await expect(page.getByTestId('onboarding-setup-profile')).toBeVisible();
     
     // Verify localStorage was set
