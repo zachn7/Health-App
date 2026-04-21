@@ -2,7 +2,7 @@
 
 **🌐 Live Demo:** https://zachn7.github.io/Health-App/
 
-**Your all-in-one AI fitness companion** — workout logging, nutrition tracking, AI-powered program generation, smart meal planning, and adaptive coaching that evolves with you. All 100% offline, private, and ad-free.
+**Your all-in-one AI fitness companion** — workout logging, nutrition tracking, AI-powered program generation, smart meal planning, and adaptive coaching that evolves with you. Built **offline-first** (local IndexedDB), private, and ad-free — with optional online integrations (USDA + hosted AI via secure proxy).
 
 ---
 
@@ -15,18 +15,24 @@ FitBud AI is a privacy-first fitness companion designed to help you **reach your
 - **AI Coaching & Program Optimization** — Get AI-driven feedback to refine your programs, periodize your training, and break through plateaus
 - **Workout & Nutrition Logging** — Track every set, rep, and meal with a fast, intuitive interface
 - **Progress Analytics** — Visualize weight trends, strength gains, adherence, and more
-- **100% Offline & Private** — Your data never leaves your device. No accounts, no cloud, no tracking
+- **Offline-First & Private** — Your data lives locally (IndexedDB). No accounts, no cloud sync, no tracking. Optional integrations (USDA + hosted AI) make network calls only when you enable/use them.
 
 ---
 
 ## ✨ Key Features
 
 ### 🤖 AI-Powered Fitness Companion
-- **AI Coach System**: Rule-based and WebLLM-powered workout generation tailored to your goals
+- **AI Coach (Local + Hosted)**:
+  - **Deterministic Coach Engine (offline)** for stable plan generation
+  - **WebLLM (in-browser, optional)** for free on-device AI (WebGPU permitting)
+  - **OpenAI Coach via Secure Proxy (optional)** for higher-quality chat + actions **without exposing your API key in the browser**
+- **Assistant Tool Calling ("do things in the app")** *(when enabled in Settings)*:
+  - Log **food**, **workouts**, and **weight** directly into your local data
+  - Create **meal/workout plan drafts** and guide you to save/apply them
+  - Navigate you to the right page (Nutrition, Workout Logger, Progress, etc.)
+- **Automatic Fallback**: If hosted AI hits quota/billing errors, the app auto-falls back to **WebLLM** (if available) or **deterministic**.
+- **Exercise Form Coaching**: Ask how to do an exercise and get step-by-step cues + common mistakes.
 - **Adaptive Calorie Targets**: Calories and macros auto-adjust based on real weight trends and your selected goal
-- **Goal-Dependent Programs**: Whether you want to lose fat, build muscle, or improve performance, FitBud AI builds a plan for *you*
-- **AI Meal Planning**: Generate meal plans that fit your macro targets, dietary preferences, and schedule
-- **Program Optimization**: AI-assisted coaching helps refine your training for better results over time
 
 ### 🏋️ Fitness Tracking
 - **Profile Management**: Personal metrics, goals, equipment, and schedule
@@ -81,6 +87,7 @@ FitBud AI is a privacy-first fitness companion designed to help you **reach your
 
 ### AI & Intelligence
 - **WebLLM** for in-browser AI model execution (optional)
+- **Secure OpenAI Proxy Provider (optional)** for hosted chat + tool calling (no key in client)
 - **Deterministic Coach Engine** for offline-first workout generation
 - **Weight trend analysis** for adaptive calorie adjustments
 
@@ -180,8 +187,9 @@ src/
 
 ## 🔐 Privacy & Security
 
-- ✅ **No Network Calls**: Works completely offline
-- ✅ **Local Storage Only**: IndexedDB for all user data
+- ✅ **Offline-first by default**: Core logging and planning works without a backend
+- ✅ **Optional network calls only**: USDA search and hosted AI (via your proxy) are opt-in and clearly surfaced
+- ✅ **Local Storage Only (for your data)**: IndexedDB for all user logs, settings, and plans
 - ✅ **No Third-Party Tracking**: Zero analytics or ads
 - ✅ **Data Export**: JSON export for backup/migration
 - ✅ **Complete Deletion**: One-click data removal
