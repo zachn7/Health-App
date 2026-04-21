@@ -19,7 +19,7 @@ export interface SeedProfileOptions {
 export interface SeedSettingsOptions {
   enableUSDALookups?: boolean
   enableWebLLMCoach?: boolean
-  aiProvider?: 'deterministic' | 'webllm' | 'openrouter'
+  aiProvider?: 'deterministic' | 'webllm' | 'openai_proxy' | 'openrouter'
   aiAllowLoggingActions?: boolean
   webllmModelId?: string | null
 }

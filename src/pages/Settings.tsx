@@ -642,7 +642,7 @@ export default function Settings() {
               <h2 className="text-xl font-semibold text-gray-900">AI Assistant Provider</h2>
             </div>
             <p className="text-gray-600 text-sm">
-              Choose how the in-app assistant should respond. Deterministic is fully local and stable. Hosted providers can be added later with an API key.
+              Choose how the in-app assistant should respond. Deterministic/WebLLM are local. OpenAI Proxy uses your private server endpoint (no key in the browser) and will auto-fallback to local providers if your credits run out.
             </p>
           </div>
 
@@ -656,6 +656,7 @@ export default function Settings() {
               >
                 <option value="deterministic">Deterministic Assistant (recommended default)</option>
                 <option value="webllm">WebLLM Assistant (experimental)</option>
+                <option value="openai_proxy">OpenAI Coach (via secure proxy)</option>
                 <option value="openrouter">OpenRouter Hosted Assistant (API key later)</option>
               </select>
             </div>

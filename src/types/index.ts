@@ -388,7 +388,7 @@ export interface Settings {
   enableWebLLMCoach: boolean;
   webllmModelId?: string;
   // AI Assistant provider configuration
-  aiProvider?: 'deterministic' | 'webllm' | 'openrouter';
+  aiProvider?: 'deterministic' | 'webllm' | 'openai_proxy' | 'openrouter';
   aiApiKey?: string;
   aiModelId?: string;
   aiAllowLoggingActions?: boolean;

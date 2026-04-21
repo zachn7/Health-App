@@ -3,12 +3,14 @@ import { settingsRepository } from '@/db/repositories/settings.repository'
 import { buildUserContextSnapshot } from './personalization'
 import { buildOutOfDomainResponse, isFitnessDomainMessage } from './domain'
 import { DeterministicAssistantProvider } from './providers/deterministic'
+import { OpenAIProxyAssistantProvider } from './providers/openai-proxy'
 import type { AIProviderId, AssistantProvider, AssistantRequest, AssistantResponse, PlanGenerationResult } from './types'
 import type { Profile } from '@/types'
 
 class AssistantService {
   private readonly deterministicProvider = new DeterministicAssistantProvider(() => repositories.nutrition.getMealTemplates())
   private webllmProviderPromise: Promise<AssistantProvider> | null = null
+  private openAIProxyProviderPromise: Promise<AssistantProvider> | null = null
 
   private async getWebLLMProvider(): Promise<AssistantProvider> {
     if (!this.webllmProviderPromise) {
@@ -18,6 +20,16 @@ class AssistantService {
     }
 
     return await this.webllmProviderPromise
+  }
+
+  private async getOpenAIProxyProvider(): Promise<AssistantProvider> {
+    if (!this.openAIProxyProviderPromise) {
+      this.openAIProxyProviderPromise = Promise.resolve(
+        new OpenAIProxyAssistantProvider(() => repositories.nutrition.getMealTemplates()),
+      )
+    }
+
+    return await this.openAIProxyProviderPromise
   }
 
   private async getProvider(providerId: AIProviderId): Promise<AssistantProvider> {
@@ -31,6 +43,18 @@ class AssistantService {
           // WebLLM is optional and can fail to initialize (no WebGPU, blocked wasm, etc).
           // Falling back keeps the app usable.
           console.warn('WebLLM assistant provider unavailable. Falling back to deterministic.', error)
+          return this.deterministicProvider
+        }
+      case 'openai_proxy':
+        try {
+          const proxy = await this.getOpenAIProxyProvider()
+          if (!(await proxy.isAvailable())) {
+            console.warn('OpenAI proxy provider not available (missing base URL). Falling back to deterministic.')
+            return this.deterministicProvider
+          }
+          return proxy
+        } catch (error) {
+          console.warn('OpenAI proxy provider failed. Falling back to deterministic.', error)
           return this.deterministicProvider
         }
       case 'openrouter':

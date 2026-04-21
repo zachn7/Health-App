@@ -1,0 +1,13 @@
+name = "fitbud-ai-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Optional: lock down CORS
+# CORS_ORIGIN = "https://<your-gh-pages-domain>"
+
+# Optional: default model override
+# DEFAULT_MODEL = "gpt-5.2"
+
+# Store secrets with:
+# wrangler secret put OPENAI_API_KEY

@@ -83,6 +83,9 @@ jobs:
           VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp }}
           # NOTE: Static client app. This will be embedded in the JS bundle and is publicly visible.
           VITE_USDA_API_KEY: ${{ secrets.VITE_USDA_API_KEY }}
+          # AI proxy base URL (public). OpenAI key must live in the proxy worker.
+          VITE_AI_PROXY_BASE_URL: ${{ secrets.VITE_AI_PROXY_BASE_URL }}
+          VITE_OPENAI_MODEL_ID: ${{ secrets.VITE_OPENAI_MODEL_ID }}
         run: npm run build
       
       - name: Verify dist exists

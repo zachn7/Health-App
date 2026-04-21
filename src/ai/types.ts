@@ -1,6 +1,6 @@
 import type { MealPlan, Profile, WorkoutPlan } from '@/types'
 
-export type AIProviderId = 'deterministic' | 'webllm' | 'openrouter'
+export type AIProviderId = 'deterministic' | 'webllm' | 'openai_proxy' | 'openrouter'
 
 export type AssistantIntent =
   | 'workout_form'
