@@ -31,11 +31,12 @@ export default function Settings() {
     loadBuildInfo();
     checkServiceWorkerController();
     
-    // Check for environment variable in development
-    const envApiKey = import.meta.env.VITE_FDC_API_KEY;
+    // If a build-time key is present, we show status + allow optional override.
+    // NOTE: VITE_* env vars are baked into the client bundle (public at runtime).
+    const envApiKey = import.meta.env.VITE_USDA_API_KEY || import.meta.env.VITE_FDC_API_KEY;
     if (envApiKey && !apiKey) {
+      // Don't auto-fill the textbox with the full key; just reflect status.
       setApiKey(envApiKey);
-      setTempApiKey(envApiKey);
     }
   }, []);
   
@@ -357,10 +358,15 @@ export default function Settings() {
     
     setIsSaving(true);
     try {
+      const buildKey = import.meta.env.VITE_USDA_API_KEY || import.meta.env.VITE_FDC_API_KEY;
+      const userOverrideKey = tempApiKey?.trim() || '';
+
       const updatedSettings: SettingsType = {
         ...settings,
-        fdcApiKey: tempApiKey || undefined,
-        enableUSDALookups: !!(tempApiKey && tempApiKey.trim()),
+        // Store ONLY the user override. Build-time key is not persisted.
+        fdcApiKey: userOverrideKey || undefined,
+        // If we have a build key, USDA lookups should be enabled by default.
+        enableUSDALookups: !!((buildKey && String(buildKey).trim()) || userOverrideKey),
         aiProvider: settings.aiProvider || 'deterministic',
         aiAllowLoggingActions: settings.aiAllowLoggingActions || false,
         updatedAt: new Date().toISOString()
@@ -463,15 +469,15 @@ export default function Settings() {
               <h2 className="text-xl font-semibold text-gray-900">USDA FoodData Central</h2>
             </div>
             <p className="text-gray-600 text-sm">
-              Search the USDA FoodData Central database for nutritional information. 
-              Requires a free API key from USDA.
+              Search the USDA FoodData Central database for nutritional information.
+              You can provide a build-time key (recommended for "it just works") and/or an optional local override.
             </p>
           </div>
           
           <div className="space-y-4">
             <div>
               <label htmlFor="fdc-api-key" className="block text-sm font-medium text-gray-700 mb-2">
-                API Key
+                API Key (optional override)
               </label>
               <div className="relative">
                 <input
@@ -479,7 +485,7 @@ export default function Settings() {
                   id="fdc-api-key"
                   value={tempApiKey}
                   onChange={(e) => setTempApiKey(e.target.value)}
-                  placeholder="Enter your USDA FDC API key"
+                  placeholder="Optional: override the build-time key"
                   className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
                 <button
@@ -494,7 +500,11 @@ export default function Settings() {
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 mt-0.5 text-yellow-500" />
                   <div>
-                    <p>Your API key is stored locally and never uploaded to our servers.</p>
+                    <p>
+                      This app runs fully client-side. A build-time key (VITE_USDA_API_KEY) is embedded into the JS bundle and is publicly visible.
+                      Treat it as non-secret.
+                    </p>
+                    <p className="mt-1">A local override (this field) is stored only in your browser.</p>
                     <p className="mt-1">
                       Get your free key at{' '}
                       <a 

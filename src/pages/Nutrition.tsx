@@ -810,7 +810,7 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
           Import Meal Plan
         </button>
         
-        {isUSDAEnabled && (
+        {isUSDAEnabled ? (
           <button
             data-testid="usda-search-button"
             onClick={() => {
@@ -821,6 +821,12 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
           >
             Search USDA Database
           </button>
+        ) : (
+          <div data-testid="usda-disabled-banner" className="text-sm text-gray-500">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              USDA search is disabled (no API key). Set VITE_USDA_API_KEY at build time or add an optional override in Settings.
+            </span>
+          </div>
         )}
         
         {savedFoods.length > 0 && (
@@ -845,13 +851,6 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
           </div>
         )}
         
-        {!isUSDAEnabled && (
-          <div className="text-sm text-gray-500">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-              USDA lookup requires API key in Settings
-            </span>
-          </div>
-        )}
       </div>
       
       {/* Saved Food Search */}

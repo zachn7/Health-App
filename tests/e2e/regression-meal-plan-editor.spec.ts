@@ -139,24 +139,31 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     const addToMealButton = modal.getByRole('button', { name: 'Add to Meal' });
     await addToMealButton.click();
     
-    // Now find a food item with Edit button
-    const editButton = page.getByTestId(/meal-plan-food-edit-btn-/).first();
+    // Target the manual food row we just created (avoid preset rows)
+    const manualRowByText = page.locator('[data-testid^="meal-plan-food-"]').filter({ hasText: 'Test Chicken Breast' }).first();
+    await expect(manualRowByText).toBeVisible({ timeout: 10_000 });
+
+    const manualRowTestId = await manualRowByText.getAttribute('data-testid');
+    if (!manualRowTestId) throw new Error('Expected manual food row to have data-testid');
+
+    const foodRow = page.getByTestId(manualRowTestId);
+
+    const editButton = foodRow.getByTestId(/meal-plan-food-edit-btn-/);
     await expect(editButton).toBeVisible({ timeout: 10_000 });
-    
+
     // Get initial calories
-    const foodRow = page.getByTestId(/meal-plan-food-/).first();
     const initialText = await foodRow.textContent();
     const initialCalMatch = initialText?.match(/(\d+) cal/);
     const initialCalories = initialCalMatch ? parseInt(initialCalMatch[1]) : 0;
-    
+
     // Click Edit button
     await editButton.click();
-    
+
     // Verify edit mode UI is visible
-    const qtyInput = page.locator('input[type="number"]').first();
+    const qtyInput = foodRow.getByTestId(/meal-plan-food-edit-qty-/);
     await expect(qtyInput).toBeVisible({ timeout: 5000 });
-    
-    const saveButton = page.getByTestId(/meal-plan-food-save-qty-/).first();
+
+    const saveButton = foodRow.getByTestId(/meal-plan-food-save-qty-/);
     await expect(saveButton).toBeVisible({ timeout: 3000 });
     
     // Change quantity to 2x
@@ -166,16 +173,17 @@ test.describe('Regression: Meal Plan Editor - Add Foods & Delete Sections', () =
     
     // Click Save
     await saveButton.click();
-    
+
+    // Wait for edit mode to close (otherwise row text won't include "cal")
+    await expect(qtyInput).not.toBeVisible({ timeout: 10_000 });
+
     // Verify food is updated (calories should be ~2x)
+    await expect(foodRow).toContainText(/\d+\s*cal/, { timeout: 10_000 });
     const updatedText = await foodRow.textContent();
     const updatedCalMatch = updatedText?.match(/(\d+) cal/);
     const updatedCalories = updatedCalMatch ? parseInt(updatedCalMatch[1]) : 0;
-    
+
     expect(updatedCalories).toBeGreaterThanOrEqual(initialCalories * 1.9);
-    
-    // Verify edit mode is closed
-    await expect(qtyInput).not.toBeVisible({ timeout: 3000 });
     
     // Reload and verify persistence
     await page.reload({ waitUntil: 'domcontentloaded' });

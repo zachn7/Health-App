@@ -81,6 +81,8 @@ jobs:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_BUILD_RUN: ${{ github.run_number }}
           VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp }}
+          # NOTE: Static client app. This will be embedded in the JS bundle and is publicly visible.
+          VITE_USDA_API_KEY: ${{ secrets.VITE_USDA_API_KEY }}
         run: npm run build
       
       - name: Verify dist exists

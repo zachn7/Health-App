@@ -1031,6 +1031,10 @@ class USDAService {
   
   static async isUSDALookupsEnabled(): Promise<boolean> {
     try {
+      const apiKey = await this.getApiKey()
+      if (!apiKey) return false
+
+      // Keep the user toggle, but default to true in Settings when a build key exists.
       return await settingsRepository.isUSDALookupsEnabled();
     } catch (error) {
       console.error('Failed to check USDA lookup status:', error);

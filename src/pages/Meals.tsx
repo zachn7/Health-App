@@ -44,7 +44,11 @@ export default function Meals() {
   
   // Meal plan editor state
   const [addingFoodToMeal, setAddingFoodToMeal] = useState<{ dayId: string; mealId: string } | null>(null);
-  const [editingFoodServing, setEditingFoodServing] = useState<{ dayId: string; mealId: string; foodId: string; quantidade: number; originalCalories: number } | null>(null);
+  const [editingFoodServing, setEditingFoodServing] = useState<{ dayId: string; mealId: string; foodId: string; quantity: number; unit: 'serving' | 'grams'; originalItem: any } | null>(null);
+const [editingFoodDraftValue, setEditingFoodDraftValue] = useState<string>('');
+const [showSavedMealPicker, setShowSavedMealPicker] = useState<{ dayId: string; mealId: string } | null>(null);
+const [savedMealsForPicker, setSavedMealsForPicker] = useState<MealTemplate[]>([]);
+const [savedMealSearch, setSavedMealSearch] = useState<string>('');
   const [logSuccessMessage, setLogSuccessMessage] = useState<string | null>(null);
   const [logSuccessTimer, setLogSuccessTimer] = useState<NodeJS.Timeout | null>(null);
   const [deleteConfirmMeal, setDeleteConfirmMeal] = useState<MealTemplate | null>(null);
@@ -220,57 +224,65 @@ export default function Meals() {
   // Meal plan editor helper: Add food to meal
   const handleAddFoodToMealPlanMeal = async (dayId: string, mealId: string, food: any) => {
     if (!editingMealPlan) return;
-    
+
     try {
-      // Create a MealPlanFood item from search result
+      // Accept either a USDA search result OR a FoodLogItem-ish object (manual foods, etc).
+      const isManualFood = !!food?.name && typeof food?.calories === 'number' && !food?.description;
+
       const mealPlanFood = {
         id: crypto.randomUUID(),
         name: food.description || food.name,
-        servingSize: food.serving_size || '1 serving',
-        quantidade: 1,
+        servingSize: food.serving_size || food.servingSize || '1 serving',
+        quantidade: typeof food.quantidade === 'number' ? food.quantidade : 1,
         calories: 0,
         proteinG: 0,
         carbsG: 0,
         fatG: 0,
-        baseUnit: 'serving' as const,
-        servingGrams: food.serving_g || 100,
-        computedTotalGrams: food.serving_g || 100,
-        fdcId: food.fdc_id
+        baseUnit: (food.baseUnit || 'serving') as 'serving' | 'grams',
+        servingGrams: food.serving_g || food.servingGrams || 100,
+        computedTotalGrams:
+          food.computedTotalGrams
+          || (typeof food.quantidade === 'number' ? food.quantidade : 1) * (food.servingGrams || food.serving_g || 100),
+        fdcId: food.fdc_id || food.fdcId
       };
-      
-      // Extract macros if available
-      const { extractMacrosFromSearchResult } = await import('../lib/usda-service');
-      const macros = extractMacrosFromSearchResult(food);
-      if (macros) {
-        mealPlanFood.calories = macros.calories || 0;
-        mealPlanFood.proteinG = macros.proteinG || 0;
-        mealPlanFood.carbsG = macros.carbsG || 0;
-        mealPlanFood.fatG = macros.fatG || 0;
+
+      if (isManualFood) {
+        mealPlanFood.calories = food.calories || 0;
+        mealPlanFood.proteinG = food.proteinG || 0;
+        mealPlanFood.carbsG = food.carbsG || 0;
+        mealPlanFood.fatG = food.fatG || 0;
+      } else {
+        const { extractMacrosFromSearchResult } = await import('../lib/usda-service');
+        const macros = extractMacrosFromSearchResult(food);
+        if (macros) {
+          mealPlanFood.calories = macros.calories || 0;
+          mealPlanFood.proteinG = macros.proteinG || 0;
+          mealPlanFood.carbsG = macros.carbsG || 0;
+          mealPlanFood.fatG = macros.fatG || 0;
+        }
       }
-      
-      // Create updated plan with added food
+
       const updatedPlan = {
         ...editingMealPlan,
         days: editingMealPlan.days.map(day => {
           if (day.id !== dayId) return day;
-          
+
           return {
             ...day,
             meals: day.meals.map(meal => {
               if (meal.id !== mealId) return meal;
-              
-              // Add food and recalculate totals
+
               const updatedFoods = [...meal.foods, mealPlanFood];
               const newTotals = updatedFoods.reduce(
                 (totals, item) => ({
-                  calories: totals.calories + item.calories,
-                  proteinG: totals.proteinG + item.proteinG,
-                  carbsG: totals.carbsG + item.carbsG,
-                  fatG: totals.fatG + item.fatG
+                  calories: totals.calories + (item.calories || 0),
+                  proteinG: totals.proteinG + (item.proteinG || 0),
+                  carbsG: totals.carbsG + (item.carbsG || 0),
+                  fatG: totals.fatG + (item.fatG || 0)
                 }),
                 { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
               );
-              
+
               return {
                 ...meal,
                 foods: updatedFoods,
@@ -283,14 +295,12 @@ export default function Meals() {
           };
         })
       };
-      
-      // Update both local state and database
+
       setEditingMealPlan(updatedPlan);
       await repositories.nutrition.updateMealPlan(editingMealPlan.id, {
         days: updatedPlan.days
       });
-      
-      // Update meal plans list
+
       await loadMealPlans();
     } catch (error) {
       console.error('Failed to add food to meal:', error);
@@ -332,51 +342,88 @@ export default function Meals() {
     }
   };
 
-  const saveFoodServing = async (dayId: string, mealId: string, foodId: string, newQuantidade: number) => {
-    if (!editingMealPlan) return;
-    
-    const ratio = newQuantidade / (editingFoodServing?.quantidade || 1);
-    
+  const recalcMealTotals = (foods: any[]) => {
+    return foods.reduce(
+      (totals, item) => ({
+        calories: totals.calories + (item.calories || 0),
+        proteinG: totals.proteinG + (item.proteinG || 0),
+        carbsG: totals.carbsG + (item.carbsG || 0),
+        fatG: totals.fatG + (item.fatG || 0)
+      }),
+      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
+    );
+  };
+
+  const saveFoodServing = async (dayId: string, mealId: string, foodId: string) => {
+    if (!editingMealPlan || !editingFoodServing) return;
+
     try {
+      const { computeServingsChange, roundToIntGrams, roundToTenthServings } = await import('../lib/serving-utils');
+
+      const rawValue = editingFoodDraftValue.trim();
+      const numericValue = parseFloat(rawValue);
+      const isGrams = editingFoodServing.unit === 'grams';
+      const sanitized = (rawValue === '' || Number.isNaN(numericValue) || numericValue < 0) ? 0 : numericValue;
+      const rounded = isGrams ? roundToIntGrams(sanitized) : roundToTenthServings(sanitized);
+
+      const result = computeServingsChange({
+        originalItem: editingFoodServing.originalItem,
+        editedQuantity: rounded,
+        editedUnit: isGrams ? 'grams' : 'serving'
+      });
+
       const updatedPlan = {
         ...editingMealPlan,
         days: editingMealPlan.days.map(day => {
           if (day.id !== dayId) return day;
-          
+
           return {
             ...day,
             meals: day.meals.map(meal => {
               if (meal.id !== mealId) return meal;
-              
+
+              const updatedFoods = meal.foods.map(food => {
+                if (food.id !== foodId) return food;
+
+                return {
+                  ...food,
+                  servingSize: result.newDisplayServingSize,
+                  quantidade: result.newQuantity,
+                  servingGrams: result.newServingGrams,
+                  baseUnit: result.newBaseUnit,
+                  computedTotalGrams: result.newTotalGrams,
+                  calories: result.newCalories,
+                  proteinG: result.newProteinG,
+                  carbsG: result.newCarbsG,
+                  fatG: result.newFatG,
+                  fiberG: result.newFiberG,
+                  sugarG: result.newSugarG,
+                  sodiumMg: result.newSodiumMg,
+                };
+              });
+
+              const totals = recalcMealTotals(updatedFoods);
+
               return {
                 ...meal,
-                foods: meal.foods.map(food => {
-                  if (food.id !== foodId) return food;
-                  
-                  return {
-                    ...food,
-                    quantidade: newQuantidade,
-                    calories: food.calories * ratio,
-                    proteinG: food.proteinG * ratio,
-                    carbsG: food.carbsG * ratio,
-                    fatG: food.fatG * ratio
-                  };
-                })
+                foods: updatedFoods,
+                ...totals,
               };
             })
           };
         })
       };
-      
+
       setEditingMealPlan(updatedPlan);
       setEditingFoodServing(null);
+      setEditingFoodDraftValue('');
       await repositories.nutrition.updateMealPlan(editingMealPlan.id, {
         days: updatedPlan.days
       });
       await loadMealPlans();
     } catch (error) {
-      console.error('Failed to update food serving:', error);
-      alert('Failed to update food serving. Please try again.');
+      console.error('Failed to update food quantity:', error);
+      alert('Failed to update food quantity. Please try again.');
     }
   };
 
@@ -1222,6 +1269,23 @@ export default function Meals() {
                                 Add Food
                               </button>
                               <button
+                                onClick={async () => {
+                                  setShowSavedMealPicker({ dayId: day.id, mealId: meal.id });
+                                  try {
+                                    const templates = await repositories.nutrition.getMealTemplates();
+                                    setSavedMealsForPicker(templates);
+                                    setSavedMealSearch('');
+                                  } catch (e) {
+                                    console.error('Failed to load saved meals for picker:', e);
+                                  }
+                                }}
+                                className="text-indigo-600 hover:text-indigo-700 text-sm flex items-center"
+                                data-testid={`meal-plan-${editingMealPlan.id}-day-${day.id}-meal-${meal.id}-add-from-saved-meal`}
+                              >
+                                <List className="w-4 h-4 mr-1" />
+                                Add Saved Meal
+                              </button>
+                              <button
                                 onClick={() => {
                                   setAddingFoodToMeal({ dayId: day.id, mealId: meal.id });
                                   setManualFood({
@@ -1277,51 +1341,104 @@ export default function Meals() {
                                   data-testid={`meal-plan-food-${food.id}`}
                                 >
                                   {editingFoodServing?.foodId === food.id ? (
-                                    // Edit serving mode
-                                    <div className="flex items-center gap-2 flex-1">
-                                      <input
-                                        type="number"
-                                        step="0.1"
-                                        min="0.1"
-                                        value={editingFoodServing.quantidade}
-                                        onChange={(e) => {
-                                          const newQuantidade = parseFloat(e.target.value) || 0;
-                                          setEditingFoodServing({ ...editingFoodServing, quantidade: newQuantidade });
-                                        }}
-                                        className="w-20 p-1 border border-gray-300 rounded text-xs"
-                                        data-testid={`meal-plan-food-edit-qty-${food.id}`}
-                                      />
-                                      <span className="text-gray-600 text-xs">
-                                        {food.baseUnit === 'serving' ? 'servings' : 'g'} • {Math.round(editingFoodServing.quantidade / (food.quantidade || 1) * editingFoodServing.originalCalories)} cal
-                                      </span>
-                                      <button
-                                        onClick={() => saveFoodServing(day.id, meal.id, food.id, editingFoodServing.quantidade)}
-                                        className="text-green-600 hover:text-green-800 font-medium text-xs"
-                                        data-testid={`meal-plan-food-save-qty-${food.id}`}
-                                      >
-                                        Save
-                                      </button>
-                                      <button
-                                        onClick={() => setEditingFoodServing(null)}
-                                        className="text-gray-500 hover:text-gray-700 text-xs"
-                                        data-testid={`meal-plan-food-cancel-qty-${food.id}`}
-                                      >
-                                        Cancel
-                                      </button>
+                                    // Edit mode (servings OR grams) - reuses same core math as Nutrition
+                                    <div className="space-y-2 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex rounded-md shadow-sm" role="group" data-testid={`meal-plan-food-amount-type-${food.id}`}>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (!editingFoodServing) return;
+                                              setEditingFoodServing({ ...editingFoodServing, unit: 'serving' });
+                                            }}
+                                            className={`px-2 py-1 text-xs font-medium rounded-l-lg border ${
+                                              editingFoodServing.unit === 'serving'
+                                                ? 'bg-blue-600 text-white border-blue-600'
+                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            Servings
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (!editingFoodServing) return;
+                                              setEditingFoodServing({ ...editingFoodServing, unit: 'grams' });
+                                            }}
+                                            className={`px-2 py-1 text-xs font-medium rounded-r-lg border ${
+                                              editingFoodServing.unit === 'grams'
+                                                ? 'bg-blue-600 text-white border-blue-600'
+                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            Grams
+                                          </button>
+                                        </div>
+
+                                        <input
+                                          type="number"
+                                          step={editingFoodServing.unit === 'grams' ? '1' : '0.1'}
+                                          min="0"
+                                          value={editingFoodDraftValue}
+                                          onChange={(e) => setEditingFoodDraftValue(e.target.value)}
+                                          className="w-24 p-1 border border-gray-300 rounded text-xs"
+                                          data-testid={`meal-plan-food-edit-qty-${food.id}`}
+                                        />
+
+                                        <button
+                                          onClick={() => saveFoodServing(day.id, meal.id, food.id)}
+                                          className="text-green-600 hover:text-green-800 font-medium text-xs"
+                                          data-testid={`meal-plan-food-save-qty-${food.id}`}
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setEditingFoodServing(null);
+                                            setEditingFoodDraftValue('');
+                                          }}
+                                          className="text-gray-500 hover:text-gray-700 text-xs"
+                                          data-testid={`meal-plan-food-cancel-qty-${food.id}`}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                      <div className="text-gray-600 text-xs">
+                                        {editingFoodServing.unit === 'grams'
+                                          ? `${Math.round(parseFloat(editingFoodDraftValue) || 0)} g`
+                                          : `${editingFoodDraftValue || '0'} servings`} • preview updates after save
+                                      </div>
                                     </div>
                                   ) : (
                                     // View mode
                                     <>
                                       <div className="flex-1">
                                         <div className="font-medium text-gray-900">{food.name}</div>
-                                        <div className="text-gray-600">{food.quantidade} {food.baseUnit === 'serving' ? 'serving' : 'g'} • {Math.round(food.calories)} cal</div>
+                                        <div className="text-gray-600">
+                                          {formatServingsAndGrams(food as any)} • {Math.round(food.calories)} cal
+                                        </div>
                                       </div>
                                       <div className="flex items-center space-x-2 text-xs text-gray-600">
                                         {food.proteinG > 0 && <span className="text-blue-600">P: {Math.round(food.proteinG)}g</span>}
                                         {food.carbsG > 0 && <span className="text-orange-600">C: {Math.round(food.carbsG)}g</span>}
                                         {food.fatG > 0 && <span className="text-yellow-600">F: {Math.round(food.fatG)}g</span>}
                                         <button
-                                          onClick={() => setEditingFoodServing({ dayId: day.id, mealId: meal.id, foodId: food.id, quantidade: food.quantidade, originalCalories: food.calories })}
+                                          onClick={() => {
+                                            const unit = (food.baseUnit || 'serving') === 'grams' ? 'grams' : 'serving';
+                                            setEditingFoodServing({
+                                              dayId: day.id,
+                                              mealId: meal.id,
+                                              foodId: food.id,
+                                              unit,
+                                              quantity: food.quantidade,
+                                              originalItem: {
+                                                ...food,
+                                                // ensure canonical grams exists for computeServingsChange
+                                                computedTotalGrams: food.computedTotalGrams || (food.quantidade || 1) * (food.servingGrams || 100),
+                                              }
+                                            });
+                                            setEditingFoodDraftValue(String(food.quantidade || 1));
+                                          }}
                                           className="text-blue-600 hover:text-blue-800 text-xs ml-2"
                                           data-testid={`meal-plan-food-edit-btn-${food.id}`}
                                         >
@@ -1567,6 +1684,125 @@ export default function Meals() {
                 <p className="text-sm text-gray-600">Try adjusting your search or filters</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Saved Meal Picker (Meal Plan Editor) */}
+      {showSavedMealPicker && editingMealPlan && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          data-testid="meal-plan-saved-meal-dialog"
+        >
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Add from Saved Meal</h2>
+                <button
+                  onClick={() => setShowSavedMealPicker(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <input
+                  type="text"
+                  value={savedMealSearch}
+                  onChange={(e) => setSavedMealSearch(e.target.value)}
+                  className="input w-full"
+                  placeholder="Search saved meals..."
+                  data-testid="meal-plan-saved-meal-search"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto" data-testid="meal-plan-saved-meal-results">
+                {savedMealsForPicker
+                  .filter((meal) => {
+                    const q = savedMealSearch.trim().toLowerCase();
+                    if (!q) return true;
+                    return meal.name.toLowerCase().includes(q);
+                  })
+                  .map((meal) => (
+                    <button
+                      key={meal.id}
+                      className="w-full p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-left transition-colors"
+                      data-testid="meal-plan-saved-meal-row"
+                      onClick={async () => {
+                        try {
+                          const { dayId, mealId } = showSavedMealPicker;
+
+                          const copyItems = (meal.items || []).map((item) => ({
+                            id: crypto.randomUUID(),
+                            name: item.name,
+                            servingSize: item.servingSize || '1 serving',
+                            quantidade: item.quantidade || 1,
+                            calories: item.calories || 0,
+                            proteinG: item.proteinG || 0,
+                            carbsG: item.carbsG || 0,
+                            fatG: item.fatG || 0,
+                            fiberG: item.fiberG,
+                            sugarG: item.sugarG,
+                            sodiumMg: item.sodiumMg,
+                            baseUnit: item.baseUnit || 'serving',
+                            servingGrams: item.servingGrams || 100,
+                            computedTotalGrams: item.computedTotalGrams || (item.quantidade || 1) * (item.servingGrams || 100),
+                            fdcId: item.fdcId,
+                          }));
+
+                          const updatedPlan = {
+                            ...editingMealPlan,
+                            days: editingMealPlan.days.map((day) => {
+                              if (day.id !== dayId) return day;
+                              return {
+                                ...day,
+                                meals: day.meals.map((section) => {
+                                  if (section.id !== mealId) return section;
+
+                                  const mergedFoods = [...section.foods, ...copyItems];
+                                  const totals = mergedFoods.reduce(
+                                    (sum, food) => ({
+                                      calories: sum.calories + (food.calories || 0),
+                                      proteinG: sum.proteinG + (food.proteinG || 0),
+                                      carbsG: sum.carbsG + (food.carbsG || 0),
+                                      fatG: sum.fatG + (food.fatG || 0),
+                                    }),
+                                    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+                                  );
+
+                                  return {
+                                    ...section,
+                                    mealId: meal.id,
+                                    foods: mergedFoods,
+                                    ...totals,
+                                  };
+                                }),
+                              };
+                            }),
+                          };
+
+                          setEditingMealPlan(updatedPlan);
+                          await repositories.nutrition.updateMealPlan(editingMealPlan.id, { days: updatedPlan.days });
+                          await loadMealPlans();
+                          setShowSavedMealPicker(null);
+                        } catch (error) {
+                          console.error('Failed to insert saved meal into section:', error);
+                          alert('Failed to add saved meal. Please try again.');
+                        }
+                      }}
+                    >
+                      <div className="font-medium text-gray-900">{meal.name}</div>
+                      <div className="text-xs text-gray-500 mt-1">{meal.items?.length || 0} items</div>
+                    </button>
+                  ))}
+
+                {savedMealsForPicker.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">No saved meals yet.</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
