@@ -3,6 +3,7 @@ import { DeterministicAssistantProvider } from './deterministic'
 import { pickBestLocalFallback } from './fallback'
 import { aiProxyChat } from '@/lib/ai-proxy-client'
 import { isAIQuotaBlocked, setAIQuotaBlockedFor } from '@/lib/ai-quota'
+import { setAssistantFallback } from '@/ai/diagnostics'
 import { findToolSpec, getToolSpecs, toolSpecsToOpenAITools } from '@/ai/tools/registry'
 
 function makeFallbackProvider(getMealTemplates: () => Promise<any[]>) {
@@ -33,7 +34,25 @@ export class OpenAIProxyAssistantProvider implements AssistantProvider {
   }
 
   async sendMessage(request: AssistantRequest): Promise<AssistantResponse> {
-    if (!(await this.isAvailable()) || isAIQuotaBlocked()) {
+    const selectedProvider = this.id
+
+    if (!(await this.isAvailable())) {
+      setAssistantFallback({
+        selectedProvider,
+        effectiveProvider: 'deterministic',
+        reasonId: 'missing_proxy_base_url',
+        message: 'Hosted AI proxy base URL is missing (VITE_AI_PROXY_BASE_URL). Falling back to offline assistant.',
+      })
+      return this.fallback.sendMessage(request)
+    }
+
+    if (isAIQuotaBlocked()) {
+      setAssistantFallback({
+        selectedProvider,
+        effectiveProvider: 'deterministic',
+        reasonId: 'quota_blocked',
+        message: 'Hosted AI quota is temporarily blocked (rate/credits). Falling back to offline assistant.',
+      })
       return this.fallback.sendMessage(request)
     }
 
@@ -74,6 +93,12 @@ export class OpenAIProxyAssistantProvider implements AssistantProvider {
             setAIQuotaBlockedFor(60)
             // Prefer WebLLM if it's available, otherwise deterministic.
             const local = await pickBestLocalFallback()
+            setAssistantFallback({
+              selectedProvider,
+              effectiveProvider: local === 'webllm' ? 'webllm' : 'deterministic',
+              reasonId: 'quota_blocked',
+              message: 'Hosted AI quota exceeded. Falling back to local assistant.',
+            })
             if (local === 'webllm') {
               try {
                 const { WebLLMAssistantProvider } = await import('./webllm')
@@ -142,6 +167,12 @@ export class OpenAIProxyAssistantProvider implements AssistantProvider {
       }
     } catch (error) {
       console.warn('[OpenAIProxyAssistantProvider] failed; falling back:', error)
+      setAssistantFallback({
+        selectedProvider,
+        effectiveProvider: 'deterministic',
+        reasonId: 'proxy_error',
+        message: error instanceof Error ? error.message : 'Hosted AI proxy error (unknown). Falling back to offline assistant.',
+      })
       return this.fallback.sendMessage(request)
     }
   }

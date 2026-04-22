@@ -3,8 +3,10 @@ import { Shield, Eye, EyeOff, Key, Brain, AlertCircle, CheckCircle2, X, Monitor,
 import { Settings as SettingsType } from '@/types';
 import { db } from '@/db';
 import { getWebLLMService, peekWebLLMService } from '@/lib/webllm-service-loader';
+import { emitSettingsChanged } from '@/lib/settings-events';
 import { getWebGPUDiagnostics } from '@/ai/webgpu';
 import { getWebLLMVersion, validateAndRepairModelId, getAvailableModels, getDefaultModelId } from '@/ai/webllmConfig';
+import SettingsDiagnosticsPanel from '@/components/SettingsDiagnosticsPanel';
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -13,6 +15,8 @@ export default function Settings() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [tempApiKey, setTempApiKey] = useState('');
+  const [aiProvider, setAiProvider] = useState<NonNullable<SettingsType['aiProvider']>>('deterministic')
+  const [aiAllowLoggingActions, setAiAllowLoggingActions] = useState(false)
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [webgpuAvailable, setWebgpuAvailable] = useState(false);
@@ -30,14 +34,7 @@ export default function Settings() {
     loadAIDiagnostics();
     loadBuildInfo();
     checkServiceWorkerController();
-    
-    // If a build-time key is present, we show status + allow optional override.
-    // NOTE: VITE_* env vars are baked into the client bundle (public at runtime).
-    const envApiKey = import.meta.env.VITE_USDA_API_KEY || import.meta.env.VITE_FDC_API_KEY;
-    if (envApiKey && !apiKey) {
-      // Don't auto-fill the textbox with the full key; just reflect status.
-      setApiKey(envApiKey);
-    }
+
   }, []);
   
   const loadBuildInfo = () => {
@@ -73,6 +70,8 @@ export default function Settings() {
       if (allSettings.length > 0) {
         const currentSettings = allSettings[0];
         setSettings(currentSettings);
+        setAiProvider((currentSettings.aiProvider || 'deterministic') as NonNullable<SettingsType['aiProvider']>)
+        setAiAllowLoggingActions(!!currentSettings.aiAllowLoggingActions)
         setApiKey(currentSettings.fdcApiKey || '');
         setTempApiKey(currentSettings.fdcApiKey || '');
       } else {
@@ -87,7 +86,10 @@ export default function Settings() {
           aiAllowLoggingActions: false,
         };
         await db.settings.add(defaultSettings);
+        emitSettingsChanged({ updatedAt: defaultSettings.updatedAt })
         setSettings(defaultSettings);
+        setAiProvider((defaultSettings.aiProvider || 'deterministic') as NonNullable<SettingsType['aiProvider']>)
+        setAiAllowLoggingActions(!!defaultSettings.aiAllowLoggingActions)
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -367,17 +369,22 @@ export default function Settings() {
         fdcApiKey: userOverrideKey || undefined,
         // If we have a build key, USDA lookups should be enabled by default.
         enableUSDALookups: !!((buildKey && String(buildKey).trim()) || userOverrideKey),
-        aiProvider: settings.aiProvider || 'deterministic',
-        aiAllowLoggingActions: settings.aiAllowLoggingActions || false,
+        aiProvider: (aiProvider || settings.aiProvider || 'deterministic') as NonNullable<SettingsType['aiProvider']>,
+        aiAllowLoggingActions,
         updatedAt: new Date().toISOString()
       };
       
       await db.settings.put(updatedSettings);
+      emitSettingsChanged({ updatedAt: updatedSettings.updatedAt })
       setSettings(updatedSettings);
       setApiKey(tempApiKey || '');
       setSaveMessage('Settings saved successfully!');
       setShowSaveToast(true);
       
+      // Reflect saved provider state immediately.
+      setAiProvider((updatedSettings.aiProvider || 'deterministic') as NonNullable<SettingsType['aiProvider']>)
+      setAiAllowLoggingActions(!!updatedSettings.aiAllowLoggingActions)
+
       // Log success in development
       if (process.env.NODE_ENV === 'development') {
         console.log('✅ Settings saved:', {
@@ -421,6 +428,7 @@ export default function Settings() {
       };
       
       await db.settings.put(updatedSettings);
+      emitSettingsChanged({ updatedAt: updatedSettings.updatedAt })
       setSettings(updatedSettings);
       setSaveMessage(
         updatedSettings.enableWebLLMCoach 
@@ -634,6 +642,8 @@ export default function Settings() {
           </div>
         </div>
         
+        <SettingsDiagnosticsPanel />
+
         {/* AI Assistant Provider Settings */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="mb-4">
@@ -650,8 +660,12 @@ export default function Settings() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
               <select
-                value={settings?.aiProvider || 'deterministic'}
-                onChange={(e) => setSettings(settings ? { ...settings, aiProvider: e.target.value as SettingsType['aiProvider'], updatedAt: new Date().toISOString() } : settings)}
+                value={aiProvider}
+                onChange={(e) => {
+                  const next = e.target.value as NonNullable<SettingsType['aiProvider']>
+                  setAiProvider(next)
+                  setSettings(settings ? { ...settings, aiProvider: next, updatedAt: new Date().toISOString() } : settings)
+                }}
                 className="input max-w-sm"
               >
                 <option value="deterministic">Deterministic Assistant (recommended default)</option>
@@ -665,8 +679,12 @@ export default function Settings() {
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                checked={!!settings?.aiAllowLoggingActions}
-                onChange={(e) => setSettings(settings ? { ...settings, aiAllowLoggingActions: e.target.checked, updatedAt: new Date().toISOString() } : settings)}
+                checked={aiAllowLoggingActions}
+                onChange={(e) => {
+                  const next = e.target.checked
+                  setAiAllowLoggingActions(next)
+                  setSettings(settings ? { ...settings, aiAllowLoggingActions: next, updatedAt: new Date().toISOString() } : settings)
+                }}
                 className="mt-1"
               />
               <div>
@@ -1233,12 +1251,6 @@ export default function Settings() {
               </span>
             </div>
             
-            <div className="flex justify-between">
-              <span className="text-gray-400">FDC API Key Set:</span>
-              <span className={apiKey ? 'text-green-400' : 'text-gray-400'}>
-                {apiKey ? 'YES (' + apiKey.length + ' chars)' : 'NO'}
-              </span>
-            </div>
             
             <div className="flex justify-between">
               <span className="text-gray-400">USDA Lookups Enabled:</span>

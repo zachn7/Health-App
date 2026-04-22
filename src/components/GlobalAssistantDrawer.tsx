@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BarChart3, Compass, Flame, LineChart, Send, Sparkles, X } from 'lucide-react'
+import AIAssistantFallbackBanner from '@/components/AIAssistantFallbackBanner'
 import { assistantService } from '@/ai/assistant-service'
 import type { AssistantActionSuggestion, UserContextSnapshot } from '@/ai/types'
 import { repositories } from '@/db'
 import { formatWeight } from '@/lib/unit-conversions'
 import type { MealPlan, Profile, WorkoutPlan } from '@/types'
 import { testIds } from '@/testIds'
+import { onSettingsChanged } from '@/lib/settings-events'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -107,6 +109,14 @@ export default function GlobalAssistantDrawer({ isOpen, onClose }: GlobalAssista
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages }))
   }, [messages])
+
+  useEffect(() => {
+    // If provider settings change, rebuild context next time the assistant sends.
+    // (assistantService listens too, but this lets the UI update any provider-dependent messaging later)
+    return onSettingsChanged(() => {
+      // noop for now, placeholder for future provider-specific UI
+    })
+  }, [])
 
   const appendAssistantMessage = (content: string) => {
     setMessages((prev) => [...prev, { role: 'assistant', content }])
@@ -224,6 +234,7 @@ export default function GlobalAssistantDrawer({ isOpen, onClose }: GlobalAssista
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
+            <AIAssistantFallbackBanner />
             <div data-testid={testIds.assistant.trendSummary} className="rounded-2xl border border-primary-100 bg-primary-50/60 p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary-900">
                 <BarChart3 className="h-4 w-4" />

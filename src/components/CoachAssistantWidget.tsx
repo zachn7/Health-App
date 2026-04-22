@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Brain, Loader2, MessageSquare } from 'lucide-react'
+import AIAssistantFallbackBanner from '@/components/AIAssistantFallbackBanner'
 import type { AssistantActionSuggestion } from '@/ai/types'
 import { assistantService } from '@/ai/assistant-service'
 import { settingsRepository } from '@/db/repositories/settings.repository'
+import { onSettingsChanged } from '@/lib/settings-events'
 import { getWebGPUDiagnostics } from '@/ai/webgpu'
 import { getAvailableModels, validateAndRepairModelId } from '@/ai/webllmConfig'
 import { getWebLLMService, peekWebLLMService } from '@/lib/webllm-service-loader'
@@ -55,8 +57,34 @@ export function CoachAssistantWidget(props: CoachAssistantWidgetProps) {
   const [selectedModelId, setSelectedModelId] = useState('')
 
   useEffect(() => {
-    assistantService.getSelectedProviderId().then((id) => setProviderId(id as any)).catch(() => setProviderId('deterministic'))
-    settingsRepository.isWebLLMCoachEnabled().then(setWebLLMEnabled).catch(() => setWebLLMEnabled(false))
+    let cancelled = false
+
+    const refresh = async () => {
+      try {
+        const id = await assistantService.getSelectedProviderId()
+        if (!cancelled) setProviderId(id as any)
+      } catch {
+        if (!cancelled) setProviderId('deterministic')
+      }
+
+      try {
+        const enabled = await settingsRepository.isWebLLMCoachEnabled()
+        if (!cancelled) setWebLLMEnabled(enabled)
+      } catch {
+        if (!cancelled) setWebLLMEnabled(false)
+      }
+    }
+
+    void refresh()
+
+    const unsubscribe = onSettingsChanged(() => {
+      void refresh()
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -202,6 +230,10 @@ export function CoachAssistantWidget(props: CoachAssistantWidgetProps) {
           <p className="mt-1 text-sm text-gray-600">Ask about workouts, form, nutrition, recovery — and (optionally) let the coach log things for you.</p>
         </div>
         <a href="#/settings" className="btn btn-secondary btn-sm">Settings</a>
+      </div>
+
+      <div className="mt-4">
+        <AIAssistantFallbackBanner />
       </div>
 
       <div className={`mt-4 rounded-lg border p-3 ${aiStatus.ok ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>

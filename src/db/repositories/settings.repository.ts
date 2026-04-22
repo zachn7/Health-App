@@ -1,6 +1,7 @@
 import { db } from '../index';
 import type { Settings } from '@/types';
 import type { AIProviderId } from '@/ai/types';
+import { emitSettingsChanged } from '@/lib/settings-events';
 
 class SettingsRepository {
   async getSettings(): Promise<Settings | null> {
@@ -16,6 +17,7 @@ class SettingsRepository {
   async saveSettings(settings: Settings): Promise<void> {
     try {
       await db.settings.put(settings);
+      emitSettingsChanged({ updatedAt: settings.updatedAt })
     } catch (error) {
       console.error('Failed to save settings:', error);
       throw error;
@@ -36,6 +38,7 @@ class SettingsRepository {
       };
       
       await db.settings.put(updatedSettings);
+      emitSettingsChanged({ updatedAt: updatedSettings.updatedAt })
       return updatedSettings;
     } catch (error) {
       console.error('Failed to update settings:', error);

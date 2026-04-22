@@ -6,11 +6,23 @@ import { DeterministicAssistantProvider } from './providers/deterministic'
 import { OpenAIProxyAssistantProvider } from './providers/openai-proxy'
 import type { AIProviderId, AssistantProvider, AssistantRequest, AssistantResponse, PlanGenerationResult } from './types'
 import type { Profile } from '@/types'
+import { onSettingsChanged } from '@/lib/settings-events'
 
 class AssistantService {
   private readonly deterministicProvider = new DeterministicAssistantProvider(() => repositories.nutrition.getMealTemplates())
   private webllmProviderPromise: Promise<AssistantProvider> | null = null
   private openAIProxyProviderPromise: Promise<AssistantProvider> | null = null
+
+  constructor() {
+    // If the user changes provider/settings, don't require a full refresh.
+    // Clear cached provider instances so next call picks up the new state.
+    if (typeof window !== 'undefined') {
+      onSettingsChanged(() => {
+        this.webllmProviderPromise = null
+        this.openAIProxyProviderPromise = null
+      })
+    }
+  }
 
   private async getWebLLMProvider(): Promise<AssistantProvider> {
     if (!this.webllmProviderPromise) {

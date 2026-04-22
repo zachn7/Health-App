@@ -273,6 +273,11 @@ export const testIds = {
   // Settings
   settings: {
     resetAppDataButton: 'reset-app-data-btn',
+    diagnosticsPanel: 'settings-diagnostics-panel',
+    diagnosticsAiProvider: 'settings-diagnostics-ai-provider',
+    diagnosticsAiProxy: 'settings-diagnostics-ai-proxy',
+    diagnosticsUsda: 'settings-diagnostics-usda',
+    diagnosticsFallback: 'settings-diagnostics-ai-fallback',
   },
 
   // Navigation / Layout
