@@ -1,11 +1,19 @@
 import { test, expect } from '@playwright/test';
+import { bootstrapContext, gotoApp } from '../helpers/bootstrap';
+import { waitForRouteReady } from '../helpers/app';
 
 test.describe('Smoke: USDA Search with Mocked Response', () => {
   test.beforeEach(async ({ page, context }) => {
-    // Set up age gate before navigating
-    await context.addInitScript(() => {
-      localStorage.setItem('age_gate_accepted', 'true');
-      localStorage.setItem('onboarding_completed', 'true');
+    await bootstrapContext(context, {
+      clearStorage: true,
+      acceptAgeGate: true,
+      completeOnboarding: true,
+      seedProfile: true,
+      seedSettings: true,
+      settings: {
+        enableUSDALookups: true,
+        fdcApiKey: 'mock-api-key-for-ci-testing',
+      },
     });
     
     // Mock USDA API responses - DO NOT require real API key in CI
@@ -97,22 +105,14 @@ test.describe('Smoke: USDA Search with Mocked Response', () => {
       }
     });
     
-    // Set up a mock API key in settings
-    await page.goto('./#/settings');
-    await page.getByLabel('API Key').fill('mock-api-key-for-ci-testing');
-    await page.getByRole('button', { name: /Save Settings/i }).click();
-    
-    // Wait for save confirmation - use first() to handle strict mode
-    await expect(page.getByText(/Settings saved|USDA lookups are enabled/i).first()).toBeVisible({ timeout: 5000 });
-    
     // Navigate to nutrition page
-    await page.goto('./#/nutrition');
-    await page.waitForLoadState('networkidle');
+    await gotoApp(page, '/nutrition');
+    await waitForRouteReady(page);
   });
 
   test('should show USDA search button when API key is configured', async ({ page }) => {
     // Should see the USDA search button
-    await expect(page.getByTestId('usda-search-button')).toBeVisible();
+    await expect(page.getByTestId('usda-search-button')).toBeVisible({ timeout: 10000 });
   });
 
   test('should search USDA database with debounced typing and show results', async ({ page }) => {

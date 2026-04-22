@@ -1006,10 +1006,20 @@ export function computePerServingMacros(
   };
 }
 
+function getBuildTimeApiKey(): string | null {
+  const raw = (import.meta as any)?.env?.VITE_USDA_API_KEY || (import.meta as any)?.env?.VITE_FDC_API_KEY
+  if (!raw) return null
+  const trimmed = String(raw).trim()
+  return trimmed ? trimmed : null
+}
+
 // Helper function to get API key without needing a class instance
 async function getApiKeyStatic(): Promise<string | null> {
   try {
-    return await settingsRepository.getFdcApiKey() || null;
+    // Priority:
+    // 1) build-time key (VITE_USDA_API_KEY)
+    // 2) user override stored in settings
+    return getBuildTimeApiKey() || await settingsRepository.getFdcApiKey() || null;
   } catch (error) {
     console.error('Error getting API key:', error);
     return null;
@@ -1022,7 +1032,10 @@ class USDAService {
   
   static async getApiKey(): Promise<string | null> {
     try {
-      return await settingsRepository.getFdcApiKey() || null;
+      // Priority:
+      // 1) build-time key (VITE_USDA_API_KEY)
+      // 2) user override stored in settings
+      return getBuildTimeApiKey() || await settingsRepository.getFdcApiKey() || null;
     } catch (error) {
       console.error('Failed to get USDA API key:', error);
       return null;
@@ -1031,10 +1044,13 @@ class USDAService {
   
   static async isUSDALookupsEnabled(): Promise<boolean> {
     try {
-      const apiKey = await this.getApiKey()
+      const buildKey = getBuildTimeApiKey()
+      if (buildKey) return true
+
+      const apiKey = await settingsRepository.getFdcApiKey()
       if (!apiKey) return false
 
-      // Keep the user toggle, but default to true in Settings when a build key exists.
+      // If using a user override key, allow the user to disable lookups.
       return await settingsRepository.isUSDALookupsEnabled();
     } catch (error) {
       console.error('Failed to check USDA lookup status:', error);

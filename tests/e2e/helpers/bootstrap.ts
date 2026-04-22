@@ -18,6 +18,8 @@ export interface SeedProfileOptions {
 
 export interface SeedSettingsOptions {
   enableUSDALookups?: boolean
+  /** Optional USDA/FDC API key override (stored in IndexedDB settings). */
+  fdcApiKey?: string | null
   enableWebLLMCoach?: boolean
   aiProvider?: 'deterministic' | 'webllm' | 'openai_proxy' | 'openrouter'
   aiAllowLoggingActions?: boolean
@@ -52,6 +54,7 @@ const defaultProfile: Required<SeedProfileOptions> = {
 
 const defaultSettings: Required<SeedSettingsOptions> = {
   enableUSDALookups: false,
+  fdcApiKey: null,
   enableWebLLMCoach: false,
   aiProvider: 'deterministic',
   aiAllowLoggingActions: false,
@@ -464,6 +467,7 @@ export async function bootstrapAppState(context: BrowserContext, options: Bootst
               createdAt: now,
               updatedAt: now,
               enableUSDALookups: seededSettings.enableUSDALookups,
+              fdcApiKey: seededSettings.fdcApiKey || undefined,
               enableWebLLMCoach: seededSettings.enableWebLLMCoach,
               aiProvider: seededSettings.aiProvider,
               aiAllowLoggingActions: seededSettings.aiAllowLoggingActions,

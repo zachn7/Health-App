@@ -657,7 +657,8 @@ export default function Settings() {
                 <option value="deterministic">Deterministic Assistant (recommended default)</option>
                 <option value="webllm">WebLLM Assistant (experimental)</option>
                 <option value="openai_proxy">OpenAI Coach (via secure proxy)</option>
-                <option value="openrouter">OpenRouter Hosted Assistant (API key later)</option>
+                {/* Deprecated placeholder (kept for backward compatibility only) */}
+                <option value="openrouter" disabled>OpenRouter Hosted Assistant (deprecated)</option>
               </select>
             </div>
 
