@@ -6,6 +6,15 @@ interface ImportMetaEnv {
   readonly PROD: boolean
   readonly DEV: boolean
   readonly SSR: boolean
+
+  // Public build-time env (Vite exposes VITE_* vars to the client bundle)
+  readonly VITE_USDA_API_KEY?: string
+  readonly VITE_FDC_API_KEY?: string
+  readonly VITE_AI_PROXY_BASE_URL?: string
+  readonly VITE_OPENAI_MODEL_ID?: string
+  readonly VITE_BUILD_SHA?: string
+  readonly VITE_BUILD_RUN?: string
+  readonly VITE_BUILD_TIME?: string
 }
 
 interface ImportMeta {

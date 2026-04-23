@@ -12,6 +12,7 @@ test.describe('Regression: USDA UI without API key', () => {
       seedSettings: true,
       settings: {
         enableUSDALookups: false,
+        fdcApiKey: null,
       },
     })
 

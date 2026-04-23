@@ -34,6 +34,20 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
           });
           return;
         }
+
+        // Also force a 401 for our explicit error-path test query.
+        if (query.includes('authfail')) {
+          await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error: {
+                message: 'Invalid API Key'
+              }
+            })
+          });
+          return;
+        }
         // Return appropriate foods based on query
         const matchFoods = query.includes('apple') || query.includes('test');
         const matchSmall = query.includes('small');
@@ -528,9 +542,10 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     // Go to nutrition page
     await page.goto('./#/nutrition');
     
-    // Try to search with invalid key
+    // Try to search with invalid key.
+    // Use a unique query so the in-memory USDA cache can't make this test flaky.
     await page.getByTestId('usda-search-button').click();
-    await page.getByTestId('usda-search-input').fill('apple');
+    await page.getByTestId('usda-search-input').fill('authfail-should-error');
     
     // Should show appropriate error message
     await expect(page.getByTestId('usda-error')).toBeVisible({ timeout: 10000 });

@@ -39,7 +39,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run build && npm run preview -- --host 127.0.0.1 --strictPort --port 4173',
+    // Make E2E deterministic: the default suite should run as if NO build-time USDA key exists.
+    // (Some dev machines have VITE_USDA_API_KEY in their shell, which would otherwise flip UI state.)
+    command: 'VITE_USDA_API_KEY= VITE_FDC_API_KEY= npm run build && npm run preview -- --host 127.0.0.1 --strictPort --port 4173',
     url: 'http://127.0.0.1:4173',
     timeout: 120_000,
     stdout: 'pipe',

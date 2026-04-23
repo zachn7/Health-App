@@ -1,6 +1,6 @@
-import { settingsRepository } from '@/db/repositories/settings.repository';
 import { db } from '@/db';
 import { FoodItem, FoodLogItem } from '@/types';
+import { getUSDAApiKey, isUSDALookupsEnabled as isUSDALookupsEnabledStatus } from '@/lib/usda-status';
 
 /**
  * Paging constants for USDA search
@@ -1006,20 +1006,11 @@ export function computePerServingMacros(
   };
 }
 
-function getBuildTimeApiKey(): string | null {
-  const raw = (import.meta as any)?.env?.VITE_USDA_API_KEY || (import.meta as any)?.env?.VITE_FDC_API_KEY
-  if (!raw) return null
-  const trimmed = String(raw).trim()
-  return trimmed ? trimmed : null
-}
 
 // Helper function to get API key without needing a class instance
 async function getApiKeyStatic(): Promise<string | null> {
   try {
-    // Priority:
-    // 1) build-time key (VITE_USDA_API_KEY)
-    // 2) user override stored in settings
-    return getBuildTimeApiKey() || await settingsRepository.getFdcApiKey() || null;
+    return await getUSDAApiKey()
   } catch (error) {
     console.error('Error getting API key:', error);
     return null;
@@ -1032,10 +1023,7 @@ class USDAService {
   
   static async getApiKey(): Promise<string | null> {
     try {
-      // Priority:
-      // 1) build-time key (VITE_USDA_API_KEY)
-      // 2) user override stored in settings
-      return getBuildTimeApiKey() || await settingsRepository.getFdcApiKey() || null;
+      return await getUSDAApiKey()
     } catch (error) {
       console.error('Failed to get USDA API key:', error);
       return null;
@@ -1044,14 +1032,7 @@ class USDAService {
   
   static async isUSDALookupsEnabled(): Promise<boolean> {
     try {
-      const buildKey = getBuildTimeApiKey()
-      if (buildKey) return true
-
-      const apiKey = await settingsRepository.getFdcApiKey()
-      if (!apiKey) return false
-
-      // If using a user override key, allow the user to disable lookups.
-      return await settingsRepository.isUSDALookupsEnabled();
+      return await isUSDALookupsEnabledStatus()
     } catch (error) {
       console.error('Failed to check USDA lookup status:', error);
       return false;

@@ -7,6 +7,7 @@ import { usdaService, type SearchDiagnostics, extractMacrosFromSearchResult, bat
 import { formatServingsAndGrams, computeServingsChange, roundToIntGrams, roundToTenthServings, gramsToServings } from '../lib/serving-utils';
 import { getTodayLocalDateKey, addDaysToLocalDate, formatLocalDate } from '../lib/date-utils';
 import { rerank } from '../lib/search/searchPipeline';
+import { getUSDALookupStatus, type USDALookupStatus } from '../lib/usda-status';
 import { testIds } from '../testIds';
 import type { NutritionLog, FoodLogItem, Profile, FoodItem } from '../types';
 
@@ -34,6 +35,7 @@ export default function Nutrition() {
   const [usdaSearchQuery, setUSDAQuery] = useState('');
   const [usdaSearchResults, setUSDAReplies] = useState<any[]>([]);
   const [isUSDAEnabled, setIsUSDAEnabled] = useState(false);
+  const [usdaLookupStatus, setUsdaLookupStatus] = useState<USDALookupStatus | null>(null);
   const [usdaSearchLoading, setUSDASearching] = useState(false);
   const [usdaSearchError, setUSDASearchError] = useState<string | null>(null);
   const [usdaSearchDiagnostics, setUSDASearchDiagnostics] = useState<SearchDiagnostics | null>(null);
@@ -92,10 +94,12 @@ export default function Nutrition() {
 
   const loadUSDAStatus = async () => {
     try {
-      const enabled = await usdaService.isUSDALookupsEnabled();
-      setIsUSDAEnabled(enabled);
+      const status = await getUSDALookupStatus();
+      setUsdaLookupStatus(status);
+      setIsUSDAEnabled(status.enabled);
     } catch (error) {
       console.error('Failed to load USDA status:', error);
+      setUsdaLookupStatus(null);
       setIsUSDAEnabled(false);
     }
   };
@@ -824,7 +828,9 @@ activeMealGroup ? null : activeMealGroup || 'Uncategorized');
         ) : (
           <div data-testid="usda-disabled-banner" className="text-sm text-gray-500">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-              USDA search is disabled (no API key). Set VITE_USDA_API_KEY at build time or add an optional override in Settings.
+              {usdaLookupStatus?.disabledReason === 'disabled_in_settings'
+                ? 'USDA search is disabled in Settings.'
+                : 'USDA search is disabled (no API key). Set VITE_USDA_API_KEY at build time or add an optional override in Settings.'}
             </span>
           </div>
         )}

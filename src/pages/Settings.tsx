@@ -76,11 +76,15 @@ export default function Settings() {
         setTempApiKey(currentSettings.fdcApiKey || '');
       } else {
         // Initialize default settings
+        const buildKey = import.meta.env.VITE_USDA_API_KEY || import.meta.env.VITE_FDC_API_KEY;
+
         const defaultSettings: SettingsType = {
           id: 'user-settings',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          enableUSDALookups: false,
+          // If we have a build key, default to enabled so hosted USDA search "just works"
+          // without requiring the user to ever visit Settings.
+          enableUSDALookups: !!(buildKey && String(buildKey).trim()),
           enableWebLLMCoach: false,
           aiProvider: 'deterministic',
           aiAllowLoggingActions: false,
