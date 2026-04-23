@@ -36,7 +36,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   const [displayedExercises, setDisplayedExercises] = useState<ExerciseDBItem[]>([]);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const searchRequestSeqRef = useRef(0);
+  const activeSearchRequestId = useRef(0);
 
   // Load filter option lists once.
   // (Doing this on every keystroke is… how do I put this politely… not ideal.)
@@ -86,7 +86,7 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
   };
   
   const searchExercises = async () => {
-    const requestId = ++searchRequestSeqRef.current;
+    const requestId = ++activeSearchRequestId.current;
     setLoading(true);
     try {
       // Step 1: Get all exercises from database
@@ -139,8 +139,8 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
         finalResults = [...candidates].sort((a, b) => a.name.localeCompare(b.name));
       }
 
-      // If a newer search started while we were working, ignore this stale result.
-      if (requestId !== searchRequestSeqRef.current) {
+      // Another search started while we were working; ignore stale results.
+      if (requestId !== activeSearchRequestId.current) {
         return;
       }
 
@@ -149,14 +149,11 @@ export default function ExercisePicker({ onSelect, onClose, excludeIds = [], all
       setVisibleLimit(30); // Reset to initial visible count
     } catch (error) {
       console.error('Failed to search exercises:', error);
-
-      // Only clear results if this is the most recent request.
-      if (requestId === searchRequestSeqRef.current) {
+      if (requestId === activeSearchRequestId.current) {
         setAllFilteredExercises([]);
       }
     } finally {
-      // Only the latest request gets to control the spinner.
-      if (requestId === searchRequestSeqRef.current) {
+      if (requestId === activeSearchRequestId.current) {
         setLoading(false);
       }
     }

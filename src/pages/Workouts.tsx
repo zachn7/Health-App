@@ -386,59 +386,64 @@ export default function Workouts() {
       setImportingPreset(true);
       setImportWarning(null);
       
-      // Resolve all workout days from the preset
+      // Resolve a *single* representative week, then copy it across durationWeeks.
+      // DRY: resolving the same slots 12x is a waste of CPU and makes WebKit cry.
       const weeks: any[] = [];
       let totalUnresolved = 0;
-      
-      // Create a single week (most presets are weekly)
-      const week = preset.durationWeeks;
-      for (let i = 0; i < week; i++) {
-        const workouts: any[] = [];
-        
-        for (let dayIndex = 0; dayIndex < preset.days.length; dayIndex++) {
-          const presetDay = preset.days[dayIndex];
-          
-          // Resolve exercises for this day
-          const { resolved, unresolvedCount } = await resolveWorkoutDay(
-            preset.id,
-            dayIndex,
-            presetDay.slots,
-            preset.equipment
-          );
-          
-          totalUnresolved += unresolvedCount;
-          
-          // Convert resolved exercises to plan format using the same order as slots
-          const exercises = resolved.map((resolvedExercise, idx) => {
-            const slot = presetDay.slots[idx];
-            return {
-              exerciseId: resolvedExercise.exerciseId,
-              sets: {
-                sets: slot.sets || 3,
-                repsRange: resolvedExercise.unresolved
-                  ? { min: 8, max: 12 }
-                  : typeof slot.reps === 'object'
-                    ? slot.reps
-                    : undefined,
-                reps: typeof slot.reps === 'number'
+
+      const resolvedWorkoutsForWeek: any[] = [];
+
+      for (let dayIndex = 0; dayIndex < preset.days.length; dayIndex++) {
+        const presetDay = preset.days[dayIndex];
+
+        // Resolve exercises for this day
+        const { resolved, unresolvedCount } = await resolveWorkoutDay(
+          preset.id,
+          dayIndex,
+          presetDay.slots,
+          preset.equipment,
+        );
+
+        totalUnresolved += unresolvedCount;
+
+        // Convert resolved exercises to plan format using the same order as slots
+        const exercises = resolved.map((resolvedExercise, idx) => {
+          const slot = presetDay.slots[idx];
+          return {
+            exerciseId: resolvedExercise.exerciseId,
+            sets: {
+              sets: slot.sets || 3,
+              repsRange: resolvedExercise.unresolved
+                ? { min: 8, max: 12 }
+                : typeof slot.reps === 'object'
                   ? slot.reps
                   : undefined,
-                restTime: slot.restSeconds,
-                notes: resolvedExercise.unresolved ? 'Please swap this with a real exercise' : undefined,
-              },
-            };
-          });
-          
-          workouts.push({
-            day: presetDay.name,
-            exercises,
-            notes: presetDay.focus,
-          });
-        }
-        
+              reps: typeof slot.reps === 'number'
+                ? slot.reps
+                : undefined,
+              restTime: slot.restSeconds,
+              notes: resolvedExercise.unresolved ? 'Please swap this with a real exercise' : undefined,
+            },
+          };
+        });
+
+        resolvedWorkoutsForWeek.push({
+          day: presetDay.name,
+          exercises,
+          notes: presetDay.focus,
+        });
+      }
+
+      // Copy the resolved week across the plan duration.
+      for (let i = 0; i < preset.durationWeeks; i++) {
+        // structuredClone is supported in modern browsers; fallback to JSON if needed.
+        const workoutsCopy = typeof structuredClone === 'function'
+          ? structuredClone(resolvedWorkoutsForWeek)
+          : JSON.parse(JSON.stringify(resolvedWorkoutsForWeek));
+
         weeks.push({
           week: i + 1,
-          workouts,
+          workouts: workoutsCopy,
         });
       }
       
@@ -466,6 +471,7 @@ export default function Workouts() {
       
       // Switch to My Programs and select the imported plan
       setActiveTab('myPrograms');
+      setSelectedWeek(0);
       setSelectedPlan(savedPlan);
     } catch (error) {
       console.error('Failed to import preset:', error);
@@ -1073,7 +1079,10 @@ export default function Workouts() {
                 </div>
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => setSelectedPlan(plan)}
+                    onClick={() => {
+                      setSelectedWeek(0);
+                      setSelectedPlan(plan);
+                    }}
                     className="btn btn-secondary text-sm"
                   >
                     View
@@ -1105,7 +1114,10 @@ export default function Workouts() {
                         </div>
                       </div>
                       <button
-                        onClick={() => setSelectedPlan(plan)}
+                        onClick={() => {
+                          setSelectedWeek(0);
+                          setSelectedPlan(plan);
+                        }}
                         className="btn btn-secondary text-xs py-1 px-2"
                       >
                         View Details

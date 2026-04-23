@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Age Gate Continue Fix', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to the app - Playwright creates fresh browser context per test
-    await page.goto('/');
+    // Navigate to the app - use the same hash routing style as the rest of the suite.
+    await page.goto('./#/');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('should navigate to onboarding when age >= 13', async ({ page }) => {
@@ -20,6 +21,7 @@ test.describe('Age Gate Continue Fix', () => {
     // Should navigate to onboarding without refresh
     await expect(page).toHaveURL(/#\/onboarding/);
     await expect(page.getByRole('heading', { name: 'Welcome to FitBud AI!' })).toBeVisible();
+    await expect(page.getByText('Your all-in-one AI fitness companion')).toBeVisible();
     await expect(page.getByTestId('onboarding-setup-profile')).toBeVisible();
     
     // Verify localStorage was set

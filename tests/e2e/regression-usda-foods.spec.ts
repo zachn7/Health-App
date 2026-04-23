@@ -509,7 +509,7 @@ test.describe('Regression: USDA Food Entry -> Totals Update (R02)', () => {
     await page.getByRole('button', { name: 'Update' }).click();
     
     // Should save and show updated macros (89 * 2 = 178 for banana)
-    await expect(page.getByText('178')).toBeVisible();
+    await expect(page.getByTestId('total-calories')).toHaveText('178');
     
     // Edit again to test switching back to serving
     await bananaItem.getByRole('button', { name: 'Edit Serving' }).click();

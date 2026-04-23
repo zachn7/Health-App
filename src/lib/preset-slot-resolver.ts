@@ -169,12 +169,15 @@ export async function resolveWorkoutSlot(
     dayIndex: number;
     slotIndex: number;
     equipment: string[];
+    skipInitialize?: boolean;
   }
 ): Promise<ResolvedExercise> {
-  const { presetId, dayIndex, slotIndex, equipment } = options;
+  const { presetId, dayIndex, slotIndex, equipment, skipInitialize } = options;
   
-  // Ensure exercise DB is loaded
-  await ExerciseDBService.initialize();
+  // Ensure exercise DB is loaded (callers that resolve whole days can skip per-slot init)
+  if (!skipInitialize) {
+    await ExerciseDBService.initialize();
+  }
   
   // Seed for deterministic selection: use presetId + dayIndex + slotIndex
   const seed = presetId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + (dayIndex * 1000) + slotIndex;
@@ -280,6 +283,9 @@ export async function resolveWorkoutDay(
 ): Promise<{ resolved: ResolvedExercise[]; unresolvedCount: number }> {
   const resolved: ResolvedExercise[] = [];
   let unresolvedCount = 0;
+
+  // Ensure exercise DB is loaded once per day resolution.
+  await ExerciseDBService.initialize();
   
   for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
     const slot = slots[slotIndex];
@@ -288,6 +294,7 @@ export async function resolveWorkoutDay(
       dayIndex,
       slotIndex,
       equipment,
+      skipInitialize: true,
     });
     
     if (result.unresolved) {

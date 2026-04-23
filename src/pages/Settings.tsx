@@ -7,8 +7,12 @@ import { emitSettingsChanged } from '@/lib/settings-events';
 import { getWebGPUDiagnostics } from '@/ai/webgpu';
 import { getWebLLMVersion, validateAndRepairModelId, getAvailableModels, getDefaultModelId } from '@/ai/webllmConfig';
 import SettingsDiagnosticsPanel from '@/components/SettingsDiagnosticsPanel';
+import { useAIDiagnostics } from '@/ai/use-ai-diagnostics';
+import { assistantService } from '@/ai/assistant-service';
+import { getHostedProxyBaseUrl, setHostedProxyBaseUrlOverride } from '@/ai/hosted-proxy-client';
 
 export default function Settings() {
+  const runtimeAIDiagnostics = useAIDiagnostics();
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,6 +31,8 @@ export default function Settings() {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [aiDebugInfo, setAiDebugInfo] = useState<any>(null);
   const [webllmActionLoading, setWebllmActionLoading] = useState<'recommend' | 'test' | null>(null);
+  const [proxyOverride, setProxyOverride] = useState('');
+  const [proxyHealthLoading, setProxyHealthLoading] = useState(false);
   
   useEffect(() => {
     loadSettings();
@@ -35,6 +41,15 @@ export default function Settings() {
     loadBuildInfo();
     checkServiceWorkerController();
 
+    const currentProxyBaseUrl = getHostedProxyBaseUrl();
+    setProxyOverride(currentProxyBaseUrl || '');
+
+    // Check for environment variable in development
+    const envApiKey = import.meta.env.VITE_FDC_API_KEY;
+    if (envApiKey && !apiKey) {
+      setApiKey(envApiKey);
+      setTempApiKey(envApiKey);
+    }
   }, []);
   
   const loadBuildInfo = () => {
@@ -656,28 +671,63 @@ export default function Settings() {
               <h2 className="text-xl font-semibold text-gray-900">AI Assistant Provider</h2>
             </div>
             <p className="text-gray-600 text-sm">
-              Choose how the in-app assistant should respond. Deterministic/WebLLM are local. OpenAI Proxy uses your private server endpoint (no key in the browser) and will auto-fallback to local providers if your credits run out.
+              By default the app will auto-select the best available AI. You can still force a manual provider here as a backup.
             </p>
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
-              <select
-                value={aiProvider}
-                onChange={(e) => {
-                  const next = e.target.value as NonNullable<SettingsType['aiProvider']>
-                  setAiProvider(next)
-                  setSettings(settings ? { ...settings, aiProvider: next, updatedAt: new Date().toISOString() } : settings)
-                }}
-                className="input max-w-sm"
-              >
-                <option value="deterministic">Deterministic Assistant (recommended default)</option>
-                <option value="webllm">WebLLM Assistant (experimental)</option>
-                <option value="openai_proxy">OpenAI Coach (via secure proxy)</option>
-                {/* Deprecated placeholder (kept for backward compatibility only) */}
-                <option value="openrouter" disabled>OpenRouter Hosted Assistant (deprecated)</option>
-              </select>
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Provider mode</label>
+                <select
+                  value={runtimeAIDiagnostics.providerMode}
+                  onChange={async (e) => {
+                    const nextMode = e.target.value as 'auto' | 'manual'
+                    await assistantService.setProviderMode(nextMode)
+                    showToastMessage(nextMode === 'auto' ? 'AI provider set to auto' : 'AI provider set to manual')
+                  }}
+                  className="input max-w-sm"
+                >
+                  <option value="auto">Auto (recommended)</option>
+                  <option value="manual">Manual override</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Manual provider</label>
+                <select
+                  value={settings?.aiProvider || 'deterministic'}
+                  onChange={(e) => setSettings(settings ? { ...settings, aiProvider: e.target.value as SettingsType['aiProvider'], updatedAt: new Date().toISOString() } : settings)}
+                  className="input max-w-sm"
+                  disabled={runtimeAIDiagnostics.providerMode !== 'manual'}
+                >
+                  <option value="deterministic">Deterministic Assistant</option>
+                  <option value="webllm">WebLLM Assistant (experimental)</option>
+                  <option value="openai_proxy">Hosted OpenAI (via secure proxy)</option>
+                  <option value="openrouter">OpenRouter Hosted Assistant (API key later)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium text-gray-900">Effective provider</div>
+                  <div className="text-gray-700" data-testid="ai-effective-provider">
+                    selected={runtimeAIDiagnostics.selectedProvider} • effective={runtimeAIDiagnostics.effectiveProvider}
+                  </div>
+                </div>
+                {runtimeAIDiagnostics.lastFallbackReason !== 'none' && (
+                  <div className="text-xs rounded-full bg-orange-100 text-orange-800 px-2 py-1" data-testid="ai-fallback-reason">
+                    fallback: {runtimeAIDiagnostics.lastFallbackReason}
+                  </div>
+                )}
+              </div>
+              {runtimeAIDiagnostics.lastFallbackMessage && (
+                <div className="mt-2 text-xs text-gray-600 break-words">
+                  {runtimeAIDiagnostics.lastFallbackMessage}
+                </div>
+              )}
             </div>
 
             <label className="flex items-start gap-3">
@@ -716,6 +766,121 @@ export default function Settings() {
           </div>
           
           <div className="space-y-4">
+            {/* Hosted Proxy Status */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Hosted AI Proxy
+                </h3>
+                {runtimeAIDiagnostics.hostedProxy.configured ? (
+                  runtimeAIDiagnostics.hostedProxy.healthy ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Healthy
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded-full">
+                      <AlertCircle className="h-3 w-3" />
+                      Unhealthy
+                    </span>
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
+                    Not configured
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600">Configured:</span>
+                  <span className={runtimeAIDiagnostics.hostedProxy.configured ? 'text-green-700' : 'text-gray-700'}>
+                    {runtimeAIDiagnostics.hostedProxy.configured ? 'YES' : 'NO'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600">Base URL:</span>
+                  <span className="font-mono text-xs text-gray-800">{runtimeAIDiagnostics.hostedProxy.baseUrlLabel}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600">Healthy:</span>
+                  <span className={runtimeAIDiagnostics.hostedProxy.healthy ? 'text-green-700' : 'text-orange-700'}>
+                    {runtimeAIDiagnostics.hostedProxy.healthy === null ? 'UNKNOWN' : runtimeAIDiagnostics.hostedProxy.healthy ? 'YES' : 'NO'}
+                  </span>
+                </div>
+                {runtimeAIDiagnostics.hostedProxy.lastCheckedAt && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-600">Last checked:</span>
+                    <span className="text-gray-700">{new Date(runtimeAIDiagnostics.hostedProxy.lastCheckedAt).toLocaleString()}</span>
+                  </div>
+                )}
+                {runtimeAIDiagnostics.hostedProxy.lastError && (
+                  <div className="mt-2 text-xs text-orange-700 break-words">
+                    {runtimeAIDiagnostics.hostedProxy.lastError}
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={proxyHealthLoading}
+                    onClick={async () => {
+                      setProxyHealthLoading(true)
+                      try {
+                        await assistantService.refreshHostedProxyHealth()
+                        showToastMessage('Hosted proxy health refreshed')
+                      } finally {
+                        setProxyHealthLoading(false)
+                      }
+                    }}
+                  >
+                    {proxyHealthLoading ? 'Checking...' : 'Check health'}
+                  </button>
+                </div>
+
+                <div className="mt-3 text-xs text-gray-600">
+                  {import.meta.env.DEV ? 'Dev tip: you can override the proxy base URL on localhost for testing.' : 'Proxy URL is configured at build time.'}
+                </div>
+
+                {import.meta.env.DEV && (
+                  <div className="mt-2 flex flex-wrap gap-2 items-end">
+                    <div className="flex-1 min-w-[16rem]">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Local override (localhost only)</label>
+                      <input
+                        value={proxyOverride}
+                        onChange={(e) => setProxyOverride(e.target.value)}
+                        className="input w-full"
+                        placeholder="https://your-proxy.example.com"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setHostedProxyBaseUrlOverride(proxyOverride.trim() || null)
+                        showToastMessage('Proxy base URL override saved (localhost only)')
+                      }}
+                    >
+                      Save override
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setProxyOverride('')
+                        setHostedProxyBaseUrlOverride(null)
+                        showToastMessage('Proxy base URL override cleared')
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* WebGPU Status */}
             <div className="border border-gray-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">

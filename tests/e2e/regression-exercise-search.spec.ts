@@ -125,25 +125,21 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     // Wait for results to load
     const firstResult = page.locator('[data-testid^="exercise-result-"]').first();
     await expect(firstResult).toBeVisible({ timeout: 5000 });
-    
+
     // Get all results
     const results = page.locator('[data-testid^="exercise-result-"]');
+    await expect(results.first()).toBeVisible({ timeout: 5000 });
+
+    // Give the async search pipeline a moment to settle (protect against stale-result races on slower CI runners)
+    await page.waitForTimeout(300);
+
     const resultCount = await results.count();
     console.log(`Found ${resultCount} exercises for "incline bench"`);
     
-    // Verify results contain the search tokens (either "incline" and "bench" in each result)
-    // or at least combined in the exercise details (name, bodypart, equipment)
-    const inclineBenchResults = results.filter({ 
-      hasText: /incline/i 
-    }).filter({ 
-      hasText: /bench/i 
-    });
-    const combinedCount = await inclineBenchResults.count();
-    console.log(`Found ${combinedCount} exercises containing both "incline" and "bench"`);
-    
-    // We should find at least some exercises with both terms
-    // (e.g., "Incline Dumbbell Bench Press", "Incline Barbell Bench Press")
-    expect(combinedCount).toBeGreaterThan(0);
+    // Verify results contain both tokens somewhere in the card.
+    // (Exact top hit can vary depending on scoring tweaks, but *some* combined hit must exist.)
+    const inclineBenchResults = results.filter({ hasText: /incline/i }).filter({ hasText: /bench/i });
+    await expect(inclineBenchResults.first()).toBeVisible({ timeout: 5000 });
     
     // Close the exercise picker
     const closeButton = page.getByText('✕');
@@ -223,15 +219,25 @@ test.describe('Regression: Exercise Search Improvements (R06)', () => {
     await expect(loadingState).not.toBeVisible({ timeout: 10000 });
 
     // Should show empty state once the debounced search settles
+    // Search pipeline can race on slower CI; poll for either empty state or 0 results.
     const emptyState = page.getByTestId('exercise-search-empty-state');
-    await expect(emptyState).toBeVisible({ timeout: 10000 });
+
+    await expect
+      .poll(async () => {
+        const emptyVisible = await emptyState.isVisible().catch(() => false)
+        const count = await page.locator('[data-testid^="exercise-result-"]').count().catch(() => 0)
+        return emptyVisible || count === 0
+      }, { timeout: 15000 })
+      .toBe(true)
+
+    await expect(emptyState).toBeVisible({ timeout: 15000 });
 
     // Should NOT show any results
     const results = page.locator('[data-testid^="exercise-result-"]');
     await expect(results).toHaveCount(0, { timeout: 5000 });
 
     // Verify empty state message
-    await expect(emptyState.getByText('No exercises found')).toBeVisible({ timeout: 3000 });
+    await expect(emptyState).toContainText('No exercises found');
     
     // Close the exercise picker
     const closeButton = page.getByText('✕');

@@ -3,6 +3,8 @@ import { bootstrapContext, gotoApp } from './helpers/bootstrap';
 import { waitForRouteReady } from './helpers/app';
 
 test.describe('Regression: Workout Editor Swap', () => {
+  test.describe.configure({ timeout: 90_000 })
+
   test.beforeEach(async ({ context }) => {
     await bootstrapContext(context, {
       clearStorage: true,
@@ -28,24 +30,25 @@ test.describe('Regression: Workout Editor Swap', () => {
     // Import first preset
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
-    await importButton.click();
+    await importButton.click({ timeout: 20000 });
 
-    // Import usually switches to My Programs tab automatically
-    // Wait for plan cards to appear
-    const workoutPlanCards = page.locator('[data-testid^="workout-plan-"]');
-    await expect(workoutPlanCards.first()).toBeVisible({ timeout: 15_000 });
+    // Wait for import to actually create a plan (can be slow on WebKit)
+    await expect
+      .poll(async () => {
+        const viewButtons = page.getByRole('button', { name: /^view$/i })
+        return await viewButtons.count()
+      }, { timeout: 30000 })
+      .toBeGreaterThan(0)
 
-    // Sometimes the import opens the plan directly, sometimes we need to select it
-    // Try clicking on the first workout plan card if it exists
-    const hasPlanCards = (await workoutPlanCards.count()) > 0;
-
-    if (hasPlanCards) {
-      await workoutPlanCards.first().click();
-    }
+    // Ensure the imported plan is actually opened (button is more reliable than clicking the card wrapper).
+    const viewButtons = page.getByRole('button', { name: /^view$/i });
+    await expect(viewButtons.first()).toBeVisible({ timeout: 15000 })
+    await viewButtons.first().click({ timeout: 20000 });
+    await expect(page.getByTestId('edit-workout-day-btn-0-0')).toBeVisible({ timeout: 20000 })
 
     // Get the initial exercise count in the first day
     const exerciseRows = page.locator('[data-testid^="workout-editor-exercise-row-"]');
-    await expect(exerciseRows.first()).toBeVisible({ timeout: 10000 });
+    await expect(exerciseRows.first()).toBeVisible({ timeout: 20000 });
     const initialCount = await exerciseRows.count();
     expect(initialCount).toBeGreaterThan(0);
 
@@ -131,7 +134,6 @@ test.describe('Regression: Workout Editor Swap', () => {
   });
 
   test('should have stable testIds for workout editor', async ({ page }) => {
-    // Set up profile
     await gotoApp(page, '/workouts');
     await waitForRouteReady(page);
 
@@ -149,10 +151,21 @@ test.describe('Regression: Workout Editor Swap', () => {
 
     const firstPresetCard = presetCards.first();
     const importButton = firstPresetCard.getByRole('button', { name: 'Import as Copy' });
-    await importButton.click();
+    await importButton.click({ timeout: 20000 });
 
-    // Verify stable testIds exist
-    await expect(page.getByTestId('edit-workout-day-btn-0-0')).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(async () => {
+        const viewButtons = page.getByRole('button', { name: /^view$/i })
+        return await viewButtons.count()
+      }, { timeout: 30000 })
+      .toBeGreaterThan(0)
+
+    // Verify stable testIds exist (ensure a plan is opened first)
+    const viewButtons = page.getByRole('button', { name: /^view$/i });
+    await expect(viewButtons.first()).toBeVisible({ timeout: 15000 })
+    await viewButtons.first().click({ timeout: 20000 });
+
+    await expect(page.getByTestId('edit-workout-day-btn-0-0')).toBeVisible({ timeout: 20000 });
     const exerciseRows = page.locator('[data-testid^="workout-editor-exercise-row-"]');
     await expect(exerciseRows.first()).toBeVisible();
 

@@ -539,7 +539,7 @@ export async function gotoApp(
   await page.goto(buildAppUrl(hashPath, cacheBust), { waitUntil: 'domcontentloaded' })
 
   // Some tests depend on seeded profile/settings being present on first mount.
-  // If we requested seeding, wait for the seed fuse to complete.
+  // If we requested seeding, wait for it to complete.
   const shouldWaitForSeed = await page
     .evaluate(() => (window as any).__e2e_seed_requested__ === true)
     .catch(() => false)
